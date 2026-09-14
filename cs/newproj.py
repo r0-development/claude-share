@@ -60,6 +60,9 @@ def run(repo: Path, m: Machine, man: Manifest, name: str, ident: Identity, *, pr
                 ok(f"github: created {r.get('full_name', owner + '/' + name)} ({'private' if private else 'public'})")
         except github.GitHubError as e:
             fail(str(e))
+            if " 403 " in str(e):
+                info("  fine-grained token needs: Repository access = All repositories, "
+                     "and Administration = Read and write (edit the token on GitHub; no need to re-run `cs token set`)")
             return 1
 
     # 3. remote (before the first commit so the identity include resolves)
