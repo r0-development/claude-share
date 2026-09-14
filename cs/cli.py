@@ -21,8 +21,20 @@ def _csv(s: Optional[str]) -> List[str]:
     return [x.strip() for x in s.split(",") if x.strip()] if s else []
 
 
+EXAMPLES = """
+examples:
+  cs init                                  set this machine up (wizard: join or create a share)
+  cs new billing-api --personal            new project: dir, git, GitHub repo, first push, Claude wired in
+  cs                                       dashboard: config repo + every project
+  cs sync                                  push/pull the config repo (memory, plans, settings)
+  cs identity add acme --owner acme-org --name "Me" --email me@acme.com
+  cs secrets set global API_TOKEN=…        encrypted, available to Claude's MCP servers as ${API_TOKEN}
+"""
+
+
 def build_parser() -> argparse.ArgumentParser:
-    p = argparse.ArgumentParser(prog="cs", description="claude-share: projects + Claude Code setup in sync across machines")
+    p = argparse.ArgumentParser(prog="cs", description="claude-share: projects + Claude Code setup in sync across machines",
+                                epilog=EXAMPLES, formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument("--version", action="version", version=f"cs {__version__}")
     p.add_argument("-q", "--quiet", action="store_true", help="only warnings/errors")
     common = argparse.ArgumentParser(add_help=False)
@@ -174,15 +186,35 @@ def _rewrite_identity_flags(argv: List[str]) -> List[str]:
     return out
 
 
+def _suggest(argv: List[str], parser: argparse.ArgumentParser) -> None:
+    """`cs stauts` -> did you mean status?"""
+    import difflib
+    cmds = [c for c in parser._subparsers._group_actions[0].choices]  # type: ignore[attr-defined]
+    first = next((a for a in argv if not a.startswith("-")), None)
+    if first and first not in cmds:
+        close = difflib.get_close_matches(first, cmds, n=1, cutoff=0.6)
+        if close:
+            ui.error(f"unknown command '{first}'", fix=f"did you mean: cs {close[0]}")
+            sys.exit(2)
+
+
 def main(argv: Optional[List[str]] = None) -> int:
     platform.refuse_unsupported()
     argv = _rewrite_identity_flags(list(sys.argv[1:] if argv is None else argv))
-    args = build_parser().parse_args(argv)
+    parser = build_parser()
+    _suggest(argv, parser)
+    args = parser.parse_args(argv)
     ui.set_quiet(args.quiet or getattr(args, "quiet_sub", False))
     try:
         return dispatch(args)
     except KeyboardInterrupt:
+        print()
         return 130
+    except SystemExit as e:
+        if isinstance(e.code, str) and e.code.startswith("cs: "):
+            ui.error(e.code[4:])
+            return 1
+        raise
 
 
 def dispatch(a) -> int:

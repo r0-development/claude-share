@@ -196,4 +196,32 @@ if command -v sops >/dev/null && command -v age-keygen >/dev/null; then
 else
   echo "SKIP secrets (sops/age not installed)"
 fi
+# --- wizard: create a new share against a local bare repo, then join it from another machine
+export HOME3="$(mktemp -d)"
+git init -q --bare "$HOME3/share.git"
+( export HOME="$HOME3" CLAUDE_CONFIG_DIR="$HOME3/.claude" XDG_STATE_HOME="$HOME3/.local/state" CS_CONFIG_DIR="$HOME3/.config/claude-share" SOPS_AGE_KEY_FILE="$HOME3/.config/sops/age/keys.txt"
+  mkdir -p "$HOME3/dev"
+  #        choose  name        url               machine  profiles  id        owner    name  email
+  #                                          choose  name        url               machine profiles workspace id       owner   name       email            keys
+  python3 "$ROOT/tests/wizard_driver.py" - create "<default>" "$HOME3/share.git" wiz1 personal "~/code" personal someone "Some One" some@example.com s n >/dev/null || die "wizard create"
+  grep -q 'workspace = "~/code"' "$CS_CONFIG_DIR/machine.toml" || die "custom workspace saved"
+  [ -f "$HOME3/.ssh/cs/master" ] || die "master key generated"
+  [ "$(git -C "$CS_CONFIG_DIR/repo" config core.sshCommand)" = "ssh -i ~/.ssh/cs/master -o IdentitiesOnly=yes" ] || die "config repo pinned to master key"
+  grep -q '^\[identities.personal\]' "$CS_CONFIG_DIR/repo/projects.toml" || die "first identity"
+  [ -f "$HOME3/.ssh/cs/personal" ] || die "identity key generated"
+  [ -f "$CS_CONFIG_DIR/repo/machines/wiz1/ssh/personal.pub" ] || die "pubkey published"
+  [ -L "$HOME3/.claude/CLAUDE.md" ] || die "applied"
+  git -C "$HOME3/share.git" log --oneline | grep -q "skeleton" || die "pushed to share" )
+export HOME4="$(mktemp -d)"
+( export HOME="$HOME4" CLAUDE_CONFIG_DIR="$HOME4/.claude" XDG_STATE_HOME="$HOME4/.local/state" CS_CONFIG_DIR="$HOME4/.config/claude-share" SOPS_AGE_KEY_FILE="$HOME4/.config/sops/age/keys.txt"
+  mkdir -p "$HOME4/dev"
+  #        choose  url               machine  profiles  (ssh keys: skip)  (token: n)
+  #                                          choose url               machine profiles workspace keys token
+  python3 "$ROOT/tests/wizard_driver.py" - join "$HOME3/share.git" wiz2 personal "<default>" s n >/dev/null || die "wizard join"
+  grep -q '^\[identities.personal\]' "$CS_CONFIG_DIR/repo/projects.toml" || die "joined share has identity"
+  [ -f "$HOME4/.ssh/cs/master" ] && [ -f "$HOME4/.ssh/cs/personal" ] || die "join generated keys"
+  [ -f "$CS_CONFIG_DIR/repo/machines/wiz2/ssh/personal.pub" ] && [ -f "$CS_CONFIG_DIR/repo/machines/wiz1/ssh/personal.pub" ] || die "both machines published"
+  [ "$(grep -c . "$CS_CONFIG_DIR/machine.toml")" -gt 2 ] || die "machine.toml" )
+pass wizard
+
 echo "ALL PASS (HOME=$HOME)"

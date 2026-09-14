@@ -121,11 +121,13 @@ def setup(repo: Path, m: Machine, man: Manifest, check_only: bool = False) -> in
     ui.table(rows, header=["identity", "key", "state"])
     unregistered = [r for r in rows if "github:" not in r[2]]
     if unregistered:
-        ui.info("")
         for r in unregistered:
             key = paths.expand(r[1]).with_name(paths.expand(r[1]).name + ".pub")
+            ident = man.identities.get(r[0])
             if key.exists():
-                ui.info(f"  {r[0]}: add this public key to the matching GitHub account, then re-run `cs ssh check`:")
-                ui.info("    " + key.read_text().strip())
+                who = f"the GitHub account that belongs to {ident.github_owner}" if ident and ident.github_owner else "your GitHub account"
+                ui.note(f"Add the '{r[0]}' key to {who}",
+                        [ui.cyan("https://github.com/settings/ssh/new"), "", ui.bold(key.read_text().strip()), "",
+                         ui.dim(f"title suggestion: cs:{m.name}:{r[0]}")])
         return 1
     return 0

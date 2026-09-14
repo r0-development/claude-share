@@ -19,7 +19,7 @@ def run(args: Sequence[str], cwd: Optional[Path] = None, check: bool = True, tim
     p = subprocess.run(["git", *args], cwd=str(cwd) if cwd else None, text=True,
                        capture_output=True, timeout=timeout, env=env)
     if check and p.returncode != 0:
-        raise GitError(f"git {' '.join(args)} failed in {cwd or '.'}: {p.stderr.strip()}")
+        raise SystemExit(f"cs: git {' '.join(args[:2])} failed in {cwd or '.'}\n  {p.stderr.strip().splitlines()[-1] if p.stderr.strip() else ''}")
     return p
 
 

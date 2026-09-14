@@ -18,14 +18,13 @@ WSL2 on Windows, macOS, Linux. Windows-native is unsupported.
 ## Quick start
 
 ```sh
-git clone https://github.com/r0-development/claude-share.git ~/dev/claude-share   # public, no auth needed
-mkdir -p ~/.local/bin && ln -s ~/dev/claude-share/bin/cs ~/.local/bin/cs
-cs init --install-deps
+curl -fsSL https://raw.githubusercontent.com/r0-development/claude-share/master/install.sh | bash
 ```
 
-`cs init` is a wizard: join an existing share (paste its GitHub URL) or create a new one; a per-machine **master key**
+One command on a fresh WSL2 Ubuntu or macOS: installs the tool to `~/.local/share/claude-share`, links `~/.local/bin/cs`,
+and starts `cs init` — a wizard: join an existing share (paste its GitHub URL) or create a new one; a per-machine **master key**
 gets this machine into the config repo (deploy key); pick a machine name and profiles; identities from the repo get their
-SSH keys and tokens; then everything is applied and projects can be cloned. Details: `docs/BOOTSTRAP.md`.
+SSH keys and tokens; choose where projects live (default `~/dev`); then everything is applied and projects can be cloned. Details: `docs/BOOTSTRAP.md`.
 
 ```sh
 cs identity add acme --owner acme-org --name "Your Name" --email you@acme.com   # more identities

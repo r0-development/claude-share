@@ -17,15 +17,15 @@ def add(repo: Path, m: Machine, man: Manifest, id_: str, *, owner: str, name: st
     mf.append_identity(repo, ident)
     gitutil.run(["add", "projects.toml"], repo)
     gitutil.commit(repo, f"identities: add {id_}", "cs", f"cs@{m.name}")
-    ui.ok(f"identity '{id_}' → {name} <{email}>, repos under github.com/{owner}, key {ident.key_path}")
+    ui.step(f"identity {ui.bold(id_)}  {ui.dim(f'{name} <{email}> · github.com/{owner} · key {ident.key_path}')}")
     man2 = mf.load(repo)
     changes: List[str] = []
     apply.apply_git(man2, False, changes)
-    for c in changes:
-        ui.act(c)
+    if changes:
+        ui.step("git identity includes updated")
     keyfile = paths.expand(ident.key_path)
     if not keyfile.exists():
-        ui.info(f"  no key at {ident.key_path} yet — `cs ssh setup` generates and registers it")
+        ui.step(f"no key at {ident.key_path} yet — `cs ssh setup` generates and registers it", "info")
     if not no_token and not github.get_token(owner):
         ui.info(f"  a GitHub token for {owner} lets `cs new --{id_}` create repos:")
         try:

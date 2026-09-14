@@ -11,6 +11,7 @@ Every phase is re-runnable and skips what is already done.
 """
 from __future__ import annotations
 
+import re
 import shutil
 from pathlib import Path
 from typing import List, Optional, Set
@@ -53,55 +54,61 @@ def _access_loop(ssh_url: str, gh, interactive: bool) -> None:
     """Make sure the master key can reach ssh_url; register/instruct until it can."""
     key, pub, created = master.ensure_key()
     if created:
-        ui.ok(f"generated master key {master.KEY} (this machine's key for the config repo only)")
-    ok, err = master.can_access(ssh_url)
-    if ok:
-        ui.ok("config repo reachable with the master key")
-        return
-    if gh:
-        reg = master.register_deploy_key(gh[0], gh[1], pub, f"cs:master:{platform.describe()}")
+        ui.step(f"master key generated  {ui.dim(master.KEY)}")
+    with ui.spinner("checking access to the config repo…"):
+        ok, err = master.can_access(ssh_url)
+    if not ok and gh:
+        with ui.spinner("registering the master key as a deploy key…"):
+            reg = master.register_deploy_key(gh[0], gh[1], pub, f"cs:master:{platform.describe()}")
         if reg:
-            ui.info(f"  {reg}")
-            ok, err = master.can_access(ssh_url)
-            if ok:
-                ui.ok("config repo reachable with the master key")
-                return
+            ui.step(reg, "ok" if "registered" in reg or "already" in reg else "warn")
+            with ui.spinner("checking access…"):
+                ok, err = master.can_access(ssh_url)
+    tries = 0
     while not ok:
         master.print_instructions(pub, gh)
         if not interactive:
             raise SystemExit("cs: config repo not reachable with the master key (see instructions above)")
-        if ui.prompt("press Enter when the key is added (q to abort)", "") == "q":
-            raise SystemExit("cs: aborted")
-        ok, err = master.can_access(ssh_url)
+        if ui.wait_enter("press Enter once the key is added", "q") == "q" or tries >= 10:
+            raise SystemExit("cs: aborted — config repo not reachable")
+        tries += 1
+        with ui.spinner("checking access…"):
+            ok, err = master.can_access(ssh_url)
         if not ok:
-            ui.warn(f"still no access: {err}")
-    ui.ok("config repo reachable with the master key")
+            ui.step(f"still no access — {err}", "warn")
+    ui.step("config repo reachable with the master key")
 
 
 def _clone_config(ssh_url: str, target: Path) -> None:
     target.parent.mkdir(parents=True, exist_ok=True)
-    gitutil.run(["clone", "-q", ssh_url, str(target)], ssh_key=str(master.key_path()))
+    with ui.spinner("cloning the config repo…"):
+        gitutil.run(["clone", "-q", ssh_url, str(target)], ssh_key=str(master.key_path()))
     master.configure_repo(target)
-    ui.ok(f"config repo cloned to {paths.contract(target)}")
+    ui.step(f"config repo cloned to {ui.dim(paths.contract(target))}")
 
 
 def _ask_url(prompt: str):
     while True:
-        raw = ui.prompt(prompt)
-        if not raw:
-            continue
+        raw = ui.prompt(prompt, validate=lambda v: "a URL is required" if not v.strip() else None,
+                        placeholder="https://github.com/<owner>/claude-share-config")
         ssh_url, gh = master.parse_repo_url(raw)
         if gh:
-            vis = master.is_public(master.https_url(*gh))
-            ui.info("  " + {True: "found (public)", False: "found (private) — access via the master key", None: "not found or unreachable — check the URL"}[vis])
-            if vis is None and not ui.confirm("use this URL anyway?", False):
-                continue
+            with ui.spinner("looking up the repository…"):
+                vis = master.is_public(master.https_url(*gh))
+            if vis is True:
+                ui.step(f"{gh[0]}/{gh[1]} found (public)")
+            elif vis is False:
+                ui.step(f"{gh[0]}/{gh[1]} found (private) — access via the master key")
+            else:
+                ui.step(f"{gh[0]}/{gh[1]} not found or unreachable", "warn")
+                if not ui.confirm("use this URL anyway?", False):
+                    continue
         return ssh_url, gh
 
 
 def _join(target: Path, interactive: bool, repo_url: str = "") -> None:
     if target.exists() and gitutil.is_repo(target):
-        ui.info(f"  [skip] config repo present at {paths.contract(target)}")
+        ui.step(f"config repo already at {ui.dim(paths.contract(target))}", "skip")
         master.configure_repo(target)
         return
     ssh_url, gh = master.parse_repo_url(repo_url) if repo_url else _ask_url("config repo URL (e.g. https://github.com/<owner>/claude-share-config)")
@@ -110,19 +117,18 @@ def _join(target: Path, interactive: bool, repo_url: str = "") -> None:
 
 
 def _create(target: Path, interactive: bool) -> None:
-    name = ui.prompt("name for your new config repo", CONFIG_REPO_NAME)
-    ui.info("")
-    ui.info(ui.bold(f"Create an EMPTY private repository named '{name}' on GitHub") + " (no README, no .gitignore):")
-    ui.info("  https://github.com/new")
-    ui.info("")
+    name = ui.prompt("name for your new config repo", CONFIG_REPO_NAME, validate=lambda v: None if mf.NAME_RE.match(v) else "letters, digits, . _ - only")
+    ui.note(f"Create an empty PRIVATE repository named '{name}' on GitHub",
+            [ui.cyan("https://github.com/new"), ui.dim("no README, no .gitignore, no license — completely empty")])
     ssh_url, gh = _ask_url("paste the new repo's URL")
     _access_loop(ssh_url, gh, interactive)
     new(target)
     if not gitutil.remote_url(target):
         gitutil.run(["remote", "add", "origin", ssh_url], target)
     master.configure_repo(target)
-    gitutil.run(["push", "-q", "-u", "origin", gitutil.current_branch(target)], target)
-    ui.ok(f"config repo initialized and pushed to {ssh_url}")
+    with ui.spinner("pushing the initial config repo…"):
+        gitutil.run(["push", "-q", "-u", "origin", gitutil.current_branch(target)], target)
+    ui.step(f"config repo initialized and pushed  {ui.dim(ssh_url)}")
 
 
 def _machine(repo: Path, name: str, profiles: List[str], workspace: Optional[str], interactive: bool) -> Machine:
@@ -133,23 +139,22 @@ def _machine(repo: Path, name: str, profiles: List[str], workspace: Optional[str
             if val and getattr(m, attr) != val:
                 setattr(m, attr, val); changed = True
         if changed:
-            save_machine(m); ui.act(f"updated {paths.contract(paths.machine_file())}")
+            save_machine(m); ui.step(f"machine settings updated  {ui.dim(paths.contract(paths.machine_file()))}")
         else:
-            ui.info(f"  [skip] machine {ui.bold(m.name)} ({', '.join(m.profiles)})")
+            ui.step(f"machine {ui.bold(m.name)}  {ui.dim(', '.join(m.profiles))}", "skip")
         return m
     existing = sorted(d.name for d in (repo / "machines").iterdir() if d.is_dir() and d.name != "recovery") if (repo / "machines").exists() else []
     if existing:
-        ui.info("  machines already in this share: " + ", ".join(existing))
+        ui.step("machines already in this share: " + ", ".join(ui.bold(x) for x in existing), "info")
     if not name:
         if not interactive:
             raise SystemExit("cs: --name <machine-name> is required")
         default = {"wsl2": "desktop", "macos": "laptop"}.get(platform.describe(), "machine")
         while True:
-            name = ui.prompt("name for this machine", default)
+            name = ui.prompt("name for this machine", default, validate=lambda v: None if mf.NAME_RE.match(v) else "letters, digits, . _ - only (e.g. desktop-work)")
             if name in existing and not ui.confirm(f"'{name}' already exists — re-use it (its published keys will be replaced)?", False):
                 continue
-            if mf.NAME_RE.match(name):
-                break
+            break
     if not profiles:
         known: Set[str] = set()
         try:
@@ -157,13 +162,52 @@ def _machine(repo: Path, name: str, profiles: List[str], workspace: Optional[str
                 known |= set(p.profiles) - {"all"}
         except SystemExit:
             pass
-        hint = f" (existing: {', '.join(sorted(known))})" if known else ""
         default = "personal"
-        profiles = [x.strip() for x in ui.prompt(f"profiles for this machine — which project groups it gets{hint}", default).split(",") if x.strip()] if interactive else [default]
+        if interactive and known:
+            picked = _multiselect_profiles(sorted(known))
+            profiles = picked or [default]
+        elif interactive:
+            profiles = [x.strip() for x in ui.prompt("profiles for this machine (comma list — project groups it should get)", default).split(",") if x.strip()]
+        else:
+            profiles = [default]
+    if workspace is None and interactive:
+        try:
+            default_ws = mf.load(repo).workspace_root
+        except SystemExit:
+            default_ws = "~/dev"
+        ws = ui.prompt("where should projects live on this machine", default_ws, validate=lambda v: None if v.startswith(("~", "/")) else "use an absolute path or ~/…")
+        ws = "~/" + ws[len(str(paths.home())) + 1:] if ws.startswith(str(paths.home()) + "/") else ws
+        if platform.is_wsl() and paths.expand(ws).as_posix().startswith("/mnt/"):
+            ui.step("that is the Windows filesystem — git and Claude are far slower there; ~/dev inside WSL is recommended", "warn")
+            if not ui.confirm("use it anyway?", False):
+                ws = default_ws
+        workspace = None if ws == default_ws else ws
+        paths.expand(ws).mkdir(parents=True, exist_ok=True)
     m = Machine(name=name, profiles=profiles, workspace=workspace)
     save_machine(m)
-    ui.ok(f"machine {ui.bold(m.name)} profiles {', '.join(m.profiles)}")
+    ui.step(f"machine {ui.bold(m.name)}  {ui.dim('profiles ' + ', '.join(m.profiles))}")
     return m
+
+
+def _multiselect_profiles(known: List[str]) -> List[str]:
+    """Pick profiles one at a time via select (simple and robust); 'done' finishes."""
+    chosen: List[str] = []
+    while True:
+        opts = [(k, ("● " if k in chosen else "○ ") + k) for k in known] + [("__new", "＋ new profile…"), ("__done", "done" + (f"  ({', '.join(chosen)})" if chosen else ""))]
+        v = ui.select("profiles for this machine — which project groups should it get? (toggle, then done)", opts, len(opts) - 1 if chosen else 0)
+        if v == "__done":
+            return chosen
+        if v == "__new":
+            n = ui.prompt("new profile name", validate=lambda x: None if mf.NAME_RE.match(x) else "letters, digits, . _ - only")
+            if n and n not in known:
+                known.append(n)
+            if n and n not in chosen:
+                chosen.append(n)
+            continue
+        if v in chosen:
+            chosen.remove(v)
+        else:
+            chosen.append(v)
 
 
 def _first_identity(repo: Path, m: Machine, interactive: bool) -> None:
@@ -174,11 +218,11 @@ def _first_identity(repo: Path, m: Machine, interactive: bool) -> None:
         ui.warn("no identities yet — add one with `cs identity add <id> --owner <owner> --name .. --email ..`")
         return
     ui.section("first identity")
-    ui.info("  An identity = a GitHub owner (your user or an org) + the name/email you commit with there.")
-    id_ = ui.prompt("identity id", "personal")
-    own = ui.prompt("GitHub owner (your login or an org)")
-    name = ui.prompt("git user.name")
-    email = ui.prompt("git user.email")
+    ui.step("an identity = a GitHub owner (your login or an org) + the name and email you commit with there", "info")
+    id_ = ui.prompt("identity id", "personal", validate=lambda v: None if mf.NAME_RE.match(v) else "letters, digits, . _ - only")
+    own = ui.prompt("GitHub owner (your login or an org)", validate=lambda v: None if re.match(r"^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})$", v) else "a GitHub login, e.g. octocat")
+    name = ui.prompt("git user.name", validate=lambda v: "required" if not v else None)
+    email = ui.prompt("git user.email", validate=lambda v: None if re.match(r"^[^@\s]+@[^@\s]+\.[^@\s]+$", v) else "not an email address")
     identity_mod.add(repo, m, man, id_, owner=own, name=name, email=email, no_token=True)
 
 
@@ -198,7 +242,7 @@ def _identities_keys_tokens(repo: Path, m: Machine, interactive: bool, skip: Lis
         missing = [i for i in man.identities.values() if i.github_owner and not github.get_token(i.github_owner)]
         if missing:
             ui.section("GitHub tokens")
-            ui.info("  A token per owner lets `cs new --<id>` create repos. Optional now; `cs token set <owner>` later.")
+            ui.step("a token per owner lets `cs new --<id>` create repos — optional now, `cs token set <owner>` later", "info")
             for i in missing:
                 if ui.confirm(f"store a token for {i.github_owner} (identity {i.id}) now?", False):
                     try:
@@ -235,8 +279,7 @@ def _finish(repo: Path, m: Machine, interactive: bool, skip: List[str]) -> int:
     if missing and interactive and ui.confirm(f"clone {len(missing)} project(s) now ({', '.join(p.name for p in missing[:6])}{'…' if len(missing) > 6 else ''})?", True):
         from . import projects
         projects.clone(repo, m, man, [])
-    ui.info("")
-    ui.info(ui.bold("done.") + "  open a new terminal (claude() wrapper) · cs status · cs new <project> --<identity>")
+    ui.outro(ui.bold("done") + "  " + ui.dim("open a new terminal (claude() wrapper) · cs status · cs new <project> --<identity>"))
     return rc
 
 
@@ -256,22 +299,23 @@ def _push(repo: Path) -> None:
 # ---------------------------------------------------------------- entry points
 def wizard(install_deps: bool, skip: List[str], repo_url: str = "") -> int:
     target = paths.repo_dir()
-    ui.section("claude-share")
+    ui.intro("claude-share setup")
     if "deps" not in skip:
         deps.run(install=install_deps)
     already = target.exists() and gitutil.is_repo(target)
     if already:
-        ui.info(f"  config repo already at {paths.contract(target)}")
+        ui.step(f"config repo already at {ui.dim(paths.contract(target))}", "skip")
         master.configure_repo(target)
     else:
         if repo_url:
-            choice = "1"
+            choice = "join"
         else:
-            ui.info("  1) join an existing share (you have a config repo already)")
-            ui.info("  2) create a new share")
-            choice = ui.prompt("choose", "1")
+            choice = ui.select("What would you like to do?", [
+                ("join", "Join an existing share  — you already have a config repo (from another machine)"),
+                ("create", "Create a new share      — first machine, no config repo yet"),
+            ])
         ui.section("config repo")
-        if choice.startswith("2"):
+        if choice == "create":
             _create(target, True)
         else:
             _join(target, True, repo_url)

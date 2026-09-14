@@ -84,14 +84,13 @@ def register_deploy_key(owner: str, repo: str, pub: str, title: str) -> Optional
 
 
 def print_instructions(pub: str, gh: Optional[Tuple[str, str]]) -> None:
-    ui.info("")
-    ui.info(ui.bold("Give this machine access to the config repo — add its master public key:"))
+    lines = []
     if gh:
-        ui.info(f"  deploy key (recommended, write access): https://github.com/{gh[0]}/{gh[1]}/settings/keys/new")
-        ui.info("  or your account:                          https://github.com/settings/ssh/new")
-    ui.info("")
-    ui.info("  " + pub)
-    ui.info("")
+        lines += [f"deploy key with write access (recommended): {ui.cyan(f'https://github.com/{gh[0]}/{gh[1]}/settings/keys/new')}",
+                  f"or your account's SSH keys:                 {ui.cyan('https://github.com/settings/ssh/new')}", ""]
+    lines += [ui.bold(pub), ""]
+    lines += [ui.dim("this master key only reaches the config repo; it is separate from your identities")]
+    ui.note("Add this machine's master public key to the config repo", lines)
 
 
 def configure_repo(repo_dir: Path) -> None:

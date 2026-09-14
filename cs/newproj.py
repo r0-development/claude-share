@@ -12,6 +12,7 @@ from typing import List, Optional
 from . import github, gitutil, link, manifest as mf, paths
 from .config import Machine
 from .manifest import Identity, Manifest, Project
+from . import ui
 from .ui import act, fail, info, kv, ok, section, warn
 
 
@@ -29,19 +30,20 @@ def run(repo: Path, m: Machine, man: Manifest, name: str, ident: Identity, *, pr
         raise SystemExit(f"cs: identity '{ident.id}' has no github_owner in projects.toml")
     url = f"git@github.com:{owner}/{name}.git" if owner else ""
 
-    section(f"new project {name}")
-    kv("identity", f"{ident.id}  ({ident.name} <{ident.email}>)")
+    ui.intro(f"new project {ui.bold(name)}")
+    kv("identity", f"{ident.id}  {ui.dim(f'{ident.name} <{ident.email}>')}")
     kv("path", paths.contract(root))
     if kind == "git":
-        kv("remote", url or "(none)")
+        kv("remote", url or ui.dim("(none)"))
         kv("branch", branch)
     kv("profiles", ", ".join(profiles))
+    ui.info(ui.gray(ui.BAR))
 
     # 1. directory + git init
     root.mkdir(parents=True, exist_ok=True)
     if kind == "git" and not gitutil.is_repo(root):
         gitutil.run(["init", "-q", "-b", branch], root)
-        act("git init")
+        ui.step(f"git init -b {branch}")
     if kind != "git":
         gitutil.run(["init", "-q", "-b", branch], root) if not gitutil.is_repo(root) else None
 
@@ -49,11 +51,13 @@ def run(repo: Path, m: Machine, man: Manifest, name: str, ident: Identity, *, pr
     if kind == "git" and not no_github and url:
         try:
             token = github.ensure_token(owner)
-            if github.repo_exists(owner, name, token):
-                info(f"  github: {owner}/{name} already exists")
+            with ui.spinner(f"creating {owner}/{name} on GitHub…"):
+                exists = github.repo_exists(owner, name, token)
+                r = None if exists else github.create_repo(owner, name, token, private=private, description=description)
+            if exists:
+                ui.step(f"github: {owner}/{name} already exists", "skip")
             else:
-                r = github.create_repo(owner, name, token, private=private, description=description)
-                ok(f"github: created {r.get('full_name', owner + '/' + name)} ({'private' if private else 'public'})")
+                ui.step(f"github: created {r.get('full_name', owner + '/' + name)}  {ui.dim('private' if private else 'public')}")
         except github.GitHubError as e:
             fail(str(e))
             if " 403 " in str(e):
@@ -66,7 +70,7 @@ def run(repo: Path, m: Machine, man: Manifest, name: str, ident: Identity, *, pr
         cur = gitutil.remote_url(root)
         if not cur:
             gitutil.run(["remote", "add", "origin", url], root)
-            act(f"remote origin -> {url}")
+            ui.step(f"remote origin  {ui.dim(url)}")
         elif gitutil.canonical_github(cur) != gitutil.canonical_github(url):
             fail(f"{root} already has origin {cur}")
             return 1
@@ -91,12 +95,13 @@ def run(repo: Path, m: Machine, man: Manifest, name: str, ident: Identity, *, pr
             gitignore.write_text(".DS_Store\n*:Zone.Identifier\n.env\n")
         gitutil.run(["add", "-A"], root)
         gitutil.commit(root, "init", ident.name, ident.email)
-        act(f"first commit on {branch}")
+        ui.step(f"first commit on {branch}  {ui.dim(f'{ident.name} <{ident.email}>')}")
     if kind == "git" and url and not no_github:
         if not gitutil.ahead_behind(root):
             try:
-                gitutil.run(["push", "-q", "-u", "origin", branch], root, timeout=60)
-                ok(f"pushed {branch} to {owner}/{name}")
+                with ui.spinner("pushing…"):
+                    gitutil.run(["push", "-q", "-u", "origin", branch], root, timeout=60)
+                ui.step(f"pushed {branch} to {owner}/{name}")
             except gitutil.GitError as e:
                 fail(str(e))
                 return 1
@@ -110,9 +115,11 @@ def run(repo: Path, m: Machine, man: Manifest, name: str, ident: Identity, *, pr
     if gitutil.is_repo(repo):
         gitutil.run(["add", "projects.toml"], repo)
         gitutil.commit(repo, f"projects: add {name}", "cs", f"cs@{m.name}")
-    ok(f"registered in projects.toml ({p.kind}, profiles {','.join(profiles)})")
+    ui.step(f"registered in projects.toml  {ui.dim(f'{p.kind}, profiles {",".join(profiles)}')}")
     man2 = mf.load(repo)
+    ui.set_quiet(True)
     link.run(repo, m, man2, [name])
-    info("")
-    ok(f"ready: cd {paths.contract(root)} && claude")
+    ui.set_quiet(False)
+    ui.step("Claude files linked (memory → config repo)")
+    ui.outro(ui.bold(f"cd {paths.contract(root)} && claude"))
     return 0

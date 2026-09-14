@@ -1,13 +1,12 @@
 # Bootstrapping a machine
 
 ```sh
-sudo apt install -y git curl openssh-client        # WSL/Ubuntu; macOS: xcode-select --install
-git clone https://github.com/r0-development/claude-share.git ~/dev/claude-share
-mkdir -p ~/.local/bin && ln -s ~/dev/claude-share/bin/cs ~/.local/bin/cs
-cs init --install-deps
+curl -fsSL https://raw.githubusercontent.com/r0-development/claude-share/master/install.sh | bash
 ```
 
-`cs init` with no arguments is a wizard. Everything is re-runnable; finished steps are skipped.
+Prerequisites are only `git`, `curl`, `python3` (WSL/Ubuntu has them; macOS: `xcode-select --install`). The installer
+clones the tool to `~/.local/share/claude-share`, links `~/.local/bin/cs` and starts `cs init` — a wizard.
+Arguments after `bash -s --` go to `cs init` (e.g. `bash -s -- --repo <url> --name laptop --profiles personal`). Everything is re-runnable; finished steps are skipped.
 
 ## 1. Join an existing share, or create one
 
@@ -26,8 +25,9 @@ same master-key step; cs initializes it from the template and pushes.
 
 ## 2. Machine
 
-Existing machines in the share are listed; pick a name for this one (`desktop-work`, `laptop`…) and its profiles —
-the project groups it should get (`personal`, `<org>` …).
+Existing machines in the share are listed; pick a name for this one (`desktop-work`, `laptop`…), its profiles —
+the project groups it should get (`personal`, `<org>` …) — and where projects live (default `~/dev`; on WSL keep it in
+the Linux filesystem, not `/mnt/c`).
 
 ## 3. Identities → keys → tokens
 
