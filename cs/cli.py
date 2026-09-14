@@ -82,14 +82,51 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("names", nargs="*")
     s.add_argument("--dry-run", action="store_true")
 
+    s = sub.add_parser("new", help="create a brand-new project: dir, git, GitHub repo, first push, register, link")
+    s.add_argument("name")
+    s.add_argument("--identity", help="identity id (or use --<identity>/--<github-owner>, e.g. --personal, --work)")
+    s.add_argument("--profiles", help="comma list (default: the identity id, e.g. personal)")
+    s.add_argument("--description", "-d", default="")
+    s.add_argument("--public", action="store_true", help="create the GitHub repo public (default private)")
+    s.add_argument("--no-github", action="store_true", help="local git only; no remote")
+    s.add_argument("--synced", action="store_true", help="kind=synced notes project (auto-committed)")
+
+    s = sub.add_parser("token", help="GitHub API tokens per identity (local, never synced)")
+    ts = s.add_subparsers(dest="token_cmd", metavar="<sub>")
+    t = ts.add_parser("set", help="store a token (prompts, hidden input)"); t.add_argument("identity")
+    t = ts.add_parser("check", help="verify a token works"); t.add_argument("identity")
+    t = ts.add_parser("rm", help="delete a stored token"); t.add_argument("identity")
+    ts.add_parser("ls", help="list identities with a stored token")
+
     s = sub.add_parser("project", help="project helpers")
     ps = s.add_subparsers(dest="project_cmd", metavar="<sub>")
     ps.add_parser("id", help="print the project name for the cwd (empty if none)")
     return p
 
 
+def _rewrite_identity_flags(argv: List[str]) -> List[str]:
+    """`cs new foo --personal` -> `cs new foo --identity personal` (needs the manifest)."""
+    if "new" not in argv:
+        return argv
+    try:
+        _, _, man = _ctx()
+    except SystemExit:
+        return argv
+    out: List[str] = []
+    for a in argv:
+        if a.startswith("--") and "=" not in a and a not in ("--identity", "--profiles", "--description", "--public",
+                                                              "--no-github", "--synced", "--help", "--quiet"):
+            ident = man.identity_by_flag(a[2:])
+            if ident:
+                out += ["--identity", ident.id]
+                continue
+        out.append(a)
+    return out
+
+
 def main(argv: Optional[List[str]] = None) -> int:
     platform.refuse_unsupported()
+    argv = _rewrite_identity_flags(list(sys.argv[1:] if argv is None else argv))
     args = build_parser().parse_args(argv)
     ui.set_quiet(args.quiet)
     try:
@@ -113,10 +150,54 @@ def dispatch(a) -> int:
             return 0
         build_parser().parse_args(["config", "-h"])
     if a.cmd is None:
+        from . import config
+        if config.exists():
+            repo, m, man = _ctx()
+            from . import status
+            status.run(repo, m, man)
+            print()
+            print(ui.dim("cs --help for commands"))
+            return 0
         build_parser().print_help()
         return 0
+    if a.cmd == "token":
+        from . import github
+        if a.token_cmd == "set":
+            f = github.set_token(a.identity)
+            ui.ok(f"token stored in {paths.contract(f)} (0600, not synced)")
+            return 0
+        if a.token_cmd == "check":
+            tok = github.get_token(a.identity)
+            if not tok:
+                ui.fail(f"no token for '{a.identity}'"); return 1
+            try:
+                ui.ok(f"token for '{a.identity}' authenticates as {github.whoami(tok)}"); return 0
+            except github.GitHubError as e:
+                ui.fail(str(e)); return 1
+        if a.token_cmd == "rm":
+            f = github.token_file(a.identity)
+            if f.exists():
+                f.unlink(); ui.ok("removed")
+            return 0
+        if a.token_cmd == "ls":
+            d = github.token_file("x").parent
+            for f in sorted(d.iterdir()) if d.exists() else []:
+                print(f.name)
+            return 0
+        build_parser().parse_args(["token", "-h"])
 
     repo, m, man = _ctx()
+    if a.cmd == "new":
+        from . import newproj
+        if not a.identity:
+            flags = ", ".join(f"--{i}" for i in man.identities)
+            raise SystemExit(f"cs: which identity? use one of {flags} (or --identity <id>)")
+        ident = man.identities.get(a.identity) or man.identity_by_flag(a.identity)
+        if not ident:
+            raise SystemExit(f"cs: unknown identity '{a.identity}'")
+        profiles = _csv(a.profiles) or ([ident.id] if ident.id in m.profiles else list(m.profiles))
+        return newproj.run(repo, m, man, a.name, ident, profiles=profiles, description=a.description,
+                           private=not a.public, no_github=a.no_github, kind="synced" if a.synced else "git")
     if a.cmd == "apply":
         from . import apply
         changes = apply.run(repo, m, man, check=a.check)

@@ -142,5 +142,17 @@ grep -q sonnet "$HOME/.claude/settings.json" || die "settings re-rendered after 
 pass conflict-abort-resolve
 
 $CS status >/dev/null; $CS doctor >/dev/null || die "doctor"
+$CS >/dev/null || die "dashboard"
 pass status-doctor
+
+# --- cs new (no GitHub in tests): dir, git init on default branch, first commit, registered, linked
+$CS new fresh --test --no-github -d "a fresh one" >/dev/null || die "cs new"
+[ "$(git -C "$HOME/dev/fresh" symbolic-ref --short HEAD)" = "master" ] || die "default branch master"
+[ "$(git -C "$HOME/dev/fresh" config user.email)" = "test@example.com" ] || die "new project identity"
+git -C "$HOME/dev/fresh" log --oneline | grep -q init || die "first commit"
+grep -q '^\[projects.fresh\]' "$CS_CONFIG_DIR/repo/projects.toml" || die "registered"
+grep -q autoMemoryDirectory "$HOME/dev/fresh/.claude/settings.local.json" || die "linked"
+[ -z "$(git -C "$HOME/dev/fresh" status --porcelain)" ] || die "fresh stays clean"
+if $CS new fresh --test --no-github >/dev/null 2>&1; then die "duplicate name refused"; fi
+pass cs-new
 echo "ALL PASS (HOME=$HOME)"

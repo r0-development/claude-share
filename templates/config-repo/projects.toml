@@ -4,6 +4,7 @@ schema_version = 1
 
 [workspace]
 root = "~/dev"                # same relative layout on every machine
+default_branch = "master"     # branch `cs new` creates
 
 # ---- Git identities ---------------------------------------------------------
 # Identity is chosen by the remote URL (git includeIf hasconfig), rendered by `cs apply`
@@ -14,6 +15,7 @@ name      = "Your Name"
 email     = "you@example.com"
 ssh_key   = "~/.ssh/id_ed25519_personal"
 gh_user   = "your-gh-login"
+github_owner = "your-org"     # `cs new --personal` (or `--your-org`) creates repos here
 url_globs = ["git@github.com:your-org/**"]
 
 # [identities.work]
@@ -21,6 +23,7 @@ url_globs = ["git@github.com:your-org/**"]
 # email     = "you@company.com"
 # ssh_key   = "~/.ssh/id_ed25519"
 # gh_user   = "your-work-login"
+# github_owner = "company-org"
 # url_globs = ["git@github.com:company-org/**"]
 
 # ---- Projects ---------------------------------------------------------------

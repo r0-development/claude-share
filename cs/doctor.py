@@ -123,8 +123,8 @@ def run(repo: Path, m: Machine, man: Manifest, do_fix: bool = False) -> int:
         _check_local_mcp_secrets(man, m), _check_gh_token_env(),
     ] + _check_identities(repo, m, man)
     rc = 0
-    for level, msg in results:
-        {"ok": ok, "warn": warn, "fail": fail}[level](msg)
-        if level == "fail":
-            rc = 1
+    from . import ui
+    sym = {"ok": ui.green(ui.OK), "warn": ui.yellow(ui.WARN), "fail": ui.red(ui.FAIL)}
+    ui.table([[sym[level], msg] for level, msg in results])
+    rc = 1 if any(level == "fail" for level, _ in results) else 0
     return rc

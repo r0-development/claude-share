@@ -7,7 +7,7 @@ from typing import List, Optional
 
 from . import apply, doctor, gitutil, link, manifest as mf, paths
 from .config import Machine, exists as machine_exists, load as load_machine, save as save_machine
-from .ui import act, head, info, ok, warn
+from .ui import act, head, info, ok, section, warn
 
 
 def new(dest: Path, force: bool = False) -> Path:
@@ -86,12 +86,12 @@ def init(repo_src: str, name: str, profiles: List[str], skip: List[str], workspa
 
     man = mf.load(target)
     if "apply" not in skip:
-        head("apply ~/.claude")
+        section("apply ~/.claude")
         apply.run(target, m, man)
     if "link" not in skip:
-        head("link project files")
+        section("link project files")
         link.run(target, m, man)
     if "doctor" not in skip:
-        head("doctor")
+        section("doctor")
         return doctor.run(target, m, man)
     return 0

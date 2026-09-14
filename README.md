@@ -37,6 +37,20 @@ Second machine: same install, then `cs init --repo git@github.com:you/claude-con
 | `cs adopt memory\|project\|mcp <name>` | pull existing local state into the config repo |
 | `cs sync` | commit / pull --rebase / push the config repo (+ synced projects); never leaves a half-rebase |
 | `cs status`, `cs doctor [--fix]` | overview / health checks |
-| `cs add [path]`, `cs clone` | register / materialize projects |
+| `cs new <name> --personal` | brand-new project: dir, `git init -b master`, GitHub repo (via stored token), first push, register, link |
+| `cs token set <identity>` | store a GitHub fine-grained token for `cs new` (local file, 0600, never synced) |
+| `cs add [path]`, `cs clone` | register an existing dir / materialize missing projects |
+
+### Creating projects
+
+```sh
+cs token set <owner>             # once per machine: fine-grained token for that GitHub user/org
+cs new <project> --personal      # → ~/dev/<project>, private repo <owner>/<project>, registered, Claude wired in
+cs new <project> --work          # --<identity> or --<github_owner> both work
+cs new <project> --personal --synced   # auto-committed notes project (no manual git)
+```
+
+Token permissions (GitHub → Settings → Developer settings → Fine-grained tokens): resource owner = the account/org,
+repository access "All repositories", permissions **Administration: read & write**, **Metadata: read**.
 
 See `docs/DESIGN.md` for the full design and roadmap (handoff of uncommitted work, secrets, bootstrap).

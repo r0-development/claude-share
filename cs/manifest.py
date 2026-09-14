@@ -22,6 +22,7 @@ class Identity:
     email: str
     ssh_key: str = "~/.ssh/id_ed25519"
     gh_user: str = ""
+    github_owner: str = ""               # GitHub user/org that `cs new` creates repos under
     url_globs: List[str] = field(default_factory=list)
 
     def matches(self, url: str) -> bool:
@@ -67,6 +68,15 @@ class Manifest:
     projects: Dict[str, Project]
     schema_version: int = 1
     path: Optional[Path] = None
+    default_branch: str = "master"
+
+    def identity_by_flag(self, flag: str) -> Optional[Identity]:
+        """`--personal` / `--work`: match identity id or github_owner (case-insensitive)."""
+        f = flag.lower()
+        for ident in self.identities.values():
+            if ident.id.lower() == f or (ident.github_owner and ident.github_owner.lower() == f):
+                return ident
+        return None
 
     def workspace(self, m: Optional[Machine] = None) -> Path:
         if m and m.workspace:
@@ -149,6 +159,7 @@ def parse(text: str, path: Optional[Path] = None) -> Manifest:
             email=v.get("email", ""),
             ssh_key=v.get("ssh_key", "~/.ssh/id_ed25519"),
             gh_user=v.get("gh_user", ""),
+            github_owner=v.get("github_owner", ""),
             url_globs=list(v.get("url_globs", [])),
         )
         for k, v in d.get("identities", {}).items()
@@ -160,6 +171,7 @@ def parse(text: str, path: Optional[Path] = None) -> Manifest:
         projects=projects,
         schema_version=int(d.get("schema_version", 1)),
         path=path,
+        default_branch=d.get("workspace", {}).get("default_branch", "master"),
     )
 
 
