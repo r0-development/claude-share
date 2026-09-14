@@ -90,6 +90,15 @@ def info_exclude(path: Path) -> Path:
     return common_dir(path) / "info" / "exclude"
 
 
+def commit(path: Path, message: str, fallback_name: str = "cs", fallback_email: str = "cs@localhost") -> None:
+    """Commit with the repo's resolved identity, or a fallback when none resolves
+    (e.g. the config repo before it has a remote)."""
+    args: List[str] = []
+    if not config_get(path, "user.email"):
+        args = ["-c", f"user.name={fallback_name}", "-c", f"user.email={fallback_email}"]
+    run(args + ["commit", "-q", "-m", message], path)
+
+
 def config_get(path: Path, key: str) -> str:
     return out(["config", "--get", key], path)
 

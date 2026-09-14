@@ -53,7 +53,7 @@ def add(repo: Path, m: Machine, man: Manifest, path: Optional[str], *, kind: Opt
     ok(f"registered {pname} ({kind}{', ' + url if url else ''}) profiles={','.join(p.profiles)}")
     if not no_commit and gitutil.is_repo(repo):
         gitutil.run(["add", "projects.toml"], repo)
-        gitutil.run(["commit", "-q", "-m", f"projects: add {pname}"], repo)
+        gitutil.commit(repo, f"projects: add {pname}", "cs", f"cs@{m.name}")
     return p
 
 

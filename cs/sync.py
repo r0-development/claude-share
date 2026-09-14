@@ -56,7 +56,7 @@ def git_sync(repo: Path, label: str, machine: str, *, pull_only: bool = False, p
         if not pull_only and gitutil.is_dirty(repo):
             n = gitutil.dirty_count(repo)
             gitutil.run(["add", "-A"], repo)
-            gitutil.run(["commit", "-q", "-m", f"sync({machine}): {n} file(s) {time.strftime('%Y-%m-%d %H:%M')}"], repo)
+            gitutil.commit(repo, f"sync({machine}): {n} file(s) {time.strftime('%Y-%m-%d %H:%M')}", "cs", f"cs@{machine}")
             act(f"{label}: committed {n} change(s)")
         if not gitutil.remote_url(repo):
             ok(f"{label}: no remote configured; local only")

@@ -94,7 +94,7 @@ def run(repo: Path, m: Machine, man: Manifest, name: str, ident: Identity, *, pr
         if not gitignore.exists():
             gitignore.write_text(".DS_Store\n*:Zone.Identifier\n.env\n")
         gitutil.run(["add", "-A"], root)
-        gitutil.run(["commit", "-q", "-m", "init"], root)
+        gitutil.commit(root, "init", ident.name, ident.email)
         act(f"first commit on {branch}")
     if kind == "git" and url and not no_github:
         if not gitutil.ahead_behind(root):
@@ -113,7 +113,7 @@ def run(repo: Path, m: Machine, man: Manifest, name: str, ident: Identity, *, pr
     mf.append_project(repo, p)
     if gitutil.is_repo(repo):
         gitutil.run(["add", "projects.toml"], repo)
-        gitutil.run(["commit", "-q", "-m", f"projects: add {name}"], repo)
+        gitutil.commit(repo, f"projects: add {name}", "cs", f"cs@{m.name}")
     ok(f"registered in projects.toml ({p.kind}, profiles {','.join(profiles)})")
     man2 = mf.load(repo)
     link.run(repo, m, man2, [name])
