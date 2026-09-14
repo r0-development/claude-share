@@ -11,7 +11,7 @@ Keep your projects **and** your Claude Code setup identical on every machine.
 - **Git identity follows the remote URL** (`includeIf hasconfig`), so work and personal repos can sit side by side.
 - **Secrets** (M1): sops + age, per-machine keys, injected into `claude` at launch. Never plaintext in git.
 
-Two repos: this tool (public) and your private config repo (`cs config new`). Python 3.9+, git — nothing else.
+Two repos: this tool and your config repo — both private . Python 3.9+, git — nothing else.
 WSL2 on Windows, macOS, Linux. Windows-native is unsupported.
 
 ## Quick start
