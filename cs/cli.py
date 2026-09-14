@@ -145,8 +145,8 @@ def build_parser() -> argparse.ArgumentParser:
     x = sub.add_parser("enroll", help="grant another machine access to secrets (run on a machine that has it)"); x.add_argument("machine")
     x = sub.add_parser("revoke", help="remove a machine's access to secrets"); x.add_argument("machine")
 
-    s = sub.add_parser("ssh", help="per-machine SSH keys for every identity")
-    s.add_argument("action", nargs="?", default="check", choices=["setup", "check"])
+    s = sub.add_parser("ssh", help="per-machine SSH keys: identities (setup/check) and the config-repo master key")
+    s.add_argument("action", nargs="?", default="check", choices=["setup", "check", "master"])
 
     s = sub.add_parser("project", help="project helpers")
     ps = s.add_subparsers(dest="project_cmd", metavar="<sub>")
@@ -255,6 +255,9 @@ def dispatch(a) -> int:
 
     repo, m, man = _ctx()
     if a.cmd == "ssh":
+        if a.action == "master":
+            from . import master
+            return master.setup(repo, sys.stdin.isatty())
         from . import ssh
         return ssh.setup(repo, m, man, check_only=(a.action == "check"))
     if a.cmd == "hooks":

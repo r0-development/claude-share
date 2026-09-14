@@ -1,25 +1,31 @@
-"""`cs config new` and `cs init` (first-run wizard / later-machine setup).
+"""`cs init` — interactive wizard (no arguments) or flag-driven (scripts, tests).
 
-cs init                      first run: machine → deps → GitHub owner + token → create & push
-                             claude-share-config → first identity → ssh → apply → link → secrets → hooks → doctor
-cs init --repo <git-url>     later machine: same, cloning the existing config repo
-All phases are re-runnable; each is skipped when already satisfied. --skip <phase,...> to omit.
+Wizard:
+  1. join an existing share (paste any GitHub URL) or create a new one
+     - a per-machine MASTER key (~/.ssh/cs/master) is the only thing that reaches the config repo;
+       registered as a deploy key on the repo (or an account key)
+  2. machine name (existing machines listed) + profiles
+  3. identities from the repo -> ssh keys generated/registered, tokens offered
+  4. apply, link, secrets, hooks, doctor, optional clone
+Every phase is re-runnable and skips what is already done.
 """
 from __future__ import annotations
 
 import shutil
 from pathlib import Path
-from typing import List, Optional
+from typing import List, Optional, Set
 
-from . import apply, deps, doctor, github, gitutil, identity as identity_mod, link, manifest as mf, paths, platform, ui
+from . import apply, deps, doctor, github, gitutil, identity as identity_mod, link, manifest as mf, master, paths, platform, ui
 from .config import Machine, exists as machine_exists, load as load_machine, save as save_machine
 
 CONFIG_REPO_NAME = "claude-share-config"
+PHASES = ["deps", "repo", "ssh", "apply", "link", "secrets", "hooks", "doctor"]
 
 
+# ---------------------------------------------------------------- template
 def new(dest: Path, force: bool = False, branch: str = "master") -> Path:
     src = paths.templates_dir() / "config-repo"
-    if dest.exists() and any(dest.iterdir()) and not force:
+    if dest.exists() and any(dest.iterdir()) and not force and not gitutil.is_repo(dest):
         raise SystemExit(f"cs: {dest} is not empty (use --force to overlay the template)")
     dest.mkdir(parents=True, exist_ok=True)
     for f in src.rglob("*"):
@@ -36,172 +42,177 @@ def new(dest: Path, force: bool = False, branch: str = "master") -> Path:
             (dest / d / ".gitkeep").touch()
     if not gitutil.is_repo(dest):
         gitutil.run(["init", "-q", "-b", branch], dest)
-        gitutil.run(["add", "-A"], dest)
+    gitutil.run(["add", "-A"], dest)
+    if gitutil.is_dirty(dest) or not gitutil.out(["rev-parse", "--verify", "-q", "HEAD"], dest):
         gitutil.commit(dest, "claude-share config skeleton")
     return dest
 
 
-def _phase_machine(name: str, profiles: List[str], workspace: Optional[str], interactive: bool) -> Machine:
+# ---------------------------------------------------------------- pieces
+def _access_loop(ssh_url: str, gh, interactive: bool) -> None:
+    """Make sure the master key can reach ssh_url; register/instruct until it can."""
+    key, pub, created = master.ensure_key()
+    if created:
+        ui.ok(f"generated master key {master.KEY} (this machine's key for the config repo only)")
+    ok, err = master.can_access(ssh_url)
+    if ok:
+        ui.ok("config repo reachable with the master key")
+        return
+    if gh:
+        reg = master.register_deploy_key(gh[0], gh[1], pub, f"cs:master:{platform.describe()}")
+        if reg:
+            ui.info(f"  {reg}")
+            ok, err = master.can_access(ssh_url)
+            if ok:
+                ui.ok("config repo reachable with the master key")
+                return
+    while not ok:
+        master.print_instructions(pub, gh)
+        if not interactive:
+            raise SystemExit("cs: config repo not reachable with the master key (see instructions above)")
+        if ui.prompt("press Enter when the key is added (q to abort)", "") == "q":
+            raise SystemExit("cs: aborted")
+        ok, err = master.can_access(ssh_url)
+        if not ok:
+            ui.warn(f"still no access: {err}")
+    ui.ok("config repo reachable with the master key")
+
+
+def _clone_config(ssh_url: str, target: Path) -> None:
+    target.parent.mkdir(parents=True, exist_ok=True)
+    gitutil.run(["clone", "-q", ssh_url, str(target)], ssh_key=str(master.key_path()))
+    master.configure_repo(target)
+    ui.ok(f"config repo cloned to {paths.contract(target)}")
+
+
+def _ask_url(prompt: str):
+    while True:
+        raw = ui.prompt(prompt)
+        if not raw:
+            continue
+        ssh_url, gh = master.parse_repo_url(raw)
+        if gh:
+            vis = master.is_public(master.https_url(*gh))
+            ui.info("  " + {True: "found (public)", False: "found (private) — access via the master key", None: "not found or unreachable — check the URL"}[vis])
+            if vis is None and not ui.confirm("use this URL anyway?", False):
+                continue
+        return ssh_url, gh
+
+
+def _join(target: Path, interactive: bool, repo_url: str = "") -> None:
+    if target.exists() and gitutil.is_repo(target):
+        ui.info(f"  [skip] config repo present at {paths.contract(target)}")
+        master.configure_repo(target)
+        return
+    ssh_url, gh = master.parse_repo_url(repo_url) if repo_url else _ask_url("config repo URL (e.g. https://github.com/<owner>/claude-share-config)")
+    _access_loop(ssh_url, gh, interactive)
+    _clone_config(ssh_url, target)
+
+
+def _create(target: Path, interactive: bool) -> None:
+    name = ui.prompt("name for your new config repo", CONFIG_REPO_NAME)
+    ui.info("")
+    ui.info(ui.bold(f"Create an EMPTY private repository named '{name}' on GitHub") + " (no README, no .gitignore):")
+    ui.info("  https://github.com/new")
+    ui.info("")
+    ssh_url, gh = _ask_url("paste the new repo's URL")
+    _access_loop(ssh_url, gh, interactive)
+    new(target)
+    if not gitutil.remote_url(target):
+        gitutil.run(["remote", "add", "origin", ssh_url], target)
+    master.configure_repo(target)
+    gitutil.run(["push", "-q", "-u", "origin", gitutil.current_branch(target)], target)
+    ui.ok(f"config repo initialized and pushed to {ssh_url}")
+
+
+def _machine(repo: Path, name: str, profiles: List[str], workspace: Optional[str], interactive: bool) -> Machine:
     if machine_exists():
         m = load_machine()
         changed = False
-        if name and m.name != name:
-            m.name, changed = name, True
-        if profiles and m.profiles != profiles:
-            m.profiles, changed = profiles, True
-        if workspace and m.workspace != workspace:
-            m.workspace, changed = workspace, True
+        for attr, val in (("name", name), ("profiles", profiles), ("workspace", workspace)):
+            if val and getattr(m, attr) != val:
+                setattr(m, attr, val); changed = True
         if changed:
-            save_machine(m)
-            ui.act(f"updated {paths.contract(paths.machine_file())}")
+            save_machine(m); ui.act(f"updated {paths.contract(paths.machine_file())}")
         else:
             ui.info(f"  [skip] machine {ui.bold(m.name)} ({', '.join(m.profiles)})")
         return m
+    existing = sorted(d.name for d in (repo / "machines").iterdir() if d.is_dir() and d.name != "recovery") if (repo / "machines").exists() else []
+    if existing:
+        ui.info("  machines already in this share: " + ", ".join(existing))
     if not name:
         if not interactive:
             raise SystemExit("cs: --name <machine-name> is required")
         default = {"wsl2": "desktop", "macos": "laptop"}.get(platform.describe(), "machine")
-        name = ui.prompt("machine name (e.g. desktop-personal, work-mac)", default)
+        while True:
+            name = ui.prompt("name for this machine", default)
+            if name in existing and not ui.confirm(f"'{name}' already exists — re-use it (its published keys will be replaced)?", False):
+                continue
+            if mf.NAME_RE.match(name):
+                break
     if not profiles:
-        profiles = [x.strip() for x in ui.prompt("profiles (comma list; projects tagged with these are cloned here)", "personal").split(",") if x.strip()] if interactive else ["personal"]
+        known: Set[str] = set()
+        try:
+            for p in mf.load(repo).projects.values():
+                known |= set(p.profiles) - {"all"}
+        except SystemExit:
+            pass
+        hint = f" (existing: {', '.join(sorted(known))})" if known else ""
+        default = "personal"
+        profiles = [x.strip() for x in ui.prompt(f"profiles for this machine — which project groups it gets{hint}", default).split(",") if x.strip()] if interactive else [default]
     m = Machine(name=name, profiles=profiles, workspace=workspace)
     save_machine(m)
-    ui.ok(f"machine {ui.bold(m.name)} profiles {', '.join(m.profiles)} → {paths.contract(paths.machine_file())}")
+    ui.ok(f"machine {ui.bold(m.name)} profiles {', '.join(m.profiles)}")
     return m
 
 
-def _phase_repo(m: Machine, repo_url: str, owner: str, interactive: bool, ssh_key: str = "") -> Path:
-    target = m.repo_dir
-    if repo_url and not ("://" in repo_url or repo_url.startswith("git@")):
-        src = paths.expand(repo_url)
-        if src.resolve() == target.resolve():
-            repo_url = ""
-        elif gitutil.is_repo(src) or gitutil.is_bare(src):
-            if not target.exists():
-                ui.act(f"clone {paths.contract(src)} → {paths.contract(target)}")
-                target.parent.mkdir(parents=True, exist_ok=True)
-                gitutil.run(["clone", "-q", str(src), str(target)])
-            return target
-        else:
-            raise SystemExit(f"cs: {src} is not a git repo")
-    if repo_url:
-        if target.exists() and gitutil.is_repo(target):
-            ui.info(f"  [skip] config repo present at {paths.contract(target)}")
-        else:
-            ui.act(f"clone {repo_url} → {paths.contract(target)}")
-            target.parent.mkdir(parents=True, exist_ok=True)
-            key = str(paths.expand(ssh_key)) if ssh_key else None
-            p = gitutil.run(["clone", "-q", repo_url, str(target)], check=False, ssh_key=key)
-            if p.returncode != 0 and interactive and not key:
-                ui.warn("clone failed with the default ssh key: " + p.stderr.strip().splitlines()[-1])
-                keys = sorted(x.name for x in (paths.home() / ".ssh").glob("id_*") if not x.name.endswith(".pub"))
-                k = ui.prompt("ssh private key that has access" + (f" (have: {', '.join(keys)})" if keys else ""), "~/.ssh/id_ed25519")
-                p = gitutil.run(["clone", "-q", repo_url, str(target)], check=False, ssh_key=str(paths.expand(k)))
-            if p.returncode != 0:
-                raise SystemExit("cs: clone failed: " + p.stderr.strip())
-        return target
-
-    # no --repo: local repo exists?  ensure it has a remote; else create everything under <owner>
-    exists = target.exists() and gitutil.is_repo(target)
-    if exists and gitutil.remote_url(target):
-        ui.info(f"  [skip] config repo present at {paths.contract(target)} ({gitutil.remote_url(target)})")
-        return target
-    if not owner:
-        if not interactive:
-            raise SystemExit("cs: pass --repo <git-url> (existing config repo) or --owner <github-user-or-org> (create one)")
-        default = ""
-        if exists:
-            try:
-                ids = mf.load(target).identities
-                default = next((i.github_owner for i in ids.values() if i.github_owner), "")
-            except SystemExit:
-                pass
-        owner = ui.prompt("GitHub user/org that will own your private config repo", default)
-        if not owner:
-            raise SystemExit("cs: an owner is required")
-    token = github.ensure_token(owner, interactive)
-    ui.ok(f"GitHub token for {owner} ok (authenticates as {github.whoami(token)})")
-    url = f"git@github.com:{owner}/{CONFIG_REPO_NAME}.git"
-    if github.ensure_repo(owner, CONFIG_REPO_NAME, token, private=True, description="claude-share config (private)"):
-        ui.ok(f"created private repo {owner}/{CONFIG_REPO_NAME}")
-        remote_is_new = True
-    else:
-        ui.info(f"  {owner}/{CONFIG_REPO_NAME} already exists on GitHub")
-        remote_is_new = False
-    if not exists:
-        if remote_is_new:
-            new(target)
-            ui.ok(f"config repo initialized at {paths.contract(target)}")
-        else:
-            ui.act(f"clone {url} → {paths.contract(target)}")
-            target.parent.mkdir(parents=True, exist_ok=True)
-            gitutil.run(["clone", "-q", url, str(target)])
-            return target
-    gitutil.run(["remote", "add", "origin", url], target)
-    ui.act(f"remote origin → {url}")
-    return target
-
-
-def _phase_first_identity(repo: Path, m: Machine, owner: str, interactive: bool) -> None:
+def _first_identity(repo: Path, m: Machine, interactive: bool) -> None:
     man = mf.load(repo)
     if man.identities:
         return
     if not interactive:
         ui.warn("no identities yet — add one with `cs identity add <id> --owner <owner> --name .. --email ..`")
         return
-    ui.section("first git identity")
-    ui.info(f"  Commits and repo creation under github.com/{owner or '<owner>'} will use this identity.")
+    ui.section("first identity")
+    ui.info("  An identity = a GitHub owner (your user or an org) + the name/email you commit with there.")
     id_ = ui.prompt("identity id", "personal")
-    own = ui.prompt("GitHub owner (user/org) for this identity", owner)
+    own = ui.prompt("GitHub owner (your login or an org)")
     name = ui.prompt("git user.name")
     email = ui.prompt("git user.email")
-    keys = sorted(p.name for p in (paths.home() / ".ssh").glob("id_*") if not p.name.endswith(".pub")) if (paths.home() / ".ssh").exists() else []
-    key = ui.prompt(f"ssh private key for github.com/{own} (Enter = new key ~/.ssh/cs/{id_})" + (f" (have: {', '.join(keys)})" if keys else ""), f"~/.ssh/cs/{id_}")
-    identity_mod.add(repo, m, man, id_, owner=own, name=name, email=email, key=key, no_token=True)
+    identity_mod.add(repo, m, man, id_, owner=own, name=name, email=email, no_token=True)
 
 
-def _phase_push(repo: Path) -> None:
-    if not gitutil.remote_url(repo):
-        return
-    if gitutil.ahead_behind(repo) is not None:
-        return
-    branch = gitutil.current_branch(repo)
-    try:
-        gitutil.run(["push", "-q", "-u", "origin", branch], repo, timeout=60)
-        ui.ok(f"pushed config repo ({branch}) to {gitutil.remote_url(repo)}")
-    except gitutil.GitError as e:
-        ui.fail(f"push failed: {e}")
-        ui.info("  (is the SSH key for this owner registered on GitHub? `ssh -T git@github.com -i <key>`)")
-
-
-PHASES = ["deps", "repo", "ssh", "apply", "link", "secrets", "hooks", "doctor"]
-
-
-def init(repo_url: str = "", owner: str = "", name: str = "", profiles: Optional[List[str]] = None,
-         skip: Optional[List[str]] = None, workspace: Optional[str] = None, interactive: bool = True,
-         ssh_key: str = "", install_deps: bool = False) -> int:
-    skip = skip or []
-    for x in skip:
-        if x not in PHASES:
-            raise SystemExit(f"cs: unknown phase '{x}' (phases: {', '.join(PHASES)})")
-    ui.section("machine")
-    m = _phase_machine(name, profiles or [], workspace, interactive)
-    if "deps" not in skip:
-        ui.section("prerequisites")
-        if deps.run(install=install_deps) != 0 and not install_deps:
-            ui.warn("missing prerequisites — `cs init --install-deps` installs the user-local ones")
-    ui.section("config repo")
-    repo = _phase_repo(m, repo_url, owner, interactive, ssh_key) if "repo" not in skip else m.repo_dir
-    _phase_first_identity(repo, m, owner, interactive)
+def _identities_keys_tokens(repo: Path, m: Machine, interactive: bool, skip: List[str]) -> None:
     man = mf.load(repo)
-    if "ssh" not in skip and man.identities:
-        ui.section("ssh keys")
+    if not man.identities:
+        return
+    if "ssh" not in skip:
+        ui.section("identity ssh keys")
         from . import ssh
-        ssh.setup(repo, m, man)
+        rc = ssh.setup(repo, m, man)
+        while rc != 0 and interactive:
+            if ui.prompt("press Enter after adding the key(s) on GitHub (s to skip)", "") == "s":
+                break
+            rc = ssh.setup(repo, m, man, check_only=True)
+    if interactive:
+        missing = [i for i in man.identities.values() if i.github_owner and not github.get_token(i.github_owner)]
+        if missing:
+            ui.section("GitHub tokens")
+            ui.info("  A token per owner lets `cs new --<id>` create repos. Optional now; `cs token set <owner>` later.")
+            for i in missing:
+                if ui.confirm(f"store a token for {i.github_owner} (identity {i.id}) now?", False):
+                    try:
+                        github.ensure_token(i.github_owner)
+                        ui.ok(f"token for {i.github_owner} stored")
+                    except (github.GitHubError, SystemExit) as e:
+                        ui.warn(str(e))
+
+
+def _finish(repo: Path, m: Machine, interactive: bool, skip: List[str]) -> int:
+    man = mf.load(repo)
     if "apply" not in skip:
         ui.section("apply ~/.claude")
         apply.run(repo, m, man)
-    _phase_push(repo)
     if "link" not in skip:
         ui.section("link project files")
         link.run(repo, m, man)
@@ -214,14 +225,113 @@ def init(repo_url: str = "", owner: str = "", name: str = "", profiles: Optional
         from . import hooks
         hooks.run(repo, m, "install")
         apply.run(repo, m, mf.load(repo))
-    _phase_push(repo)
+    _push(repo)
+    rc = 0
     if "doctor" not in skip:
         ui.section("doctor")
         rc = doctor.run(repo, m, man)
-    else:
-        rc = 0
+    ws = man.workspace(m)
+    missing = [p for p in man.selected(m) if p.kind != "local" and not p.checkout_root(ws).exists()]
+    if missing and interactive and ui.confirm(f"clone {len(missing)} project(s) now ({', '.join(p.name for p in missing[:6])}{'…' if len(missing) > 6 else ''})?", True):
+        from . import projects
+        projects.clone(repo, m, man, [])
     ui.info("")
-    if not man.identities:
-        ui.info("next: " + ui.bold("cs identity add personal --owner <github-user> --name \"..\" --email .."))
-    ui.info("next: " + ui.bold("cs new <project> --<identity>") + "   " + ui.dim("cs status · cs sync · cs --help"))
+    ui.info(ui.bold("done.") + "  open a new terminal (claude() wrapper) · cs status · cs new <project> --<identity>")
     return rc
+
+
+def _push(repo: Path) -> None:
+    if not gitutil.remote_url(repo):
+        return
+    branch = gitutil.current_branch(repo)
+    ab = gitutil.ahead_behind(repo)
+    if ab is None or ab[0]:
+        p = gitutil.run(["push", "-q", "-u", "origin", branch], repo, check=False, timeout=60)
+        if p.returncode == 0:
+            ui.ok("config repo pushed")
+        else:
+            ui.fail(f"push failed: {p.stderr.strip()}")
+
+
+# ---------------------------------------------------------------- entry points
+def wizard(install_deps: bool, skip: List[str], repo_url: str = "") -> int:
+    target = paths.repo_dir()
+    ui.section("claude-share")
+    if "deps" not in skip:
+        deps.run(install=install_deps)
+    already = target.exists() and gitutil.is_repo(target)
+    if already:
+        ui.info(f"  config repo already at {paths.contract(target)}")
+        master.configure_repo(target)
+    else:
+        if repo_url:
+            choice = "1"
+        else:
+            ui.info("  1) join an existing share (you have a config repo already)")
+            ui.info("  2) create a new share")
+            choice = ui.prompt("choose", "1")
+        ui.section("config repo")
+        if choice.startswith("2"):
+            _create(target, True)
+        else:
+            _join(target, True, repo_url)
+    ui.section("machine")
+    m = _machine(target, "", [], None, True)
+    _first_identity(target, m, True)
+    _identities_keys_tokens(target, m, True, skip)
+    return _finish(target, m, True, skip)
+
+
+def init(repo_url: str = "", owner: str = "", name: str = "", profiles: Optional[List[str]] = None,
+         skip: Optional[List[str]] = None, workspace: Optional[str] = None, interactive: bool = True,
+         ssh_key: str = "", install_deps: bool = False) -> int:
+    skip = skip or []
+    for x in skip:
+        if x not in PHASES:
+            raise SystemExit(f"cs: unknown phase '{x}' (phases: {', '.join(PHASES)})")
+    target = paths.repo_dir()
+    local_src = paths.expand(repo_url) if repo_url and not ("://" in repo_url or repo_url.startswith("git@")) else None
+
+    if interactive and not name and not local_src and not owner:
+        return wizard(install_deps, skip, repo_url)
+
+    # flag-driven / scripted path
+    ui.section("machine")
+    if not (target.exists() and gitutil.is_repo(target)) and "repo" not in skip:
+        ui.section("config repo")
+        if local_src:
+            if not (gitutil.is_repo(local_src) or gitutil.is_bare(local_src)):
+                raise SystemExit(f"cs: {local_src} is not a git repo")
+            target.parent.mkdir(parents=True, exist_ok=True)
+            gitutil.run(["clone", "-q", str(local_src), str(target)])
+            ui.ok(f"config repo cloned from {paths.contract(local_src)}")
+        elif repo_url:
+            ssh_url, gh = master.parse_repo_url(repo_url)
+            if ssh_key:   # explicit key instead of the master key
+                target.parent.mkdir(parents=True, exist_ok=True)
+                gitutil.run(["clone", "-q", ssh_url, str(target)], ssh_key=str(paths.expand(ssh_key)))
+                gitutil.run(["config", "core.sshCommand", f"ssh -i {paths.contract(paths.expand(ssh_key))} -o IdentitiesOnly=yes"], target)
+            else:
+                _access_loop(ssh_url, gh, interactive)
+                _clone_config(ssh_url, target)
+        elif owner:
+            token = github.ensure_token(owner, interactive)
+            url = f"git@github.com:{owner}/{CONFIG_REPO_NAME}.git"
+            if github.ensure_repo(owner, CONFIG_REPO_NAME, token, private=True, description="claude-share config (private)"):
+                ui.ok(f"created private repo {owner}/{CONFIG_REPO_NAME}")
+                new(target)
+                gitutil.run(["remote", "add", "origin", url], target)
+            else:
+                _access_loop(url, (owner, CONFIG_REPO_NAME), interactive)
+                _clone_config(url, target)
+            _access_loop(url, (owner, CONFIG_REPO_NAME), interactive)
+            master.configure_repo(target)
+        else:
+            raise SystemExit("cs: pass --repo <url|path> or --owner <github-owner>, or run `cs init` without arguments")
+    if "deps" not in skip:
+        ui.section("prerequisites")
+        deps.run(install=install_deps)
+    m = _machine(target, name, profiles or [], workspace, interactive)
+    _first_identity(target, m, interactive)
+    _identities_keys_tokens(target, m, interactive, skip)
+    return _finish(target, m, interactive, skip)

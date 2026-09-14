@@ -19,19 +19,18 @@ WSL2 on Windows, macOS, Linux. Windows-native is unsupported.
 
 ```sh
 git clone https://github.com/r0-development/claude-share.git ~/dev/claude-share   # public, no auth needed
-ln -s ~/dev/claude-share/bin/cs ~/.local/bin/cs
-
-cs init --install-deps      # first machine — interactive:
-                            #   machine name + profiles
-                            #   GitHub owner for your private config repo + a fine-grained token (stored locally)
-                            #   → creates <owner>/claude-share-config, initializes and pushes it
-                            #   first git identity (name, email, ssh key)
-cs identity add work --owner <company-org> --name "Your Name" --email you@company.com
-cs new <project> --personal        # dir, git init -b master, private GitHub repo, first push, registered, Claude wired in
+mkdir -p ~/.local/bin && ln -s ~/dev/claude-share/bin/cs ~/.local/bin/cs
+cs init --install-deps
 ```
 
-Every later machine: same clone + `cs init --repo git@github.com:<owner>/claude-share-config.git --name work-mac --profiles work,personal`, then `cs clone`.
-Details: `docs/BOOTSTRAP.md`.
+`cs init` is a wizard: join an existing share (paste its GitHub URL) or create a new one; a per-machine **master key**
+gets this machine into the config repo (deploy key); pick a machine name and profiles; identities from the repo get their
+SSH keys and tokens; then everything is applied and projects can be cloned. Details: `docs/BOOTSTRAP.md`.
+
+```sh
+cs identity add acme --owner acme-org --name "Your Name" --email you@acme.com   # more identities
+cs new <project> --acme            # dir, git init -b master, private GitHub repo, first push, registered, Claude wired in
+```
 
 `cs` with no arguments prints the dashboard. `cs <command> -h` for options.
 
@@ -69,7 +68,8 @@ There is deliberately **no global `user.email`**: a repo that matches no identit
 | `cs identity` | list: commits as, owner, key present?, token stored?, projects using it |
 | `cs identity add <id> --owner <owner> --name "<name>" --email <email>` | add it, render git includes, offer to store a token for `<owner>` (`--key <path>` to use an existing key, `--no-token`) |
 | `cs identity rename <old> <new>` | rename everywhere (manifest, projects, key files, published pubkeys, includes) |
-| `cs ssh setup` / `cs ssh check` | create missing keys, publish public halves, register on GitHub (user accounts, via token) or print for pasting; verify |
+| `cs ssh setup` / `cs ssh check` | create missing identity keys, publish public halves, register on GitHub (user accounts, via token) or print for pasting; verify |
+| `cs ssh master` | the machine's **master key** `~/.ssh/cs/master`: reaches the config repo only (deploy key); nothing else uses it |
 | `cs token set\|check\|rm\|ls <owner>` | API tokens |
 | `cs doctor --fix` | report identity mismatches; rewrite remotes that use an old owner name or SSH alias |
 

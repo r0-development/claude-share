@@ -1,47 +1,59 @@
 # Bootstrapping a machine
 
-## First machine (you have nothing yet)
-
 ```sh
+sudo apt install -y git curl openssh-client        # WSL/Ubuntu; macOS: xcode-select --install
 git clone https://github.com/r0-development/claude-share.git ~/dev/claude-share
-~/dev/claude-share/bin/cs init --install-deps
+mkdir -p ~/.local/bin && ln -s ~/dev/claude-share/bin/cs ~/.local/bin/cs
+cs init --install-deps
 ```
 
-`cs init` walks through, skipping anything already done:
+`cs init` with no arguments is a wizard. Everything is re-runnable; finished steps are skipped.
 
-| phase | what happens | needs you? |
-|---|---|---|
-| machine | `~/.config/claude-share/machine.toml` — name, profiles | name + profiles |
-| prerequisites | git, ssh, age, sops, node, claude (user-local installs; apt/brew commands printed otherwise) | – |
-| config repo | GitHub owner + a fine-grained token → creates private `<owner>/claude-share-config`, initializes, pushes | owner + token |
-| first identity | name, email, ssh key → `[identities.<id>]`, git includes | answers |
-| ssh keys | generates missing keys, publishes public halves, registers on GitHub via token (user accounts) or prints the key | maybe paste a key |
-| apply | `~/.claude` rendered/linked, `~/.gitconfig` include, shell rc block (`claude()` wrapper) | – |
-| link | side-store files into every checkout | – |
-| secrets | age key for this machine; first machine becomes the only recipient | – |
-| automatic sync | Claude Code hooks (in the config repo) + systemd/launchd timer | – |
-| doctor | everything checked | – |
+## 1. Join an existing share, or create one
 
-Then `cs identity add work --owner <org> --name .. --email .. --key ..` for more identities, and `cs new <project> --<identity>`.
+**Join** — paste the config repo URL in any form (`https://github.com/<owner>/claude-share-config` is fine).
+cs checks whether the repo exists (public or private), then makes sure this machine can reach it:
 
-## Every later machine
+- a **master key** `~/.ssh/cs/master` is generated. It is this machine's key for the config repo *only* — separate
+  from all identities; without it nothing else works.
+- if a GitHub token for the owner is stored, the key is registered automatically as a **deploy key** (write access).
+  Otherwise the public key is printed with the link `…/settings/keys/new`; add it (deploy key, or your account's SSH keys),
+  press Enter, and cs verifies access.
+- the repo is cloned to `~/.config/claude-share/repo`, pinned to the master key.
+
+**Create** — name the repo (default `claude-share-config`), create it *empty and private* on GitHub, paste its URL;
+same master-key step; cs initializes it from the template and pushes.
+
+## 2. Machine
+
+Existing machines in the share are listed; pick a name for this one (`desktop-work`, `laptop`…) and its profiles —
+the project groups it should get (`personal`, `<org>` …).
+
+## 3. Identities → keys → tokens
+
+From the repo cs knows your identities (owner + name + email). For each one it generates `~/.ssh/cs/<id>` if missing,
+publishes the public half to `machines/<machine>/ssh/`, and registers it on GitHub via the owner's token when the owner
+is a user account — otherwise it prints the key to paste (an org key goes on *your user account* that belongs to the org).
+Then it offers to store a GitHub token per owner (needed for `cs new`; skippable).
+
+On a brand-new share the wizard first asks for your first identity.
+
+## 4. Apply, link, secrets, hooks, doctor, clone
+
+`~/.claude` is rendered, Claude files are linked, this machine's age key is created and published, the Claude Code
+hooks and the 15-minute timer are installed, doctor runs, and cs offers to clone the projects for your profiles.
+
+Afterwards: **open a new terminal** (the `claude()` wrapper), log into Claude Code once (`claude`), and on a machine
+that already has secrets run `cs sync && cs enroll <new-machine>` — until then Claude runs there without secrets.
+
+## Scripted / non-interactive
 
 ```sh
-git clone https://github.com/r0-development/claude-share.git ~/dev/claude-share
-~/dev/claude-share/bin/cs init --install-deps --repo git@github.com:<owner>/claude-share-config.git --key ~/.ssh/cs/personal --name work-mac --profiles work,personal
+cs init --repo https://github.com/<owner>/claude-share-config --name work-mac --profiles personal,acme --non-interactive
 ```
-
-- Without `--key`, cs tries the default key and then asks which one can clone the config repo. On a truly bare machine
-  generate one first: `ssh-keygen -t ed25519 -f ~/.ssh/cs/personal` and add the `.pub` to GitHub.
-- After init: `cs clone` brings in the projects for this machine's profiles.
-- Secrets: the new machine publishes its age public key; on a machine that already has access run
-  `cs sync && cs enroll <new-machine>`; then `cs sync` on the new machine. Until then Claude runs without secrets.
-- GitHub tokens are per machine: `cs token set <owner>` when you first need `cs new`.
-- Log into Claude Code once (`claude`).
+Fails with instructions instead of prompting when the master key is not yet registered.
 
 ## Day to day
 
-Nothing. Hooks push memory/plans after each Claude response and pull at session start; the timer syncs every 15 min.
+Nothing. Hooks push after each Claude response and pull at session start; the timer syncs every 15 min.
 `cs` shows the dashboard; `cs sync` when it says blocked; `cs doctor` when something feels off.
-
-Open a **new shell** after the first `cs init` so the `claude()` wrapper (from `~/.bashrc` / `~/.zshrc`) is active.
