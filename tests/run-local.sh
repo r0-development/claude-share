@@ -106,7 +106,7 @@ sleep 1; echo '# alpha guidance v2' > "$HOME/dev/alpha/CLAUDE.md"
 $CS sync >/dev/null || die "sync"
 grep -q v2 "$SIDE/CLAUDE.md" || die "newer checkout content won"
 (cd "$CS_CONFIG_DIR/repo" && [ -z "$(git status --porcelain)" ]) || die "config repo committed"
-[ "$(git -C "$HOME/cfg.git" rev-parse main)" = "$(git -C "$CS_CONFIG_DIR/repo" rev-parse HEAD)" ] || die "pushed"
+[ "$(git -C "$HOME/cfg.git" rev-parse HEAD)" = "$(git -C "$CS_CONFIG_DIR/repo" rev-parse HEAD)" ] || die "pushed"
 pass sync-copyback
 
 # --- second machine from the same remote sees the same state
@@ -155,4 +155,13 @@ grep -q autoMemoryDirectory "$HOME/dev/fresh/.claude/settings.local.json" || die
 [ -z "$(git -C "$HOME/dev/fresh" status --porcelain)" ] || die "fresh stays clean"
 if $CS new fresh --test --no-github >/dev/null 2>&1; then die "duplicate name refused"; fi
 pass cs-new
+
+# --- identity add: appended before the Projects marker, includes re-rendered, usable as --flag
+$CS identity add extra --owner extra-org --name "Extra" --email extra@example.com --key ~/.ssh/id_extra --no-token >/dev/null 2>&1 || die "identity add"
+grep -q '^\[identities.extra\]' "$CS_CONFIG_DIR/repo/projects.toml" || die "identity in manifest"
+grep -q 'git@github.com:extra-org/\*\*' "$HOME/.config/git/claude-share.inc" || die "includeIf for new identity"
+$CS identity ls | grep -q extra || die "identity ls"
+$CS new viaflag --extra-org --no-github >/dev/null 2>&1 || die "new via --owner flag"
+[ "$(git -C "$HOME/dev/viaflag" config user.email)" = "extra@example.com" ] || die "identity applied to new project"
+pass identity
 echo "ALL PASS (HOME=$HOME)"

@@ -47,12 +47,8 @@ def run(repo: Path, m: Machine, man: Manifest, name: str, ident: Identity, *, pr
 
     # 2. GitHub repo
     if kind == "git" and not no_github and url:
-        token = github.get_token(ident.id)
-        if not token:
-            fail(f"no GitHub token for identity '{ident.id}' — run `cs token set {ident.id}` "
-                 f"(fine-grained token with Repository administration + Metadata for {owner})")
-            return 1
         try:
+            token = github.ensure_token(owner)
             if github.repo_exists(owner, name, token):
                 info(f"  github: {owner}/{name} already exists")
             else:

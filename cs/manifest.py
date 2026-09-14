@@ -216,3 +216,28 @@ def append_project(repo: Path, p: Project) -> None:
     if not text.endswith("\n"):
         text += "\n"
     f.write_text(text + "\n" + project_block(p))
+
+
+def identity_block(i: Identity) -> str:
+    values: Dict[str, Any] = {"name": i.name, "email": i.email, "ssh_key": i.ssh_key}
+    if i.gh_user:
+        values["gh_user"] = i.gh_user
+    if i.github_owner:
+        values["github_owner"] = i.github_owner
+    values["url_globs"] = i.url_globs
+    return toml.table(f"identities.{i.id}", values)
+
+
+def append_identity(repo: Path, i: Identity) -> None:
+    f = repo / "projects.toml"
+    text = f.read_text()
+    if re.search(rf"^\[identities\.{re.escape(i.id)}\]\s*$", text, re.M):
+        raise SystemExit(f"cs: identity '{i.id}' already exists (edit projects.toml to change it)")
+    block = identity_block(i)
+    marker = "# ---- Projects"
+    if marker in text:
+        idx = text.index(marker)
+        text = text[:idx].rstrip("\n") + "\n\n" + block + "\n" + text[idx:]
+    else:
+        text = text.rstrip("\n") + "\n\n" + block
+    f.write_text(text)

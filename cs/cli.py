@@ -27,8 +27,10 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("-q", "--quiet", action="store_true", help="only warnings/errors")
     sub = p.add_subparsers(dest="cmd", metavar="<command>")
 
-    s = sub.add_parser("init", help="set this machine up from a config repo (re-runnable)")
-    s.add_argument("--repo", required=True, help="config repo: git URL or local path")
+    s = sub.add_parser("init", help="set this machine up (first run: creates your config repo; later: --repo <url>)")
+    s.add_argument("--repo", default="", help="existing config repo: git URL (or local path)")
+    s.add_argument("--owner", default="", help="GitHub user/org to create claude-share-config under (first run)")
+    s.add_argument("--non-interactive", action="store_true")
     s.add_argument("--name", help="machine name (e.g. work-desktop)")
     s.add_argument("--profiles", help="comma list, e.g. work,personal")
     s.add_argument("--workspace", help="override workspace root for this machine")
@@ -91,12 +93,24 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("--no-github", action="store_true", help="local git only; no remote")
     s.add_argument("--synced", action="store_true", help="kind=synced notes project (auto-committed)")
 
-    s = sub.add_parser("token", help="GitHub API tokens per identity (local, never synced)")
+    s = sub.add_parser("token", help="GitHub API tokens per owner (local, never synced)")
     ts = s.add_subparsers(dest="token_cmd", metavar="<sub>")
-    t = ts.add_parser("set", help="store a token (prompts, hidden input)"); t.add_argument("identity")
-    t = ts.add_parser("check", help="verify a token works"); t.add_argument("identity")
-    t = ts.add_parser("rm", help="delete a stored token"); t.add_argument("identity")
-    ts.add_parser("ls", help="list identities with a stored token")
+    t = ts.add_parser("set", help="store a token (prompts, hidden input)"); t.add_argument("owner", help="GitHub user/org login")
+    t = ts.add_parser("check", help="verify a token works"); t.add_argument("owner")
+    t = ts.add_parser("rm", help="delete a stored token"); t.add_argument("owner")
+    ts.add_parser("ls", help="list owners with a stored token")
+
+    s = sub.add_parser("identity", help="git identities (who commits, which key, which GitHub owner)")
+    isub = s.add_subparsers(dest="identity_cmd", metavar="<sub>")
+    i = isub.add_parser("add", help="add an identity to projects.toml")
+    i.add_argument("id", help="short id used as --<id> in cs new, e.g. personal, work")
+    i.add_argument("--owner", required=True, help="GitHub user/org whose repos use this identity")
+    i.add_argument("--name", required=True, help="git user.name")
+    i.add_argument("--email", required=True, help="git user.email")
+    i.add_argument("--key", help="ssh private key path (default ~/.ssh/id_ed25519_<id>)")
+    i.add_argument("--gh-user", default="")
+    i.add_argument("--no-token", action="store_true", help="don't prompt for a GitHub token")
+    isub.add_parser("ls")
 
     sub.add_parser("self-update", help="git pull the cs tool itself")
 
@@ -140,7 +154,8 @@ def main(argv: Optional[List[str]] = None) -> int:
 def dispatch(a) -> int:
     if a.cmd == "init":
         from . import configrepo
-        return configrepo.init(a.repo, a.name or "", _csv(a.profiles), _csv(a.skip), a.workspace)
+        return configrepo.init(a.repo, a.owner, a.name or "", _csv(a.profiles), _csv(a.skip), a.workspace,
+                               interactive=not a.non_interactive and sys.stdin.isatty())
     if a.cmd == "config":
         from . import configrepo
         if a.config_cmd == "new":
@@ -177,19 +192,19 @@ def dispatch(a) -> int:
     if a.cmd == "token":
         from . import github
         if a.token_cmd == "set":
-            f = github.set_token(a.identity)
+            f = github.set_token(a.owner)
             ui.ok(f"token stored in {paths.contract(f)} (0600, not synced)")
             return 0
         if a.token_cmd == "check":
-            tok = github.get_token(a.identity)
+            tok = github.get_token(a.owner)
             if not tok:
-                ui.fail(f"no token for '{a.identity}'"); return 1
+                ui.fail(f"no token for '{a.owner}'"); return 1
             try:
-                ui.ok(f"token for '{a.identity}' authenticates as {github.whoami(tok)}"); return 0
+                ui.ok(f"token for '{a.owner}' authenticates as {github.whoami(tok)}"); return 0
             except github.GitHubError as e:
                 ui.fail(str(e)); return 1
         if a.token_cmd == "rm":
-            f = github.token_file(a.identity)
+            f = github.token_file(a.owner)
             if f.exists():
                 f.unlink(); ui.ok("removed")
             return 0
@@ -201,6 +216,13 @@ def dispatch(a) -> int:
         build_parser().parse_args(["token", "-h"])
 
     repo, m, man = _ctx()
+    if a.cmd == "identity":
+        from . import identity
+        if a.identity_cmd == "add":
+            return identity.add(repo, m, man, a.id, owner=a.owner, name=a.name, email=a.email, key=a.key,
+                                gh_user=a.gh_user, no_token=a.no_token)
+        identity.ls(man)
+        return 0
     if a.cmd == "new":
         from . import newproj
         if not a.identity:

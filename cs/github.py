@@ -1,7 +1,7 @@
 """GitHub REST API via a per-identity fine-grained token (no gh CLI needed).
 
-Tokens live in ~/.config/claude-share/tokens/<identity> (0600, never synced) or
-the env var CS_GITHUB_TOKEN_<IDENTITY>. Required token permissions on the owner:
+Tokens are keyed by GitHub owner (user or org login) and live in
+~/.config/claude-share/tokens/<owner> (0600, never synced) or the env var CS_GITHUB_TOKEN_<OWNER>. Required token permissions on the owner:
 Repository administration (read/write) and Metadata (read); for an organization
 owner the token must be authorized for that org.
 """
@@ -24,26 +24,26 @@ class GitHubError(RuntimeError):
     pass
 
 
-def token_file(identity: str) -> Path:
-    return paths.cs_config_dir() / "tokens" / identity
+def token_file(owner: str) -> Path:
+    return paths.cs_config_dir() / "tokens" / owner.lower()
 
 
-def get_token(identity: str) -> Optional[str]:
-    env = os.environ.get(f"CS_GITHUB_TOKEN_{identity.upper().replace('-', '_')}")
+def get_token(owner: str) -> Optional[str]:
+    env = os.environ.get(f"CS_GITHUB_TOKEN_{owner.upper().replace('-', '_')}")
     if env:
         return env.strip()
-    f = token_file(identity)
+    f = token_file(owner)
     if f.exists():
         return f.read_text().strip() or None
     return None
 
 
-def set_token(identity: str, token: Optional[str] = None) -> Path:
+def set_token(owner: str, token: Optional[str] = None) -> Path:
     if not token:
-        token = getpass.getpass(f"GitHub token for identity '{identity}' (input hidden): ").strip()
+        token = getpass.getpass(f"GitHub fine-grained token for '{owner}' (hidden; needs Administration r/w on all repos): ").strip()
     if not token:
         raise SystemExit("cs: empty token")
-    f = token_file(identity)
+    f = token_file(owner)
     f.parent.mkdir(parents=True, exist_ok=True)
     f.parent.chmod(0o700)
     f.write_text(token + "\n")
@@ -101,3 +101,26 @@ def create_repo(owner: str, name: str, token: str, private: bool = True, descrip
     if me.lower() != owner.lower():
         raise GitHubError(f"token belongs to '{me}', cannot create repos for user '{owner}'")
     return api("POST", "/user/repos", token, body)
+
+
+def ensure_token(owner: str, interactive: bool = True) -> str:
+    """Return a working token for owner, prompting for one if missing/invalid."""
+    tok = get_token(owner)
+    if tok:
+        return tok
+    if not interactive:
+        raise GitHubError(f"no GitHub token for '{owner}' — run `cs token set {owner}`")
+    set_token(owner)
+    tok = get_token(owner) or ""
+    me = whoami(tok)
+    if owner_type(owner, tok) == "User" and me.lower() != owner.lower():
+        raise GitHubError(f"token authenticates as '{me}', not '{owner}'")
+    return tok
+
+
+def ensure_repo(owner: str, name: str, token: str, private: bool = True, description: str = "") -> bool:
+    """Create owner/name if missing. Returns True when it was created."""
+    if repo_exists(owner, name, token):
+        return False
+    create_repo(owner, name, token, private=private, description=description)
+    return True

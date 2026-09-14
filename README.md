@@ -20,31 +20,35 @@ WSL2 on Windows, macOS, Linux. Windows-native is unsupported.
 git clone git@github.com:r0-development/claude-share.git ~/dev/claude-share
 ln -s ~/dev/claude-share/bin/cs ~/.local/bin/cs
 
-cs config new ~/claude-config          # skeleton; edit projects.toml; push it to a private repo
-cs init --repo ~/claude-config --name my-desktop --profiles personal
-cs status
+cs init                     # first machine — interactive:
+                            #   machine name + profiles
+                            #   GitHub owner for your private config repo + a fine-grained token (stored locally)
+                            #   → creates <owner>/claude-share-config, initializes and pushes it
+                            #   first git identity (name, email, ssh key)
+cs identity add work --owner <company-org> --name "Your Name" --email you@company.com --key ~/.ssh/id_ed25519
+cs new <project> --personal        # dir, git init -b master, private GitHub repo, first push, registered, Claude wired in
 ```
 
-Second machine: same install, then `cs init --repo git@github.com:you/claude-config.git --name laptop --profiles work,personal && cs clone`.
+Every later machine: same clone + `cs init --repo git@github.com:<owner>/claude-share-config.git --name work-mac --profiles work,personal`, then `cs clone`.
 
 ## Commands
 
 | command | what |
 |---|---|
-| `cs init` | set the machine up (re-runnable phases) |
+| `cs init` | first run: create config repo + first identity; later machines: `--repo <url>` (re-runnable) |
+| `cs identity add <id> --owner <gh-owner> --name .. --email .. [--key ..]` | add a git identity; `--<id>` / `--<owner>` then select it in `cs new` |
 | `cs apply [--check]` | render `~/.claude` + git identity includes |
 | `cs link [--check]` | side-store ⇄ checkouts (newer wins) |
 | `cs adopt memory\|project\|mcp <name>` | pull existing local state into the config repo |
 | `cs sync` | commit / pull --rebase / push the config repo (+ synced projects); never leaves a half-rebase |
 | `cs status`, `cs doctor [--fix]` | overview / health checks |
 | `cs new <name> --personal` | brand-new project: dir, `git init -b master`, GitHub repo (via stored token), first push, register, link |
-| `cs token set <identity>` | store a GitHub fine-grained token for `cs new` (local file, 0600, never synced) |
+| `cs token set <owner>` | store a GitHub fine-grained token for that user/org (local file, 0600, never synced) |
 | `cs add [path]`, `cs clone` | register an existing dir / materialize missing projects |
 
 ### Creating projects
 
 ```sh
-cs token set <owner>             # once per machine: fine-grained token for that GitHub user/org
 cs new <project> --personal      # → ~/dev/<project>, private repo <owner>/<project>, registered, Claude wired in
 cs new <project> --work          # --<identity> or --<github_owner> both work
 cs new <project> --personal --synced   # auto-committed notes project (no manual git)
