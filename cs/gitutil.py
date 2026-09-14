@@ -10,9 +10,14 @@ class GitError(RuntimeError):
     pass
 
 
-def run(args: Sequence[str], cwd: Optional[Path] = None, check: bool = True, timeout: Optional[int] = None) -> subprocess.CompletedProcess:
+def run(args: Sequence[str], cwd: Optional[Path] = None, check: bool = True, timeout: Optional[int] = None,
+        ssh_key: Optional[str] = None) -> subprocess.CompletedProcess:
+    env = None
+    if ssh_key:
+        import os
+        env = dict(os.environ, GIT_SSH_COMMAND=f"ssh -i {ssh_key} -o IdentitiesOnly=yes")
     p = subprocess.run(["git", *args], cwd=str(cwd) if cwd else None, text=True,
-                       capture_output=True, timeout=timeout)
+                       capture_output=True, timeout=timeout, env=env)
     if check and p.returncode != 0:
         raise GitError(f"git {' '.join(args)} failed in {cwd or '.'}: {p.stderr.strip()}")
     return p

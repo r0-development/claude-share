@@ -30,6 +30,7 @@ def build_parser() -> argparse.ArgumentParser:
     s = sub.add_parser("init", help="set this machine up (first run: creates your config repo; later: --repo <url>)")
     s.add_argument("--repo", default="", help="existing config repo: git URL (or local path)")
     s.add_argument("--owner", default="", help="GitHub user/org to create claude-share-config under (first run)")
+    s.add_argument("--key", default="", help="ssh private key for cloning --repo (before identities are set up)")
     s.add_argument("--non-interactive", action="store_true")
     s.add_argument("--name", help="machine name (e.g. work-desktop)")
     s.add_argument("--profiles", help="comma list, e.g. work,personal")
@@ -155,7 +156,7 @@ def dispatch(a) -> int:
     if a.cmd == "init":
         from . import configrepo
         return configrepo.init(a.repo, a.owner, a.name or "", _csv(a.profiles), _csv(a.skip), a.workspace,
-                               interactive=not a.non_interactive and sys.stdin.isatty())
+                               interactive=not a.non_interactive and sys.stdin.isatty(), ssh_key=a.key)
     if a.cmd == "config":
         from . import configrepo
         if a.config_cmd == "new":

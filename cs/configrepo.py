@@ -70,7 +70,7 @@ def _phase_machine(name: str, profiles: List[str], workspace: Optional[str], int
     return m
 
 
-def _phase_repo(m: Machine, repo_url: str, owner: str, interactive: bool) -> Path:
+def _phase_repo(m: Machine, repo_url: str, owner: str, interactive: bool, ssh_key: str = "") -> Path:
     target = m.repo_dir
     if repo_url and not ("://" in repo_url or repo_url.startswith("git@")):
         src = paths.expand(repo_url)
@@ -90,7 +90,15 @@ def _phase_repo(m: Machine, repo_url: str, owner: str, interactive: bool) -> Pat
         else:
             ui.act(f"clone {repo_url} → {paths.contract(target)}")
             target.parent.mkdir(parents=True, exist_ok=True)
-            gitutil.run(["clone", "-q", repo_url, str(target)])
+            key = str(paths.expand(ssh_key)) if ssh_key else None
+            p = gitutil.run(["clone", "-q", repo_url, str(target)], check=False, ssh_key=key)
+            if p.returncode != 0 and interactive and not key:
+                ui.warn("clone failed with the default ssh key: " + p.stderr.strip().splitlines()[-1])
+                keys = sorted(x.name for x in (paths.home() / ".ssh").glob("id_*") if not x.name.endswith(".pub"))
+                k = ui.prompt("ssh private key that has access" + (f" (have: {', '.join(keys)})" if keys else ""), "~/.ssh/id_ed25519")
+                p = gitutil.run(["clone", "-q", repo_url, str(target)], check=False, ssh_key=str(paths.expand(k)))
+            if p.returncode != 0:
+                raise SystemExit("cs: clone failed: " + p.stderr.strip())
         return target
 
     # no --repo: local repo exists?  ensure it has a remote; else create everything under <owner>
@@ -167,12 +175,13 @@ def _phase_push(repo: Path) -> None:
 
 
 def init(repo_url: str = "", owner: str = "", name: str = "", profiles: Optional[List[str]] = None,
-         skip: Optional[List[str]] = None, workspace: Optional[str] = None, interactive: bool = True) -> int:
+         skip: Optional[List[str]] = None, workspace: Optional[str] = None, interactive: bool = True,
+         ssh_key: str = "") -> int:
     skip = skip or []
     ui.section("machine")
     m = _phase_machine(name, profiles or [], workspace, interactive)
     ui.section("config repo")
-    repo = _phase_repo(m, repo_url, owner, interactive) if "repo" not in skip else m.repo_dir
+    repo = _phase_repo(m, repo_url, owner, interactive, ssh_key) if "repo" not in skip else m.repo_dir
     _phase_first_identity(repo, m, owner, interactive)
     man = mf.load(repo)
     if "apply" not in skip:
