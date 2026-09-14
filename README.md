@@ -17,7 +17,7 @@ WSL2 on Windows, macOS, Linux. Windows-native is unsupported.
 ## Quick start
 
 ```sh
-git clone git@github.com:r0-development/claude-share.git ~/dev/claude-share
+git clone https://github.com/r0-development/claude-share.git ~/dev/claude-share   # public, no auth needed
 ln -s ~/dev/claude-share/bin/cs ~/.local/bin/cs
 
 cs init                     # first machine — interactive:

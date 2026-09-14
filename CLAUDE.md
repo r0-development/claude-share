@@ -5,6 +5,7 @@
 - Every filesystem path comes from `cs/paths.py` (HOME / CLAUDE_CONFIG_DIR / CS_CONFIG_DIR / XDG_STATE_HOME overridable) so
   `tests/run-local.sh` can run against a throwaway HOME.
 - Never write machine-specific values (absolute paths, hostnames) into the config repo; inject them at link/apply time.
+- This repo is PUBLIC: no real names, emails, orgs, project names or hostnames anywhere (docs, examples, tests, commit messages) — placeholders only.
 - Never touch a user's git index, stash, or working tree in project repos (`git add -A` only in the config repo and `kind=synced` repos).
 - `cs sync` must never leave a repo mid-rebase: abort, write a `blocked-*` marker, print the resolve commands.
 - Run `make test` (unit + e2e) before committing. The e2e script is the spec; extend it when behaviour changes.
