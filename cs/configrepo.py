@@ -1,9 +1,9 @@
 """`cs config new` and `cs init` (first-run wizard / later-machine setup).
 
-cs init                      interactive first run: machine → GitHub owner + token → create & push
-                             claude-share-config → first identity → apply → link → doctor
-cs init --repo <git-url>     later machine: clone the existing config repo, then apply/link/doctor
-All phases are re-runnable; each is skipped when already satisfied.
+cs init                      first run: machine → deps → GitHub owner + token → create & push
+                             claude-share-config → first identity → ssh → apply → link → secrets → hooks → doctor
+cs init --repo <git-url>     later machine: same, cloning the existing config repo
+All phases are re-runnable; each is skipped when already satisfied. --skip <phase,...> to omit.
 """
 from __future__ import annotations
 
@@ -11,7 +11,7 @@ import shutil
 from pathlib import Path
 from typing import List, Optional
 
-from . import apply, doctor, github, gitutil, identity as identity_mod, link, manifest as mf, paths, platform, ui
+from . import apply, deps, doctor, github, gitutil, identity as identity_mod, link, manifest as mf, paths, platform, ui
 from .config import Machine, exists as machine_exists, load as load_machine, save as save_machine
 
 CONFIG_REPO_NAME = "claude-share-config"
@@ -174,16 +174,30 @@ def _phase_push(repo: Path) -> None:
         ui.info("  (is the SSH key for this owner registered on GitHub? `ssh -T git@github.com -i <key>`)")
 
 
+PHASES = ["deps", "repo", "ssh", "apply", "link", "secrets", "hooks", "doctor"]
+
+
 def init(repo_url: str = "", owner: str = "", name: str = "", profiles: Optional[List[str]] = None,
          skip: Optional[List[str]] = None, workspace: Optional[str] = None, interactive: bool = True,
-         ssh_key: str = "") -> int:
+         ssh_key: str = "", install_deps: bool = False) -> int:
     skip = skip or []
+    for x in skip:
+        if x not in PHASES:
+            raise SystemExit(f"cs: unknown phase '{x}' (phases: {', '.join(PHASES)})")
     ui.section("machine")
     m = _phase_machine(name, profiles or [], workspace, interactive)
+    if "deps" not in skip:
+        ui.section("prerequisites")
+        if deps.run(install=install_deps) != 0 and not install_deps:
+            ui.warn("missing prerequisites — `cs init --install-deps` installs the user-local ones")
     ui.section("config repo")
     repo = _phase_repo(m, repo_url, owner, interactive, ssh_key) if "repo" not in skip else m.repo_dir
     _phase_first_identity(repo, m, owner, interactive)
     man = mf.load(repo)
+    if "ssh" not in skip and man.identities:
+        ui.section("ssh keys")
+        from . import ssh
+        ssh.setup(repo, m, man)
     if "apply" not in skip:
         ui.section("apply ~/.claude")
         apply.run(repo, m, man)
@@ -191,6 +205,16 @@ def init(repo_url: str = "", owner: str = "", name: str = "", profiles: Optional
     if "link" not in skip:
         ui.section("link project files")
         link.run(repo, m, man)
+    if "secrets" not in skip and m.secrets_backend != "none":
+        ui.section("secrets")
+        from . import secretscmd
+        secretscmd.init(repo, m, interactive)
+    if "hooks" not in skip:
+        ui.section("automatic sync")
+        from . import hooks
+        hooks.run(repo, m, "install")
+        apply.run(repo, m, mf.load(repo))
+    _phase_push(repo)
     if "doctor" not in skip:
         ui.section("doctor")
         rc = doctor.run(repo, m, man)

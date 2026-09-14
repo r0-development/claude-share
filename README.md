@@ -9,7 +9,8 @@ Keep your projects **and** your Claude Code setup identical on every machine.
 - **Per-project Claude state** — `CLAUDE.md`, `.claude/**`, `.mcp.json` and **auto-memory** live in a side-store in the
   config repo and are copied into every checkout (and worktree) without ever being committed to the project repo.
 - **Git identity follows the remote URL** (`includeIf hasconfig`), so work and personal repos can sit side by side.
-- **Secrets** (M1): sops + age, per-machine keys, injected into `claude` at launch. Never plaintext in git.
+- **Secrets** — sops + age, per-machine keys, decrypted into `claude`'s environment at launch so `${VAR}` in `.mcp.json` resolve. Never plaintext in git.
+- **Automatic sync** — Claude Code hooks push after each response and pull at session start; a timer syncs every 15 min.
 
 Two repos: this tool and your config repo — both private . Python 3.9+, git — nothing else.
 WSL2 on Windows, macOS, Linux. Windows-native is unsupported.
@@ -42,6 +43,8 @@ Every later machine: same clone + `cs init --repo git@github.com:<owner>/claude-
 | `cs adopt memory\|project\|mcp <name>` | pull existing local state into the config repo |
 | `cs sync` | commit / pull --rebase / push the config repo (+ synced projects); never leaves a half-rebase |
 | `cs status`, `cs doctor [--fix]` | overview / health checks |
+| `cs secrets …`, `cs enroll <machine>` | encrypted secrets (see `docs/SECRETS.md`) |
+| `cs ssh setup`, `cs deps [--install]`, `cs hooks install` | per-machine keys, prerequisites, automatic sync |
 | `cs new <name> --personal` | brand-new project: dir, `git init -b master`, GitHub repo (via stored token), first push, register, link |
 | `cs token set <owner>` | store a GitHub fine-grained token for that user/org (local file, 0600, never synced) |
 | `cs add [path]`, `cs clone` | register an existing dir / materialize missing projects |
@@ -57,4 +60,4 @@ cs new <project> --personal --synced   # auto-committed notes project (no manual
 Token permissions (GitHub → Settings → Developer settings → Fine-grained tokens): resource owner = the account/org,
 repository access "All repositories", permissions **Administration: read & write**, **Metadata: read**.
 
-See `docs/DESIGN.md` for the full design and roadmap (handoff of uncommitted work, secrets, bootstrap).
+Docs: `docs/BOOTSTRAP.md`, `docs/SECRETS.md`, `docs/WINDOWS.md`.

@@ -180,11 +180,33 @@ def apply_git(man: Manifest, check: bool, changes: List[str]) -> None:
             gc.write_text(new)
 
 
+RC_MARK = "# >>> claude-share >>>"
+RC_END = "# <<< claude-share <<<"
+
+
+def apply_shell_rc(check: bool, changes: List[str]) -> None:
+    from . import platform
+    rc = platform.shell_rc()
+    line = f'[ -f "{paths.contract(paths.tool_root() / "shell" / "cs.sh")}" ] && . "{paths.contract(paths.tool_root() / "shell" / "cs.sh")}"'
+    block = f"{RC_MARK}\n{line}\n{RC_END}\n"
+    text = rc.read_text() if rc.exists() else ""
+    if RC_MARK in text:
+        start, end = text.index(RC_MARK), text.index(RC_END) + len(RC_END) + 1
+        new = text[:start] + block + text[end:]
+    else:
+        new = text + ("\n" if text and not text.endswith("\n") else "") + block
+    if new != text:
+        changes.append(f"{paths.contract(rc)}: source shell/cs.sh (claude() wrapper, PATH)")
+        if not check:
+            rc.write_text(new)
+
+
 def run(repo: Path, m: Machine, man: Manifest, check: bool = False) -> List[str]:
     changes: List[str] = []
     apply_settings(repo, m, check, changes)
     apply_links(repo, check, changes)
     apply_git(man, check, changes)
+    apply_shell_rc(check, changes)
     for c in changes:
         (info if check else act)(c)
     if not changes:

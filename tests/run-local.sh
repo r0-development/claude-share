@@ -68,7 +68,7 @@ git clone -q --bare "$HOME/cfg-src" "$HOME/cfg.git"
 CFG_REMOTE="$HOME/cfg.git"; HOME1="$HOME"
 
 # --- init
-$CS init --repo "$HOME/cfg.git" --name t1 --profiles work >/dev/null || die "init"
+$CS init --repo "$HOME/cfg.git" --name t1 --profiles work --skip deps,ssh,secrets,hooks >/dev/null || die "init"
 pass init
 [ -L "$HOME/.claude/CLAUDE.md" ] || die "CLAUDE.md linked"
 [ -L "$HOME/.claude/skills/shared-skill" ] && [ -d "$HOME/.claude/skills/old-skill" ] && [ ! -L "$HOME/.claude/skills/old-skill" ] || die "skills coexist"
@@ -98,7 +98,7 @@ pass adopt-memory
 # --- idempotency
 $CS apply --check >/dev/null || die "apply --check clean"
 $CS link --check >/dev/null || die "link --check clean"
-$CS init --repo "$HOME/cfg.git" --name t1 --profiles work >/dev/null || die "init rerun"
+$CS init --repo "$HOME/cfg.git" --name t1 --profiles work --skip deps,ssh,secrets,hooks >/dev/null || die "init rerun"
 pass idempotent
 
 # --- edit in checkout flows back and to the worktree; sync commits + pushes
@@ -113,7 +113,7 @@ pass sync-copyback
 export HOME2="$(mktemp -d)"
 ( export HOME="$HOME2" CLAUDE_CONFIG_DIR="$HOME2/.claude" XDG_STATE_HOME="$HOME2/.local/state" CS_CONFIG_DIR="$HOME2/.config/claude-share"
   mkdir -p "$HOME2/dev"
-  $CS init --repo "$CFG_REMOTE" --name t2 --profiles work,personal --skip doctor >/dev/null || die "init m2"
+  $CS init --repo "$CFG_REMOTE" --name t2 --profiles work,personal --skip doctor,deps,ssh,secrets,hooks >/dev/null || die "init m2"
   $CS clone >/dev/null || die "clone m2"
   [ -d "$HOME2/dev/alpha/.git" ] && [ -d "$HOME2/dev/gamma/.git" ] && [ -d "$HOME2/dev/beta/repo/.git" ] || die "cloned selected projects"
   grep -q v2 "$HOME2/dev/alpha/CLAUDE.md" || die "m2 got alpha CLAUDE.md"
@@ -164,4 +164,33 @@ $CS identity ls | grep -q extra || die "identity ls"
 $CS new viaflag --extra-org --no-github >/dev/null 2>&1 || die "new via --owner flag"
 [ "$(git -C "$HOME/dev/viaflag" config user.email)" = "extra@example.com" ] || die "identity applied to new project"
 pass identity
+
+# --- secrets (only when sops + age are installed): init, set, get, exec, enroll a second machine, guard
+if command -v sops >/dev/null && command -v age-keygen >/dev/null; then
+  export SOPS_AGE_KEY_FILE="$HOME/.config/sops/age/keys.txt"
+  $CS secrets init >/dev/null || die "secrets init"
+  $CS secrets set global API_KEY=abc123 URL="https://x" >/dev/null || die "secrets set"
+  grep -q '^API_KEY=ENC\[' "$CS_CONFIG_DIR/repo/secrets/global.env" || die "encrypted on disk"
+  [ "$($CS secrets get global API_KEY --show)" = "abc123" ] || die "secrets get"
+  $CS secrets set alpha DB=pg >/dev/null || die "project secret"
+  (cd "$HOME/dev/alpha" && [ "$($CS -q secrets exec -- sh -c 'echo $API_KEY-$DB')" = "abc123-pg" ]) || die "secrets exec"
+  (cd "$HOME/dev/beta/repo" && [ "$($CS -q secrets exec -- sh -c 'echo $API_KEY-$DB')" = "abc123-" ]) || die "project scoping"
+  echo "PLAIN=1" > "$CS_CONFIG_DIR/repo/secrets/projects/x.env"
+  (cd "$CS_CONFIG_DIR/repo" && git add -A && git -c user.name=t -c user.email=t@x commit -qm plain >/dev/null 2>&1) && die "guard should refuse plaintext"
+  rm "$CS_CONFIG_DIR/repo/secrets/projects/x.env"; (cd "$CS_CONFIG_DIR/repo" && git reset -q)
+  $CS sync >/dev/null || die "sync secrets"
+  # second machine: not a recipient until enrolled
+  ( export HOME="$HOME2" CLAUDE_CONFIG_DIR="$HOME2/.claude" XDG_STATE_HOME="$HOME2/.local/state" CS_CONFIG_DIR="$HOME2/.config/claude-share" SOPS_AGE_KEY_FILE="$HOME2/.config/sops/age/keys.txt"
+    $CS sync >/dev/null; $CS secrets init >/dev/null 2>&1 || die "m2 secrets init"
+    $CS secrets get global API_KEY --show >/dev/null 2>&1 && die "m2 must not decrypt before enroll"
+    $CS sync >/dev/null || die "m2 publish pub" )
+  $CS sync >/dev/null && $CS enroll t2 >/dev/null || die "enroll"
+  $CS sync >/dev/null
+  ( export HOME="$HOME2" CLAUDE_CONFIG_DIR="$HOME2/.claude" XDG_STATE_HOME="$HOME2/.local/state" CS_CONFIG_DIR="$HOME2/.config/claude-share" SOPS_AGE_KEY_FILE="$HOME2/.config/sops/age/keys.txt"
+    $CS sync >/dev/null; [ "$($CS secrets get global API_KEY --show)" = "abc123" ] || die "m2 decrypts after enroll" )
+  $CS revoke t2 >/dev/null 2>&1 || die "revoke"
+  pass secrets
+else
+  echo "SKIP secrets (sops/age not installed)"
+fi
 echo "ALL PASS (HOME=$HOME)"

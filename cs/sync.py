@@ -122,9 +122,13 @@ def git_sync(repo: Path, label: str, machine: str, *, pull_only: bool = False, p
 
 
 def run(repo: Path, m: Machine, man: Manifest, *, pull_only=False, push_only=False, timeout=20,
-        resolve: Optional[str] = None, projects: bool = True) -> int:
+        resolve: Optional[str] = None, projects: bool = True, debounce: int = 0) -> int:
     ws = man.workspace(m)
     rc = 0
+    if debounce:
+        last = paths.state_dir() / "last-config"
+        if last.exists() and time.time() - last.stat().st_mtime < debounce:
+            return 0
     head_before = gitutil.out(["rev-parse", "HEAD"], repo)
     # 1. project files: checkout -> side-store (so they get committed)
     if not pull_only:

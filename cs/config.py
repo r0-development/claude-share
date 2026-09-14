@@ -15,7 +15,7 @@ class Machine:
     exclude: List[str] = field(default_factory=list)
     workspace: Optional[str] = None      # overrides projects.toml [workspace].root
     repo: Optional[str] = None           # overrides default config-repo location
-    secrets_backend: str = "none"        # sops | op | none
+    secrets_backend: str = "sops"        # sops | none
 
     @property
     def repo_dir(self) -> Path:
@@ -47,7 +47,7 @@ def load() -> Machine:
         exclude=list(d.get("exclude", [])),
         workspace=d.get("workspace"),
         repo=d.get("repo"),
-        secrets_backend=d.get("secrets", {}).get("backend", "none"),
+        secrets_backend=d.get("secrets", {}).get("backend", "sops"),
     )
 
 

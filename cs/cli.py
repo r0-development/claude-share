@@ -25,6 +25,8 @@ def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(prog="cs", description="claude-share: projects + Claude Code setup in sync across machines")
     p.add_argument("--version", action="version", version=f"cs {__version__}")
     p.add_argument("-q", "--quiet", action="store_true", help="only warnings/errors")
+    common = argparse.ArgumentParser(add_help=False)
+    common.add_argument("-q", "--quiet", action="store_true", dest="quiet_sub", help="only warnings/errors")
     sub = p.add_subparsers(dest="cmd", metavar="<command>")
 
     s = sub.add_parser("init", help="set this machine up (first run: creates your config repo; later: --repo <url>)")
@@ -35,7 +37,8 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("--name", help="machine name (e.g. work-desktop)")
     s.add_argument("--profiles", help="comma list, e.g. work,personal")
     s.add_argument("--workspace", help="override workspace root for this machine")
-    s.add_argument("--skip", default="", help="comma list of phases to skip: repo,apply,link,doctor")
+    s.add_argument("--skip", default="", help="comma list of phases to skip: deps,repo,ssh,apply,link,secrets,hooks,doctor")
+    s.add_argument("--install-deps", action="store_true", help="install missing user-local prerequisites")
 
     s = sub.add_parser("config", help="manage the config repo")
     cs_ = s.add_subparsers(dest="config_cmd", metavar="<sub>")
@@ -58,12 +61,17 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("--check", action="store_true")
     s.add_argument("--show", action="store_true", help="(mcp) print the secret values for your secrets store")
 
-    s = sub.add_parser("sync", help="commit/pull/push the config repo (+ synced projects)")
+    s = sub.add_parser("sync", help="commit/pull/push the config repo (+ synced projects)", parents=[common])
     s.add_argument("--pull-only", action="store_true")
     s.add_argument("--push-only", action="store_true")
     s.add_argument("--timeout", type=int, default=20)
     s.add_argument("--resolve", choices=["ours", "theirs"])
     s.add_argument("--no-projects", action="store_true", help="skip kind=synced projects")
+    s.add_argument("--debounce", type=int, default=0, help="do nothing if a sync ran less than N seconds ago")
+
+    s = sub.add_parser("hooks", help="automatic sync: Claude Code hooks + a 15-min timer")
+    s.add_argument("action", nargs="?", default="status", choices=["install", "remove", "status"])
+    s.add_argument("--no-timer", action="store_true")
 
     s = sub.add_parser("status", help="config repo + projects overview")
     s.add_argument("--fetch", action="store_true")
@@ -115,6 +123,30 @@ def build_parser() -> argparse.ArgumentParser:
 
     sub.add_parser("self-update", help="git pull the cs tool itself")
 
+    s = sub.add_parser("deps", help="check (or install) prerequisites: git, age, sops, fnm/node, claude …")
+    s.add_argument("--install", action="store_true")
+
+    s = sub.add_parser("secrets", help="encrypted secrets in the config repo (sops + age)")
+    ss = s.add_subparsers(dest="secrets_cmd", metavar="<sub>")
+    ss.add_parser("init", help="create this machine's age key and publish its public half")
+    ss.add_parser("status")
+    x = ss.add_parser("edit", help="open an env file in $EDITOR via sops"); x.add_argument("name", help="global | <project>")
+    x = ss.add_parser("set", help="set KEY=VALUE pairs"); x.add_argument("name"); x.add_argument("pairs", nargs="+")
+    x = ss.add_parser("unset"); x.add_argument("name"); x.add_argument("keys", nargs="+")
+    x = ss.add_parser("get", help="print values (masked unless --show)"); x.add_argument("name"); x.add_argument("key", nargs="?"); x.add_argument("--show", action="store_true")
+    x = ss.add_parser("pull", help="write <project>/.env from the store"); x.add_argument("project"); x.add_argument("--force", action="store_true")
+    x = ss.add_parser("push", help="encrypt <project>/.env into the store"); x.add_argument("project")
+    x = ss.add_parser("diff", help="stored vs local .env"); x.add_argument("project")
+    x = ss.add_parser("exec", help="run a command with global + project secrets in its environment")
+    x.add_argument("-p", "--project"); x.add_argument("command", nargs=argparse.REMAINDER)
+    ss.add_parser("recovery", help="add a recovery recipient; prints its private key once")
+
+    x = sub.add_parser("enroll", help="grant another machine access to secrets (run on a machine that has it)"); x.add_argument("machine")
+    x = sub.add_parser("revoke", help="remove a machine's access to secrets"); x.add_argument("machine")
+
+    s = sub.add_parser("ssh", help="per-machine SSH keys for every identity")
+    s.add_argument("action", nargs="?", default="check", choices=["setup", "check"])
+
     s = sub.add_parser("project", help="project helpers")
     ps = s.add_subparsers(dest="project_cmd", metavar="<sub>")
     ps.add_parser("id", help="print the project name for the cwd (empty if none)")
@@ -145,7 +177,7 @@ def main(argv: Optional[List[str]] = None) -> int:
     platform.refuse_unsupported()
     argv = _rewrite_identity_flags(list(sys.argv[1:] if argv is None else argv))
     args = build_parser().parse_args(argv)
-    ui.set_quiet(args.quiet)
+    ui.set_quiet(args.quiet or getattr(args, "quiet_sub", False))
     try:
         return dispatch(args)
     except KeyboardInterrupt:
@@ -156,7 +188,8 @@ def dispatch(a) -> int:
     if a.cmd == "init":
         from . import configrepo
         return configrepo.init(a.repo, a.owner, a.name or "", _csv(a.profiles), _csv(a.skip), a.workspace,
-                               interactive=not a.non_interactive and sys.stdin.isatty(), ssh_key=a.key)
+                               interactive=not a.non_interactive and sys.stdin.isatty(), ssh_key=a.key,
+                               install_deps=a.install_deps)
     if a.cmd == "config":
         from . import configrepo
         if a.config_cmd == "new":
@@ -178,6 +211,9 @@ def dispatch(a) -> int:
             return 0
         build_parser().print_help()
         return 0
+    if a.cmd == "deps":
+        from . import deps
+        return deps.run(install=a.install)
     if a.cmd == "self-update":
         from . import gitutil
         root = paths.tool_root()
@@ -217,6 +253,35 @@ def dispatch(a) -> int:
         build_parser().parse_args(["token", "-h"])
 
     repo, m, man = _ctx()
+    if a.cmd == "ssh":
+        from . import ssh
+        return ssh.setup(repo, m, man, check_only=(a.action == "check"))
+    if a.cmd == "hooks":
+        from . import hooks
+        return hooks.run(repo, m, a.action, timer=not a.no_timer)
+    if a.cmd == "secrets":
+        from . import secretscmd as S
+        c = a.secrets_cmd
+        if c == "init": return S.init(repo, m, sys.stdin.isatty())
+        if c == "status": return S.status(repo, m)
+        if c == "edit": return S.edit(repo, m, a.name)
+        if c == "set": return S.set_values(repo, m, a.name, a.pairs)
+        if c == "unset": return S.unset_values(repo, m, a.name, a.keys)
+        if c == "get": return S.get(repo, m, a.name, a.key, a.show)
+        if c == "pull": return S.pull(repo, m, man, a.project, a.force)
+        if c == "push": return S.push(repo, m, man, a.project)
+        if c == "diff": return S.diff(repo, m, man, a.project)
+        if c == "exec":
+            cmd = a.command[1:] if a.command and a.command[0] == "--" else a.command
+            return S.exec_(repo, m, man, a.project, cmd)
+        if c == "recovery": return S.recovery(repo, m)
+        build_parser().parse_args(["secrets", "-h"])
+    if a.cmd == "enroll":
+        from . import secretscmd as S
+        return S.enroll(repo, m, a.machine)
+    if a.cmd == "revoke":
+        from . import secretscmd as S
+        return S.revoke(repo, m, a.machine)
     if a.cmd == "identity":
         from . import identity
         if a.identity_cmd == "add":
@@ -251,7 +316,7 @@ def dispatch(a) -> int:
     if a.cmd == "sync":
         from . import sync
         return sync.run(repo, m, man, pull_only=a.pull_only, push_only=a.push_only, timeout=a.timeout,
-                        resolve=a.resolve, projects=not a.no_projects)
+                        resolve=a.resolve, projects=not a.no_projects, debounce=a.debounce)
     if a.cmd == "status":
         from . import status
         return status.run(repo, m, man, fetch=a.fetch, show_all=a.all)
