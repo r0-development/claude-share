@@ -108,9 +108,19 @@ def fix(repo: Path, m: Machine, man: Manifest) -> None:
         if p.kind != "git" or not root.exists() or not gitutil.is_repo(root) or not p.url:
             continue
         url = gitutil.remote_url(root)
-        if url != p.url and gitutil.canonical_github(url) == gitutil.canonical_github(p.url):
+        if url == p.url:
+            continue
+        cur, want = gitutil.canonical_github(url), gitutil.canonical_github(p.url)
+        same_repo = cur == want
+        # owner renamed (e.g. old org name): safe when both owners belong to the project's identity
+        ident = man.identities.get(p.identity)
+        if not same_repo and ident and ident.matches(cur) and cur.rsplit("/", 1)[-1] == want.rsplit("/", 1)[-1]:
+            same_repo = True
+        if same_repo:
             gitutil.run(["remote", "set-url", "origin", p.url], root)
-            ok(f"{p.name}: remote url -> {p.url}")
+            ok(f"{p.name}: remote url {url} -> {p.url}")
+        else:
+            warn(f"{p.name}: remote {url} is a different repo than manifest {p.url}; not changing it")
     apply.run(repo, m, man)
 
 
