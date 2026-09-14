@@ -39,8 +39,17 @@ def add(repo: Path, m: Machine, man: Manifest, id_: str, *, owner: str, name: st
 
 
 def ls(man: Manifest) -> None:
+    if not man.identities:
+        ui.info("no identities — add one: cs identity add personal --owner <github-user> --name \"..\" --email ..")
+        return
     rows = []
     for i in man.identities.values():
-        tok = "token ✓" if github.get_token(i.github_owner or "") else ui.dim("no token")
-        rows.append([ui.bold(i.id), f"{i.name} <{i.email}>", i.github_owner or ui.dim("-"), i.ssh_key, tok])
-    ui.table(rows, header=["id", "who", "github owner", "ssh key", ""])
+        n = sum(1 for p in man.projects.values() if p.identity == i.id)
+        tok = ui.green("token ✓") if github.get_token(i.github_owner or "") else ui.dim("no token")
+        key = paths.expand(i.ssh_key)
+        keystate = i.ssh_key if key.exists() else ui.red(i.ssh_key + " (missing)")
+        rows.append([ui.bold(i.id), f"{i.name} <{i.email}>", i.github_owner or ui.dim("-"), keystate, tok,
+                     ui.dim(f"{n} project{'s' if n != 1 else ''}")])
+    ui.table(rows, header=["id", "commits as", "github owner", "ssh key", "", ""])
+    ui.info("")
+    ui.info(ui.dim("  use as: cs new <name> --<id>   (or --<github owner>)"))

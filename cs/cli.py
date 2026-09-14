@@ -111,7 +111,7 @@ def build_parser() -> argparse.ArgumentParser:
     i.add_argument("--key", help="ssh private key path (default ~/.ssh/id_ed25519_<id>)")
     i.add_argument("--gh-user", default="")
     i.add_argument("--no-token", action="store_true", help="don't prompt for a GitHub token")
-    isub.add_parser("ls")
+    isub.add_parser("ls", help="list identities (default)")
 
     sub.add_parser("self-update", help="git pull the cs tool itself")
 
