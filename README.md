@@ -17,8 +17,8 @@ WSL2 on Windows, macOS, Linux. Windows-native is unsupported.
 ## Quick start
 
 ```sh
-git clone https://github.com/r0-development/claude-share ~/.local/share/claude-share
-ln -s ~/.local/share/claude-share/bin/cs ~/.local/bin/cs
+git clone git@github.com:r0-development/claude-share.git ~/dev/claude-share
+ln -s ~/dev/claude-share/bin/cs ~/.local/bin/cs
 
 cs config new ~/claude-config          # skeleton; edit projects.toml; push it to a private repo
 cs init --repo ~/claude-config --name my-desktop --profiles personal
