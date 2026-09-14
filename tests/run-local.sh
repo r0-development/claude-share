@@ -163,6 +163,10 @@ grep -q 'git@github.com:extra-org/\*\*' "$HOME/.config/git/claude-share.inc" || 
 $CS identity ls | grep -q extra || die "identity ls"
 $CS new viaflag --extra-org --no-github >/dev/null 2>&1 || die "new via --owner flag"
 [ "$(git -C "$HOME/dev/viaflag" config user.email)" = "extra@example.com" ] || die "identity applied to new project"
+$CS identity rename extra extra2 >/dev/null || die "identity rename"
+grep -q '^\[identities.extra2\]' "$CS_CONFIG_DIR/repo/projects.toml" && ! grep -q '^\[identities.extra\]' "$CS_CONFIG_DIR/repo/projects.toml" || die "renamed in manifest"
+[ "$(git -C "$HOME/dev/viaflag" config user.email)" = "extra@example.com" ] || die "rename keeps identity working"
+[ ! -f "$HOME/.config/git/identity-extra.inc" ] || die "stale include pruned"
 pass identity
 
 # --- secrets (only when sops + age are installed): init, set, get, exec, enroll a second machine, guard

@@ -41,7 +41,7 @@ Details: `docs/BOOTSTRAP.md`.
 
 An identity answers three questions for a group of repositories: **who commits** (`user.name` / `user.email`),
 **which SSH key** authenticates, and **which GitHub owner** (user or organization) new repos are created under.
-Typical setup: one `personal` identity and one `work` identity.
+Name identities after the GitHub owner they belong to — `personal`, plus one per client/employer org (`acme`, `globex`) — since each has its own account, email and key.
 
 Identity is selected **by the remote URL**, not by directory. `cs apply` renders a git include per identity
 (`~/.config/git/identity-<id>.inc` with `user.*` and `core.sshCommand`) and an `includeIf "hasconfig:remote.*.url:git@github.com:<owner>/**"`
@@ -53,6 +53,7 @@ committing as the wrong person.
 |---|---|
 | `cs identity` / `cs identity ls` | list identities: who they commit as, GitHub owner, whether the SSH key exists here, whether a token is stored, how many projects use each |
 | `cs identity add <id> --owner <gh-owner> --name "<name>" --email <email> [--key <path>] [--gh-user <login>] [--no-token]` | add an identity to `projects.toml` (`url_globs = ["git@github.com:<owner>/**"]`), re-render the git includes, and offer to store a GitHub token for `<owner>` |
+| `cs identity rename <old> <new>` | rename everywhere: manifest, projects using it, `~/.ssh/cs/<id>` files, published pubkeys, git includes |
 | `cs ssh setup` / `cs ssh check` | generate a missing key for each identity on this machine, publish the public half to the config repo, register it on GitHub (user accounts, via the token) or print it for pasting; verify with `ssh -T` |
 | `cs token set <owner>` / `check` / `rm` / `ls` | GitHub fine-grained token per owner — lets `cs new` create repos and `cs ssh setup` register keys. Stored in `~/.config/claude-share/tokens/<owner>` (0600), never synced |
 | `cs doctor --fix` | report repos whose resolved `user.email` doesn't match their identity; rewrite remotes that use an old owner name or SSH alias |
@@ -76,15 +77,15 @@ Examples:
 # personal account: repos under github.com/<you>
 cs identity add personal --owner <you> --name "Your Name" --email you@example.com
 
-# company organization: commits with the work address, default key
-cs identity add work --owner <company-org> --name "Your Name" --email you@company.com --gh-user <your-work-login>
+# a client/employer organization: its own address and key
+cs identity add acme --owner acme-org --name "Your Name" --email you@acme.com --gh-user <your-acme-login>
 
 cs identity                      # id | commits as | github owner | ssh key | token | projects
 cs ssh setup                     # keys generated/published/registered; prints anything you must paste on GitHub
-cs token set <company-org>       # once per machine; needed before `cs new <project> --work`
+cs token set acme-org            # once per machine; needed before `cs new <project> --acme`
 
-cs new api-gateway --work        # identity by id …
-cs new api-gateway --<company-org>   # … or by GitHub owner — both select the same identity
+cs new api-gateway --acme        # identity by id …
+cs new api-gateway --acme-org    # … or by GitHub owner — both select the same identity
 ```
 
 Token permissions (GitHub → Settings → Developer settings → Fine-grained tokens): resource owner = the user or org,

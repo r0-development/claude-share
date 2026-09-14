@@ -120,6 +120,8 @@ def build_parser() -> argparse.ArgumentParser:
     i.add_argument("--gh-user", default="")
     i.add_argument("--no-token", action="store_true", help="don't prompt for a GitHub token")
     isub.add_parser("ls", help="list identities (default)")
+    r = isub.add_parser("rename", help="rename an identity (manifest, projects, key files, published pubkeys, git includes)")
+    r.add_argument("old"); r.add_argument("new")
 
     sub.add_parser("self-update", help="git pull the cs tool itself")
 
@@ -287,6 +289,8 @@ def dispatch(a) -> int:
         if a.identity_cmd == "add":
             return identity.add(repo, m, man, a.id, owner=a.owner, name=a.name, email=a.email, key=a.key,
                                 gh_user=a.gh_user, no_token=a.no_token)
+        if a.identity_cmd == "rename":
+            return identity.rename(repo, m, man, a.old, a.new)
         identity.ls(man)
         return 0
     if a.cmd == "new":

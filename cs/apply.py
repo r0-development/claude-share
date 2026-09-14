@@ -159,7 +159,14 @@ def render_git_includes(man: Manifest) -> Dict[Path, str]:
 
 
 def apply_git(man: Manifest, check: bool, changes: List[str]) -> None:
-    for f, content in render_git_includes(man).items():
+    gdir = paths.home() / ".config" / "git"
+    wanted = render_git_includes(man)
+    for stale in gdir.glob("identity-*.inc") if gdir.exists() else []:
+        if stale not in wanted:
+            changes.append(f"remove stale {paths.contract(stale)}")
+            if not check:
+                stale.unlink()
+    for f, content in wanted.items():
         if f.exists() and f.read_text() == content:
             continue
         changes.append(f"write {paths.contract(f)}")

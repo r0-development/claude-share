@@ -37,6 +37,38 @@ def add(repo: Path, m: Machine, man: Manifest, id_: str, *, owner: str, name: st
     return 0
 
 
+def rename(repo: Path, m: Machine, man: Manifest, old: str, new: str) -> int:
+    import re
+    if old not in man.identities:
+        raise SystemExit(f"cs: unknown identity '{old}'")
+    if new in man.identities or not mf.NAME_RE.match(new):
+        raise SystemExit(f"cs: '{new}' is taken or invalid")
+    ident = man.identities[old]
+    f = repo / "projects.toml"
+    text = f.read_text()
+    text = re.sub(rf"^\[identities\.{re.escape(old)}\]", f"[identities.{new}]", text, flags=re.M)
+    text = re.sub(rf'^(identity\s*=\s*)"{re.escape(old)}"', rf'\1"{new}"', text, flags=re.M)
+    f.write_text(text)
+    # key files: only when they follow the default naming
+    if not ident.ssh_key:
+        old_key, new_key = paths.expand(f"~/.ssh/cs/{old}"), paths.expand(f"~/.ssh/cs/{new}")
+        for suffix in ("", ".pub"):
+            if (old_key.parent / (old_key.name + suffix)).exists():
+                (old_key.parent / (old_key.name + suffix)).rename(new_key.parent / (new_key.name + suffix))
+        ui.act(f"~/.ssh/cs/{old} → ~/.ssh/cs/{new}")
+    for pub in repo.glob(f"machines/*/ssh/{old}.pub"):
+        gitutil.run(["mv", str(pub.relative_to(repo)), str(pub.with_name(f"{new}.pub").relative_to(repo))], repo)
+    gitutil.run(["add", "projects.toml"], repo)
+    gitutil.commit(repo, f"identities: rename {old} → {new}", "cs", f"cs@{m.name}")
+    ui.ok(f"identity {old} → {new} ({sum(1 for p in man.projects.values() if p.identity == old)} projects updated)")
+    man2 = mf.load(repo)
+    changes: List[str] = []
+    apply.apply_git(man2, False, changes)
+    for c in changes:
+        ui.act(c)
+    return 0
+
+
 def ls(man: Manifest) -> None:
     if not man.identities:
         ui.info("no identities — add one: cs identity add personal --owner <github-user> --name \"..\" --email ..")
