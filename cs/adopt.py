@@ -99,9 +99,12 @@ def adopt_project_files(repo: Path, p: Project, ws: Path, check: bool = False) -
 
 
 def _env_var_name(server: str, key: str) -> str:
-    s = re.sub(r"[^A-Za-z0-9]+", "_", server).upper().strip("_")
-    k = re.sub(r"[^A-Za-z0-9]+", "_", key).upper().strip("_")
-    return f"{s}_{k}" if not k.startswith(s) else k
+    """foo-bar + FOO_BASE_URL -> FOO_BAR_BASE_URL; foo + FOO_ACCESS_TOKEN -> FOO_ACCESS_TOKEN."""
+    st = [t for t in re.split(r"[^A-Za-z0-9]+", server.upper()) if t]
+    kt = [t for t in re.split(r"[^A-Za-z0-9]+", key.upper()) if t]
+    if st and kt and kt[0] == st[0]:
+        kt = kt[1:]
+    return "_".join(st + kt)
 
 
 def adopt_mcp(repo: Path, p: Project, ws: Path, check: bool = False) -> int:
@@ -148,6 +151,7 @@ def adopt_mcp(repo: Path, p: Project, ws: Path, check: bool = False) -> int:
         sl.parent.mkdir(parents=True, exist_ok=True)
         sl.write_text(jsonmerge.dumps(sd))
     if secrets:
+        info("")
         warn(f"{p.name}: these values were replaced by ${{VAR}} placeholders — add them to your secrets store "
              f"(cs secrets edit) and remove the local-scope servers with `claude mcp remove <name> -s local`:")
         for k, v in secrets.items():
