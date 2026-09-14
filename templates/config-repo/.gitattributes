@@ -1,0 +1,3 @@
+# concurrent edits from two machines are concatenated instead of conflicting
+projects/*/memory/*.md merge=union
+plans/*.md             merge=union

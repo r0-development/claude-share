@@ -1,0 +1,15 @@
+#!/usr/bin/env python3
+"""claude-share launcher. Resolves the package next to this file (symlink-safe)."""
+import os
+import sys
+
+if sys.version_info < (3, 9):
+    sys.stderr.write("cs: Python 3.9+ required (found %s)\n" % sys.version.split()[0])
+    sys.exit(1)
+
+_root = os.path.dirname(os.path.dirname(os.path.realpath(__file__)))
+sys.path.insert(0, _root)
+
+from cs.cli import main  # noqa: E402
+
+sys.exit(main())

@@ -1,0 +1,8 @@
+# belt and braces: never let machine-local Claude state in
+*.jsonl
+.credentials.json
+*.log
+.DS_Store
+*:Zone.Identifier
+.cs-tmp
+*.cs-tmp

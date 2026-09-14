@@ -1,0 +1,37 @@
+# claude-share manifest — where every project lives and which machines get it.
+# Edited by `cs add` (appends [projects.<name>] blocks) or by hand.
+schema_version = 1
+
+[workspace]
+root = "~/dev"                # same relative layout on every machine
+
+# ---- Git identities ---------------------------------------------------------
+# Identity is chosen by the remote URL (git includeIf hasconfig), rendered by `cs apply`
+# into ~/.config/git/claude-share.inc. Keys are per machine; `cs ssh setup` generates them.
+
+[identities.personal]
+name      = "Your Name"
+email     = "you@example.com"
+ssh_key   = "~/.ssh/id_ed25519_personal"
+gh_user   = "your-gh-login"
+url_globs = ["git@github.com:your-org/**"]
+
+# [identities.work]
+# name      = "Your Name"
+# email     = "you@company.com"
+# ssh_key   = "~/.ssh/id_ed25519"
+# gh_user   = "your-work-login"
+# url_globs = ["git@github.com:company-org/**"]
+
+# ---- Projects ---------------------------------------------------------------
+# kind:     git (clone from url) | synced (private auto-committed repo, no manual git) | local (never leaves one machine)
+# profiles: which machine profiles want it (machine.toml `profiles`); "all" = every machine
+# machines: optional hard allowlist of machine names
+# layout:   plain | worktrees  (checkout lives in <name>/repo, siblings are git worktrees)
+
+# [projects.example]
+# kind = "git"
+# url = "git@github.com:your-org/example.git"
+# identity = "personal"
+# profiles = ["all"]
+# branch = "main"
