@@ -13,7 +13,7 @@ default_branch = "master"     # branch `cs new` creates
 [identities.personal]
 name      = "Your Name"
 email     = "you@example.com"
-ssh_key   = "~/.ssh/id_ed25519_personal"
+# ssh_key = "~/.ssh/cs/personal"   # default: ~/.ssh/cs/<identity>; keys are per machine (cs ssh setup)
 gh_user   = "your-gh-login"
 github_owner = "your-org"     # `cs new --personal` (or `--your-org`) creates repos here
 url_globs = ["git@github.com:your-org/**"]
@@ -21,7 +21,6 @@ url_globs = ["git@github.com:your-org/**"]
 # [identities.work]
 # name      = "Your Name"
 # email     = "you@company.com"
-# ssh_key   = "~/.ssh/id_ed25519"
 # gh_user   = "your-work-login"
 # github_owner = "company-org"
 # url_globs = ["git@github.com:company-org/**"]

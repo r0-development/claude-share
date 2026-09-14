@@ -28,11 +28,11 @@ Then `cs identity add work --owner <org> --name .. --email .. --key ..` for more
 
 ```sh
 git clone https://github.com/r0-development/claude-share.git ~/dev/claude-share
-~/dev/claude-share/bin/cs init --install-deps --repo git@github.com:<owner>/claude-share-config.git --key ~/.ssh/<key-with-access> --name work-mac --profiles work,personal
+~/dev/claude-share/bin/cs init --install-deps --repo git@github.com:<owner>/claude-share-config.git --key ~/.ssh/cs/personal --name work-mac --profiles work,personal
 ```
 
 - Without `--key`, cs tries the default key and then asks which one can clone the config repo. On a truly bare machine
-  generate one first: `ssh-keygen -t ed25519 -f ~/.ssh/id_ed25519_personal` and add the `.pub` to GitHub.
+  generate one first: `ssh-keygen -t ed25519 -f ~/.ssh/cs/personal` and add the `.pub` to GitHub.
 - After init: `cs clone` brings in the projects for this machine's profiles.
 - Secrets: the new machine publishes its age public key; on a machine that already has access run
   `cs sync && cs enroll <new-machine>`; then `cs sync` on the new machine. Until then Claude runs without secrets.

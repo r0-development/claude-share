@@ -116,7 +116,7 @@ def build_parser() -> argparse.ArgumentParser:
     i.add_argument("--owner", required=True, help="GitHub user/org whose repos use this identity")
     i.add_argument("--name", required=True, help="git user.name")
     i.add_argument("--email", required=True, help="git user.email")
-    i.add_argument("--key", help="ssh private key path (default ~/.ssh/id_ed25519_<id>)")
+    i.add_argument("--key", help="ssh private key path (default ~/.ssh/cs/<id>)")
     i.add_argument("--gh-user", default="")
     i.add_argument("--no-token", action="store_true", help="don't prompt for a GitHub token")
     isub.add_parser("ls", help="list identities (default)")

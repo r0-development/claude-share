@@ -26,7 +26,7 @@ cs init --install-deps      # first machine — interactive:
                             #   GitHub owner for your private config repo + a fine-grained token (stored locally)
                             #   → creates <owner>/claude-share-config, initializes and pushes it
                             #   first git identity (name, email, ssh key)
-cs identity add work --owner <company-org> --name "Your Name" --email you@company.com --key ~/.ssh/id_ed25519
+cs identity add work --owner <company-org> --name "Your Name" --email you@company.com
 cs new <project> --personal        # dir, git init -b master, private GitHub repo, first push, registered, Claude wired in
 ```
 
@@ -57,17 +57,27 @@ committing as the wrong person.
 | `cs token set <owner>` / `check` / `rm` / `ls` | GitHub fine-grained token per owner — lets `cs new` create repos and `cs ssh setup` register keys. Stored in `~/.config/claude-share/tokens/<owner>` (0600), never synced |
 | `cs doctor --fix` | report repos whose resolved `user.email` doesn't match their identity; rewrite remotes that use an old owner name or SSH alias |
 
-Options for `identity add`: `--key` defaults to `~/.ssh/id_ed25519_<id>`; `--gh-user` is the GitHub login used to
-verify the key (`Hi <login>!`); `--no-token` skips the token prompt.
+**SSH key naming.** Keys are per machine and never copied. Each identity owns one key:
+
+```
+~/.ssh/cs/<identity>          private   e.g. ~/.ssh/cs/personal, ~/.ssh/cs/work
+~/.ssh/cs/<identity>.pub      public
+comment / GitHub title        cs:<machine>:<identity>      e.g. cs:work-mac:work
+config repo                   machines/<machine>/ssh/<identity>.pub
+```
+
+So the file name says what a key is for, and the GitHub title says which machine it belongs to (revoke "the laptop's
+work key" by name). `--key` overrides the path for an identity; `--gh-user` is the GitHub login used to verify the key
+(`Hi <login>!`); `--no-token` skips the token prompt.
 
 Examples:
 
 ```sh
 # personal account: repos under github.com/<you>
-cs identity add personal --owner <you> --name "Your Name" --email you@example.com --key ~/.ssh/id_ed25519_personal
+cs identity add personal --owner <you> --name "Your Name" --email you@example.com
 
 # company organization: commits with the work address, default key
-cs identity add work --owner <company-org> --name "Your Name" --email you@company.com --key ~/.ssh/id_ed25519 --gh-user <your-work-login>
+cs identity add work --owner <company-org> --name "Your Name" --email you@company.com --gh-user <your-work-login>
 
 cs identity                      # id | commits as | github owner | ssh key | token | projects
 cs ssh setup                     # keys generated/published/registered; prints anything you must paste on GitHub

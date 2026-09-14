@@ -147,8 +147,8 @@ def render_git_includes(man: Manifest) -> Dict[Path, str]:
             f"\tname = {ident.name}",
             f"\temail = {ident.email}",
         ]
-        if ident.ssh_key:
-            key = paths.contract(paths.expand(ident.ssh_key))
+        if ident.key_path:
+            key = paths.contract(paths.expand(ident.key_path))
             body += ["[core]", f"\tsshCommand = ssh -i {key} -o IdentitiesOnly=yes"]
         files[gdir / f"identity-{ident.id}.inc"] = "\n".join(body) + "\n"
         for g in ident.url_globs:

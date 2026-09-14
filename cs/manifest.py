@@ -20,10 +20,14 @@ class Identity:
     id: str
     name: str
     email: str
-    ssh_key: str = "~/.ssh/id_ed25519"
+    ssh_key: str = ""                    # default: ~/.ssh/cs/<id>
     gh_user: str = ""
     github_owner: str = ""               # GitHub user/org that `cs new` creates repos under
     url_globs: List[str] = field(default_factory=list)
+
+    @property
+    def key_path(self) -> str:
+        return self.ssh_key or f"~/.ssh/cs/{self.id}"
 
     def matches(self, url: str) -> bool:
         return any(fnmatch.fnmatchcase(url, g) for g in self.url_globs)
@@ -157,7 +161,7 @@ def parse(text: str, path: Optional[Path] = None) -> Manifest:
             id=k,
             name=v.get("name", ""),
             email=v.get("email", ""),
-            ssh_key=v.get("ssh_key", "~/.ssh/id_ed25519"),
+            ssh_key=v.get("ssh_key", ""),
             gh_user=v.get("gh_user", ""),
             github_owner=v.get("github_owner", ""),
             url_globs=list(v.get("url_globs", [])),
@@ -219,7 +223,9 @@ def append_project(repo: Path, p: Project) -> None:
 
 
 def identity_block(i: Identity) -> str:
-    values: Dict[str, Any] = {"name": i.name, "email": i.email, "ssh_key": i.ssh_key}
+    values: Dict[str, Any] = {"name": i.name, "email": i.email}
+    if i.ssh_key and i.ssh_key != f"~/.ssh/cs/{i.id}":
+        values["ssh_key"] = i.ssh_key
     if i.gh_user:
         values["gh_user"] = i.gh_user
     if i.github_owner:

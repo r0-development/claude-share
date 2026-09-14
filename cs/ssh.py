@@ -1,5 +1,8 @@
 """`cs ssh setup|check`: per-machine SSH keys for every identity.
 
+Naming: ~/.ssh/cs/<identity> (+ .pub), comment and GitHub title `cs:<machine>:<identity>`,
+published as machines/<machine>/ssh/<identity>.pub in the config repo.
+
 - generates missing ed25519 keys (no passphrase; disk encryption is assumed)
 - publishes the public halves under machines/<machine>/ssh/ in the config repo
 - writes a managed block into ~/.ssh/config
@@ -85,16 +88,16 @@ def setup(repo: Path, m: Machine, man: Manifest, check_only: bool = False) -> in
     rows = []
     published = False
     for ident in man.identities.values():
-        key = paths.expand(ident.ssh_key)
+        key = paths.expand(ident.key_path)
         pub_f = key.with_name(key.name + ".pub")
         state: List[str] = []
         if not key.exists():
             if check_only:
-                rows.append([ident.id, ident.ssh_key, ui.red("missing")]); continue
-            _keygen(key, f"{m.name}-{ident.id}")
+                rows.append([ident.id, ident.key_path, ui.red("missing")]); continue
+            _keygen(key, f"cs:{m.name}:{ident.id}")
             state.append(ui.green("generated"))
         pub = pub_f.read_text().strip()
-        dest = repo / "machines" / m.name / "ssh" / pub_f.name
+        dest = repo / "machines" / m.name / "ssh" / f"{ident.id}.pub"
         if not check_only and (not dest.exists() or dest.read_text().strip() != pub):
             dest.parent.mkdir(parents=True, exist_ok=True)
             dest.write_text(pub + "\n")
@@ -104,13 +107,13 @@ def setup(repo: Path, m: Machine, man: Manifest, check_only: bool = False) -> in
         if user:
             state.append(ui.green(f"github: {user}") + (ui.yellow(f" ≠ {ident.gh_user}") if ident.gh_user and user != ident.gh_user else ""))
         elif not check_only:
-            state.append(ui.dim(_register(ident, pub, f"{m.name}-{ident.id}")))
+            state.append(ui.dim(_register(ident, pub, f"cs:{m.name}:{ident.id}")))
             user = _github_user_for_key(key)
             if user:
                 state[-1] = ui.green(f"github: {user}")
         else:
             state.append(ui.red("not accepted by GitHub"))
-        rows.append([ident.id, ident.ssh_key, "  ".join(state)])
+        rows.append([ident.id, ident.key_path, "  ".join(state)])
     if published:
         gitutil.commit(repo, f"machines: {m.name} ssh public keys", "cs", f"cs@{m.name}")
     if not check_only and write_ssh_config():

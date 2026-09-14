@@ -78,8 +78,8 @@ def run(repo: Path, m: Machine, man: Manifest, name: str, ident: Identity, *, pr
             info(f"  no remote: git identity set per-repo ({ident.email})")
         gitutil.run(["config", "user.name", ident.name], root)
         gitutil.run(["config", "user.email", ident.email], root)
-        if ident.ssh_key:
-            gitutil.run(["config", "core.sshCommand", f"ssh -i {paths.contract(paths.expand(ident.ssh_key))} -o IdentitiesOnly=yes"], root)
+        if ident.key_path:
+            gitutil.run(["config", "core.sshCommand", f"ssh -i {paths.contract(paths.expand(ident.key_path))} -o IdentitiesOnly=yes"], root)
 
     # 4. first commit + push
     if not gitutil.out(["rev-parse", "--verify", "-q", "HEAD"], root):

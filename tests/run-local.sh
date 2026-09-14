@@ -38,7 +38,7 @@ cat >> "$HOME/cfg-src/projects.toml" <<TOML
 [identities.test]
 name = "Test User"
 email = "test@example.com"
-ssh_key = "~/.ssh/id_test"
+
 url_globs = ["$HOME/remote.git", "$HOME/remote.git/**"]
 
 [projects.alpha]
@@ -157,7 +157,7 @@ if $CS new fresh --test --no-github >/dev/null 2>&1; then die "duplicate name re
 pass cs-new
 
 # --- identity add: appended before the Projects marker, includes re-rendered, usable as --flag
-$CS identity add extra --owner extra-org --name "Extra" --email extra@example.com --key ~/.ssh/id_extra --no-token >/dev/null 2>&1 || die "identity add"
+$CS identity add extra --owner extra-org --name "Extra" --email extra@example.com  --no-token >/dev/null 2>&1 || die "identity add"
 grep -q '^\[identities.extra\]' "$CS_CONFIG_DIR/repo/projects.toml" || die "identity in manifest"
 grep -q 'git@github.com:extra-org/\*\*' "$HOME/.config/git/claude-share.inc" || die "includeIf for new identity"
 $CS identity ls | grep -q extra || die "identity ls"
