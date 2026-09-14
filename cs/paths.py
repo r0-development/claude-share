@@ -57,6 +57,7 @@ def expand(p: str) -> Path:
 def contract(p: Path) -> str:
     """Inverse of expand(): render a path with ~ for the home prefix."""
     try:
-        return "~/" + str(p.relative_to(home()))
+        rel = p.relative_to(home())
     except ValueError:
         return str(p)
+    return "~" if str(rel) == "." else "~/" + str(rel)

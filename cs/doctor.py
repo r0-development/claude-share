@@ -90,7 +90,8 @@ def _check_local_mcp_secrets(man: Manifest, m: Machine) -> Result:
             if cfg.get("env") or cfg.get("headers"):
                 hits.append(f"{name}@{paths.contract(Path(path))}")
     if hits:
-        return ("warn", "local-scope MCP servers with env/headers in ~/.claude.json (not portable): " + ", ".join(hits) + "  (cs adopt mcp <project>)")
+        return ("warn", "local-scope MCP servers with secrets in ~/.claude.json (machine-only): " + ", ".join(hits)
+                + "  — keep until `cs secrets` provides the ${VAR}s, then `claude mcp remove <name> -s local`")
     return ("ok", "no secret-bearing local-scope MCP servers")
 
 
