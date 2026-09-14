@@ -98,6 +98,8 @@ def build_parser() -> argparse.ArgumentParser:
     t = ts.add_parser("rm", help="delete a stored token"); t.add_argument("identity")
     ts.add_parser("ls", help="list identities with a stored token")
 
+    sub.add_parser("self-update", help="git pull the cs tool itself")
+
     s = sub.add_parser("project", help="project helpers")
     ps = s.add_subparsers(dest="project_cmd", metavar="<sub>")
     ps.add_parser("id", help="print the project name for the cwd (empty if none)")
@@ -159,6 +161,18 @@ def dispatch(a) -> int:
             print(ui.dim("cs --help for commands"))
             return 0
         build_parser().print_help()
+        return 0
+    if a.cmd == "self-update":
+        from . import gitutil
+        root = paths.tool_root()
+        if not gitutil.is_repo(root):
+            ui.fail(f"{root} is not a git checkout"); return 1
+        before = gitutil.out(["rev-parse", "--short", "HEAD"], root)
+        p = gitutil.run(["pull", "-q", "--ff-only"], root, check=False, timeout=60)
+        if p.returncode != 0:
+            ui.fail(f"pull failed: {p.stderr.strip()}"); return 1
+        after = gitutil.out(["rev-parse", "--short", "HEAD"], root)
+        ui.ok(f"cs {__version__} at {after}" + ("" if before == after else f" (was {before})"))
         return 0
     if a.cmd == "token":
         from . import github
