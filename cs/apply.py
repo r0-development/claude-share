@@ -151,7 +151,7 @@ def render_git_includes(man: Manifest) -> Dict[Path, str]:
             key = paths.contract(paths.expand(ident.key_path))
             body += ["[core]", f"\tsshCommand = ssh -i {key} -o IdentitiesOnly=yes"]
         files[gdir / f"identity-{ident.id}.inc"] = "\n".join(body) + "\n"
-        for g in ident.url_globs:
+        for g in ident.globs:
             inc_lines.append(f'[includeIf "hasconfig:remote.*.url:{g}"]')
             inc_lines.append(f"\tpath = identity-{ident.id}.inc")
     files[gdir / "claude-share.inc"] = "\n".join(inc_lines) + "\n"

@@ -7,23 +7,20 @@ root = "~/dev"                # same relative layout on every machine
 default_branch = "master"     # branch `cs new` creates
 
 # ---- Git identities ---------------------------------------------------------
-# Identity is chosen by the remote URL (git includeIf hasconfig), rendered by `cs apply`
-# into ~/.config/git/claude-share.inc. Keys are per machine; `cs ssh setup` generates them.
+# An identity = a GitHub owner (user or org) + how you commit there. Everything else is derived:
+#   ssh key  ~/.ssh/cs/<id>  (per machine; `cs ssh setup`)   url match  git@github.com:<owner>/**
+# Add with `cs identity add <id> --owner <owner> --name ".." --email ..`.
 
 [identities.personal]
-name      = "Your Name"
-email     = "you@example.com"
-# ssh_key = "~/.ssh/cs/personal"   # default: ~/.ssh/cs/<identity>; keys are per machine (cs ssh setup)
-gh_user   = "your-gh-login"
-github_owner = "your-org"     # `cs new --personal` (or `--your-org`) creates repos here
-url_globs = ["git@github.com:your-org/**"]
+owner = "your-github-login"
+name  = "Your Name"
+email = "you@example.com"
 
-# [identities.work]
-# name      = "Your Name"
-# email     = "you@company.com"
-# gh_user   = "your-work-login"
-# github_owner = "company-org"
-# url_globs = ["git@github.com:company-org/**"]
+# [identities.acme]                # one per client/employer org
+# owner = "acme-org"
+# name  = "Your Name"
+# email = "you@acme.com"
+# url_globs = ["git@github.com:acme-org/**", "git@github.com:acme-old-name/**"]   # optional override (renamed org)
 
 # ---- Projects ---------------------------------------------------------------
 # kind:     git (clone from url) | synced (private auto-committed repo, no manual git) | local (never leaves one machine)

@@ -39,61 +39,53 @@ Details: `docs/BOOTSTRAP.md`.
 
 ## Identities
 
-An identity answers three questions for a group of repositories: **who commits** (`user.name` / `user.email`),
-**which SSH key** authenticates, and **which GitHub owner** (user or organization) new repos are created under.
-Name identities after the GitHub owner they belong to — `personal`, plus one per client/employer org (`acme`, `globex`) — since each has its own account, email and key.
+Two things matter:
 
-Identity is selected **by the remote URL**, not by directory. `cs apply` renders a git include per identity
-(`~/.config/git/identity-<id>.inc` with `user.*` and `core.sshCommand`) and an `includeIf "hasconfig:remote.*.url:git@github.com:<owner>/**"`
-rule for each. Any repo whose `origin` is under that owner — cloned by `cs` or by hand — gets the right name, email and key
-automatically. There is deliberately **no global `user.email`**: a repo that matches no identity refuses to commit instead of
-committing as the wrong person.
+- **GitHub owner** — the account a repository lives under: *you* (`<your-login>`) or an *organization* (`acme-org`).
+  Repo creation, the API token and the URL `git@github.com:<owner>/<repo>` all hang off it.
+- **Identity** — how you act toward one owner: the name/email on commits and the SSH key. Its id is a nickname you
+  type (`--personal`, `--acme`). Name identities after the owner they belong to; one per client/employer org.
+
+Everything else is derived. An identity in `projects.toml` is just:
+
+```toml
+[identities.acme]
+owner = "acme-org"
+name  = "Your Name"
+email = "you@acme.com"
+```
+
+| derived | value |
+|---|---|
+| SSH key (per machine, never copied) | `~/.ssh/cs/<id>` — generated and registered by `cs ssh setup`; GitHub title `cs:<machine>:<id>` |
+| which repos use it | any repo whose `origin` is `git@github.com:<owner>/…` (git `includeIf hasconfig`, rendered by `cs apply`) — cloned by `cs` or by hand |
+| GitHub login of the key | whatever `ssh -T` reports; for an org it is *your user account* that is a member of the org |
+| API token | per owner, `cs token set <owner>` (asked for automatically when first needed); stored locally, never synced |
+
+There is deliberately **no global `user.email`**: a repo that matches no identity refuses to commit rather than committing as the wrong person.
 
 | command | what it does |
 |---|---|
-| `cs identity` / `cs identity ls` | list identities: who they commit as, GitHub owner, whether the SSH key exists here, whether a token is stored, how many projects use each |
-| `cs identity add <id> --owner <gh-owner> --name "<name>" --email <email> [--key <path>] [--gh-user <login>] [--no-token]` | add an identity to `projects.toml` (`url_globs = ["git@github.com:<owner>/**"]`), re-render the git includes, and offer to store a GitHub token for `<owner>` |
-| `cs identity rename <old> <new>` | rename everywhere: manifest, projects using it, `~/.ssh/cs/<id>` files, published pubkeys, git includes |
-| `cs ssh setup` / `cs ssh check` | generate a missing key for each identity on this machine, publish the public half to the config repo, register it on GitHub (user accounts, via the token) or print it for pasting; verify with `ssh -T` |
-| `cs token set <owner>` / `check` / `rm` / `ls` | GitHub fine-grained token per owner — lets `cs new` create repos and `cs ssh setup` register keys. Stored in `~/.config/claude-share/tokens/<owner>` (0600), never synced |
-| `cs doctor --fix` | report repos whose resolved `user.email` doesn't match their identity; rewrite remotes that use an old owner name or SSH alias |
-
-**SSH key naming.** Keys are per machine and never copied. Each identity owns one key:
-
-```
-~/.ssh/cs/<identity>          private   e.g. ~/.ssh/cs/personal, ~/.ssh/cs/work
-~/.ssh/cs/<identity>.pub      public
-comment / GitHub title        cs:<machine>:<identity>      e.g. cs:work-mac:work
-config repo                   machines/<machine>/ssh/<identity>.pub
-```
-
-So the file name says what a key is for, and the GitHub title says which machine it belongs to (revoke "the laptop's
-work key" by name). `--key` overrides the path for an identity; `--gh-user` is the GitHub login used to verify the key
-(`Hi <login>!`); `--no-token` skips the token prompt.
-
-Examples:
+| `cs identity` | list: commits as, owner, key present?, token stored?, projects using it |
+| `cs identity add <id> --owner <owner> --name "<name>" --email <email>` | add it, render git includes, offer to store a token for `<owner>` (`--key <path>` to use an existing key, `--no-token`) |
+| `cs identity rename <old> <new>` | rename everywhere (manifest, projects, key files, published pubkeys, includes) |
+| `cs ssh setup` / `cs ssh check` | create missing keys, publish public halves, register on GitHub (user accounts, via token) or print for pasting; verify |
+| `cs token set\|check\|rm\|ls <owner>` | API tokens |
+| `cs doctor --fix` | report identity mismatches; rewrite remotes that use an old owner name or SSH alias |
 
 ```sh
-# personal account: repos under github.com/<you>
-cs identity add personal --owner <you> --name "Your Name" --email you@example.com
-
-# a client/employer organization: its own address and key
-cs identity add acme --owner acme-org --name "Your Name" --email you@acme.com --gh-user <your-acme-login>
-
-cs identity                      # id | commits as | github owner | ssh key | token | projects
-cs ssh setup                     # keys generated/published/registered; prints anything you must paste on GitHub
-cs token set acme-org            # once per machine; needed before `cs new <project> --acme`
-
-cs new api-gateway --acme        # identity by id …
-cs new api-gateway --acme-org    # … or by GitHub owner — both select the same identity
+cs identity add personal --owner <your-login> --name "Your Name" --email you@example.com
+cs identity add acme     --owner acme-org     --name "Your Name" --email you@acme.com
+cs ssh setup                       # prints any public key you still have to paste on GitHub
+cs new billing-api --acme          # or --acme-org: id and owner both select the identity
 ```
 
 Token permissions (GitHub → Settings → Developer settings → Fine-grained tokens): resource owner = the user or org,
-repository access **All repositories**, **Administration: read & write** (Metadata is added automatically).
-To let `cs ssh setup` register keys for a user account add the account permission **Git SSH keys: read & write**.
+repository access **All repositories**, **Administration: read & write**. Add the account permission
+**Git SSH keys: read & write** if `cs ssh setup` should register keys for a user account.
 
-Editing an identity (email, key, extra owners): change its `[identities.<id>]` block in `projects.toml`, then `cs apply`.
-An identity can list several `url_globs` — useful when an org was renamed.
+Overrides for unusual cases go in the identity's block: `ssh_key = "…"` (a key elsewhere), `url_globs = [...]`
+(extra URL patterns, e.g. an org's old name).
 
 ---
 

@@ -105,7 +105,7 @@ def setup(repo: Path, m: Machine, man: Manifest, check_only: bool = False) -> in
             published = True
         user = _github_user_for_key(key)
         if user:
-            state.append(ui.green(f"github: {user}") + (ui.yellow(f" ≠ {ident.gh_user}") if ident.gh_user and user != ident.gh_user else ""))
+            state.append(ui.green(f"github: {user}"))
         elif not check_only:
             state.append(ui.dim(_register(ident, pub, f"cs:{m.name}:{ident.id}")))
             user = _github_user_for_key(key)

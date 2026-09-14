@@ -38,7 +38,6 @@ cat >> "$HOME/cfg-src/projects.toml" <<TOML
 [identities.test]
 name = "Test User"
 email = "test@example.com"
-
 url_globs = ["$HOME/remote.git", "$HOME/remote.git/**"]
 
 [projects.alpha]

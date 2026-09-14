@@ -29,8 +29,14 @@ class Identity:
     def key_path(self) -> str:
         return self.ssh_key or f"~/.ssh/cs/{self.id}"
 
+    @property
+    def globs(self) -> List[str]:
+        if self.url_globs:
+            return self.url_globs
+        return [f"git@github.com:{self.github_owner}/**"] if self.github_owner else []
+
     def matches(self, url: str) -> bool:
-        return any(fnmatch.fnmatchcase(url, g) for g in self.url_globs)
+        return any(fnmatch.fnmatchcase(url, g) for g in self.globs)
 
 
 @dataclass
@@ -115,6 +121,9 @@ class Manifest:
         errs: List[str] = []
         if self.schema_version > SUPPORTED_SCHEMA:
             errs.append(f"projects.toml schema_version {self.schema_version} > supported {SUPPORTED_SCHEMA}; run `cs self-update`")
+        for i in self.identities.values():
+            if not i.github_owner and not i.url_globs:
+                errs.append(f"identity {i.id}: needs owner (GitHub user/org)")
         for p in self.projects.values():
             if not NAME_RE.match(p.name):
                 errs.append(f"{p.name}: invalid project name")
@@ -163,7 +172,7 @@ def parse(text: str, path: Optional[Path] = None) -> Manifest:
             email=v.get("email", ""),
             ssh_key=v.get("ssh_key", ""),
             gh_user=v.get("gh_user", ""),
-            github_owner=v.get("github_owner", ""),
+            github_owner=v.get("owner", v.get("github_owner", "")),
             url_globs=list(v.get("url_globs", [])),
         )
         for k, v in d.get("identities", {}).items()
@@ -223,14 +232,11 @@ def append_project(repo: Path, p: Project) -> None:
 
 
 def identity_block(i: Identity) -> str:
-    values: Dict[str, Any] = {"name": i.name, "email": i.email}
+    values: Dict[str, Any] = {"owner": i.github_owner, "name": i.name, "email": i.email}
     if i.ssh_key and i.ssh_key != f"~/.ssh/cs/{i.id}":
         values["ssh_key"] = i.ssh_key
-    if i.gh_user:
-        values["gh_user"] = i.gh_user
-    if i.github_owner:
-        values["github_owner"] = i.github_owner
-    values["url_globs"] = i.url_globs
+    if i.url_globs and i.url_globs != [f"git@github.com:{i.github_owner}/**"]:
+        values["url_globs"] = i.url_globs
     return toml.table(f"identities.{i.id}", values)
 
 

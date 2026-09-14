@@ -10,11 +10,10 @@ from .manifest import Identity, Manifest
 
 
 def add(repo: Path, m: Machine, man: Manifest, id_: str, *, owner: str, name: str, email: str,
-        key: Optional[str], gh_user: str, no_token: bool) -> int:
+        key: Optional[str] = None, no_token: bool = False) -> int:
     if not mf.NAME_RE.match(id_):
         raise SystemExit(f"cs: '{id_}' is not a valid identity id")
-    ident = Identity(id=id_, name=name, email=email, ssh_key=key or "",
-                     gh_user=gh_user, github_owner=owner, url_globs=[f"git@github.com:{owner}/**"])
+    ident = Identity(id=id_, name=name, email=email, ssh_key=key or "", github_owner=owner)
     mf.append_identity(repo, ident)
     gitutil.run(["add", "projects.toml"], repo)
     gitutil.commit(repo, f"identities: add {id_}", "cs", f"cs@{m.name}")

@@ -157,7 +157,7 @@ def _phase_first_identity(repo: Path, m: Machine, owner: str, interactive: bool)
     email = ui.prompt("git user.email")
     keys = sorted(p.name for p in (paths.home() / ".ssh").glob("id_*") if not p.name.endswith(".pub")) if (paths.home() / ".ssh").exists() else []
     key = ui.prompt(f"ssh private key for github.com/{own} (Enter = new key ~/.ssh/cs/{id_})" + (f" (have: {', '.join(keys)})" if keys else ""), f"~/.ssh/cs/{id_}")
-    identity_mod.add(repo, m, man, id_, owner=own, name=name, email=email, key=key, gh_user="", no_token=True)
+    identity_mod.add(repo, m, man, id_, owner=own, name=name, email=email, key=key, no_token=True)
 
 
 def _phase_push(repo: Path) -> None:

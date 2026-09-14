@@ -113,11 +113,10 @@ def build_parser() -> argparse.ArgumentParser:
     isub = s.add_subparsers(dest="identity_cmd", metavar="<sub>")
     i = isub.add_parser("add", help="add an identity to projects.toml")
     i.add_argument("id", help="short id used as --<id> in cs new, e.g. personal, work")
-    i.add_argument("--owner", required=True, help="GitHub user/org whose repos use this identity")
+    i.add_argument("--owner", required=True, help="GitHub user or organization this identity is for")
     i.add_argument("--name", required=True, help="git user.name")
     i.add_argument("--email", required=True, help="git user.email")
     i.add_argument("--key", help="ssh private key path (default ~/.ssh/cs/<id>)")
-    i.add_argument("--gh-user", default="")
     i.add_argument("--no-token", action="store_true", help="don't prompt for a GitHub token")
     isub.add_parser("ls", help="list identities (default)")
     r = isub.add_parser("rename", help="rename an identity (manifest, projects, key files, published pubkeys, git includes)")
@@ -288,7 +287,7 @@ def dispatch(a) -> int:
         from . import identity
         if a.identity_cmd == "add":
             return identity.add(repo, m, man, a.id, owner=a.owner, name=a.name, email=a.email, key=a.key,
-                                gh_user=a.gh_user, no_token=a.no_token)
+                                no_token=a.no_token)
         if a.identity_cmd == "rename":
             return identity.rename(repo, m, man, a.old, a.new)
         identity.ls(man)

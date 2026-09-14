@@ -9,7 +9,7 @@ root = "~/dev"
 [identities.work]
 name = "W"
 email = "w@x"
-url_globs = ["git@github.com:acme/**"]
+owner = "acme"
 [projects.a]
 kind = "git"
 url = "git@github.com:acme/a.git"
@@ -47,6 +47,7 @@ class ManifestTests(unittest.TestCase):
         self.assertTrue(any("does not match identity" in e for e in bad.validate()))
 
     def test_project_block_roundtrip(self):
+        self.assertEqual(self.m.identities["work"].globs, ["git@github.com:acme/**"])
         p = mf.Project(name="x", kind="git", url="git@github.com:acme/x.git", identity="work", profiles=["work"], layout="worktrees")
         block = mf.project_block(p)
         again = mf.parse(TOML + "\n" + block).projects["x"]
