@@ -26,6 +26,8 @@ test("manifest: parse, validate, select, identity globs, block round-trip", () =
   assert.equal(identityForUrl(m, "git@github.com:acme/zzz.git")?.id, "work");
   assert.equal(identityForUrl(m, "git@github.com:other/zzz.git"), undefined);
   assert.ok(globMatch("git@github.com:acme/**", "git@github.com:acme/x/y.git"));
+  assert.ok(globMatch("**/*.key", "api.key") && globMatch("**/*.key", "a/b/api.key") && !globMatch("**/*.key", "api.keyx"));
+  assert.ok(globMatch("**/.env*", ".env.local") && globMatch("*token*", "my-token.txt") && !globMatch("*.pem", "a/b.pem"));
   const bad = parseManifest(TOML + "[projects.d]\nkind = \"git\"\nurl = \"git@github.com:other/d.git\"\nidentity = \"work\"\n");
   assert.ok(validate(bad).some((e) => e.includes("does not match identity")));
   const again = parseManifest(TOML + "\n" + projectBlock({ name: "x", kind: "git", url: "git@github.com:acme/x.git", identity: "work", profiles: ["work"], machines: [], layout: "worktrees", handoff: {}, sync: {} })).projects.x;

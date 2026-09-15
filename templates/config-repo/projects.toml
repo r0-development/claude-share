@@ -34,3 +34,10 @@ default_branch = "master"     # branch `cs new` creates
 # identity = "personal"
 # profiles = ["all"]
 # branch = "main"
+
+# Handoff (cs handoff / cs resume) — optional per project:
+# [projects.example.handoff]
+# extra   = ["local.conf"]        # gitignored files that must travel with uncommitted work
+# never   = ["*.sqlite"]          # extends the secret-file deny list
+# exclude = ["vendor/"]           # never snapshot these
+# (or `handoff = false` inside [projects.example] to opt out)

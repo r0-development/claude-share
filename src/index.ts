@@ -129,6 +129,32 @@ sec.command("exec [command...]").description("run a command with global + projec
 sec.command("recovery").action(async () => { const { repo, m } = ctx(); await ui.command("cs secrets recovery", async () => (await S()).recovery(repo, m)); });
 program.command("enroll <machine>").description("grant another machine access to secrets").action(async (mc) => { const { repo, m } = ctx(); await ui.command(`cs enroll ${mc}`, async () => ui.group("enrolled", async () => (await S()).enroll(repo, m, mc)), { outro: () => ui.dim(`now: cs sync here, then cs sync on ${mc}`) }); });
 program.command("revoke <machine>").description("remove a machine's access to secrets").action(async (mc) => { const { repo, m } = ctx(); await ui.command(`cs revoke ${mc}`, async () => ui.group("revoked", async () => (await S()).revoke(repo, m, mc))); });
+const H = () => import("./handoff.js");
+program.command("handoff [projects...]").description("push uncommitted work of the cwd project (or --all) to wip/<user>/<branch> on its remote")
+  .option("-m, --note <text>", "note shown when the work is resumed").option("--all", "every selected git project").option("--dry-run").option("--allow <glob>", "override the secret-file deny list", (v: string, a: string[]) => [...a, v], [] as string[]).option("--overwrite", "replace a parcel from another machine")
+  .option("--mark", "(SessionEnd hook) only remember that dirty work exists here").option("-q, --quiet")
+  .action(async (names, o) => { const { repo, m, man } = ctx(); const h = await H();
+    if (o.mark) { h.markPending(man, m); return; }
+    await ui.command("cs handoff", async () => { const projects = h.projectsFor(man, m, names, o.all);
+      process.exitCode = await ui.group("handed off", () => h.handoff(repo, m, man, projects, { note: o.note, dryRun: o.dryRun, allow: o.allow, overwrite: o.overwrite }), { done: "nothing to hand off" });
+      if (!o.dryRun) { const { runSync } = await import("./sync.js"); await ui.group("memory & plans synced", () => runSync(repo, m, man, { pushOnly: true, timeout: 20 }), { done: "already in sync" }); } },
+      { outro: () => (process.exitCode ? ui.red("some units not handed off — see above") : ui.dim("on the other machine: cs resume")) }); });
+program.command("resume [projects...]").description("apply parcels from wip/<user>/* as uncommitted changes and delete them")
+  .option("--all").option("--replace", "discard local uncommitted changes in the target (a backup ref is kept)").option("--keep-remote", "leave the wip branch on the remote").option("--dry-run")
+  .action(async (names, o) => { const { repo, m, man } = ctx(); const h = await H();
+    await ui.command("cs resume", async () => { const projects = h.projectsFor(man, m, names, o.all);
+      const { runSync } = await import("./sync.js"); await ui.group("memory & plans", () => runSync(repo, m, man, { pullOnly: true, timeout: 10 }), { done: "up to date" });
+      process.exitCode = await ui.group("resumed", () => h.resume(repo, m, man, projects, { replace: o.replace, keepRemote: o.keepRemote, dryRun: o.dryRun }), { done: "no parcels waiting" }); },
+      { outro: () => (process.exitCode ? ui.red("some parcels not applied — see above") : ui.dim("carry on: claude")) }); });
+const wip = program.command("wip").description("parcels waiting on remotes");
+wip.command("ls", { isDefault: true }).option("--all").action(async (o) => { const { m, man } = ctx(); const h = await H(); const projects = h.projectsFor(man, m, [], o.all ?? true);
+  ui.intro("cs wip"); const list = await h.wipList(m, man, projects);
+  if (!list.length) ui.info(ui.dim("no parcels waiting")); else ui.table(list.map((x) => [x.worktree, x.branch, x.machine, x.when.slice(0, 16), ui.dim(x.note)]), ["project", "branch", "from", "when", "note"]);
+  ui.outro(ui.dim("cs resume · cs wip gc --older-than 14")); });
+wip.command("gc").option("--older-than <days>", "", "14").option("--all").action(async (o) => { const { m, man } = ctx(); const h = await H(); await ui.command("cs wip gc", async () => ui.group("dropped", () => h.wipGc(m, man, h.projectsFor(man, m, [], true), +o.olderThan), { done: "nothing older than that" })); });
+wip.command("drop <branch>").description("delete one parcel (branch name or wip/… ref) for the cwd project").action(async (b) => { const { m, man } = ctx(); const h = await H(); const [p] = h.projectsFor(man, m, [], false); await ui.command("cs wip drop", () => h.wipDrop(m, man, p, b)); });
+program.command("note").description("print (once) the note left by the last cs resume for the cwd project").option("--print").action(async () => { const { m, man } = ctx(); const h = await H(); if (!h.printNote(man, m)) process.exitCode = 1; });
+
 program.command("ui-demo", { hidden: true }).description("show every UI element with fake data").action(async () => {
   const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
   await ui.command("cs ui-demo", async () => {

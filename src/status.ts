@@ -6,6 +6,7 @@ import { contract, stateDir } from "./paths.js";
 import type { Machine } from "./config.js";
 import { checkoutRoot, selected, workspace, type Manifest } from "./manifest.js";
 import * as ui from "./ui.js";
+import { pending } from "./handoff.js";
 
 function repoState(path: string, fetch: boolean): [string, string, boolean] {
   if (!git.isRepo(path)) return ["", ui.dim("not a git repo"), false];
@@ -24,7 +25,7 @@ export async function runStatus(repo: string, m: Machine, man: Manifest, fetch =
   ui.info(`${ui.dim("profiles")} ${m.profiles.join(", ")}  ${ui.dim("workspace")} ${contract(ws)}`);
   const [branch, state] = repoState(repo, fetch); const mk = join(stateDir(), "blocked-config");
   ui.table([[ui.bold("config repo"), branch, state + (existsSync(mk) ? "  " + ui.red("BLOCKED: " + readFileSync(mk, "utf8").trim()) : "")]]);
-  let rc = 0; const rows: string[][] = []; const known = new Set<string>();
+  let rc = 0; const rows: string[][] = []; const known = new Set<string>(); const pend = pending();
   for (const p of Object.values(man.projects)) {
     known.add(p.path || p.name); const sel = selected(p, m); if (!sel && !showAll) continue;
     const root = checkoutRoot(p, ws); const kind = ui.dim(p.kind + (p.layout === "worktrees" ? " ⑂" : ""));
@@ -36,6 +37,7 @@ export async function runStatus(repo: string, m: Machine, man: Manifest, fetch =
       const ident = p.identity ? man.identities[p.identity] : undefined; const email = git.configGet(root, "user.email");
       if (ident && email && email !== ident.email) { s += "  " + ui.red(`identity ${email}`); att = true; } else if (ident && !email) { s += "  " + ui.red("identity unset"); att = true; }
       if (p.layout === "worktrees") s += "  " + ui.dim(`${git.worktrees(root).length} worktrees`);
+      if (pend[p.name]) s += "  " + ui.yellow("uncommitted work — cs handoff");
       if (att) rc = 1; rows.push([p.name, kind, b, s]);
     } else rows.push([p.name, kind, "", ui.green("present")]);
   }

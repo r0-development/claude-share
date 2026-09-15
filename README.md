@@ -147,6 +147,20 @@ cs secrets recovery                        # print a recovery key once → passw
 
 ---
 
+## Handoff — uncommitted work between machines
+
+```sh
+cs handoff -m "where I stopped"      # snapshot the cwd project's working tree → wip/<user>/<branch> on its remote
+cs resume                            # on the other machine: back to uncommitted changes, branch deleted, note shown
+cs wip                               # parcels waiting · cs wip gc --older-than 14
+```
+
+Manual by design — nothing is pushed to a company remote by itself; `cs status` reminds you when a session ended with
+uncommitted work. The sending machine is never touched (private index), secrets-looking files are refused, worktrees are
+created on demand. See `docs/HANDOFF.md`.
+
+---
+
 ## Sync, machines, health
 
 | command | what it does |

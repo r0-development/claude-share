@@ -7,6 +7,7 @@ export const claudeJson = () => join(process.env.CLAUDE_CONFIG_DIR || home(), ".
 export const csConfigDir = () => process.env.CS_CONFIG_DIR || join(home(), ".config", "claude-share");
 export const machineFile = () => join(csConfigDir(), "machine.toml");
 export const repoDirDefault = () => join(csConfigDir(), "repo");
+export const handoffStateDir = () => join(stateDir(), "handoff");
 export const stateDir = () => join(process.env.XDG_STATE_HOME || join(home(), ".local", "state"), "cs");
 export const toolRoot = () => resolve(new URL(".", import.meta.url).pathname, "..");
 export const templatesDir = () => join(toolRoot(), "templates");

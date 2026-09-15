@@ -10,12 +10,14 @@ import { dumps, loads } from "./jsonmerge.js";
 import * as ui from "./ui.js";
 
 const STOP = "command -v cs >/dev/null 2>&1 && cs sync --push-only --quiet --debounce 120 || true";
-const START = "command -v cs >/dev/null 2>&1 && cs sync --pull-only --quiet --timeout 5 || true";
+const START = "command -v cs >/dev/null 2>&1 && { cs sync --pull-only --quiet --timeout 5; cs note --print 2>/dev/null; } || true";
+const END = "command -v cs >/dev/null 2>&1 && cs handoff --mark --quiet || true";
 const entries = (): Record<string, any[]> => ({
   Stop: [{ hooks: [{ type: "command", command: STOP, async: true, timeout: 120 }] }],
   SessionStart: [{ matcher: "startup", hooks: [{ type: "command", command: START, timeout: 15 }] }],
+  SessionEnd: [{ hooks: [{ type: "command", command: END, timeout: 5 }] }],
 });
-const ours = (e: any) => (e.hooks ?? []).some((h: any) => String(h.command ?? "").includes("cs sync"));
+const ours = (e: any) => (e.hooks ?? []).some((h: any) => /cs (sync|handoff|note)/.test(String(h.command ?? "")));
 export function installHooks(repo: string, m: Machine, remove = false): boolean {
   const f = join(repo, "claude", "settings.base.json"); const data: any = existsSync(f) ? loads(readFileSync(f, "utf8")) : {};
   data.hooks ??= {}; let changed = false;

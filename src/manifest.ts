@@ -20,8 +20,15 @@ export interface Manifest { workspaceRoot: string; defaultBranch: string; identi
 export const keyPath = (i: Identity) => i.sshKey || `~/.ssh/cs/${i.id}`;
 export const globs = (i: Identity) => (i.urlGlobs?.length ? i.urlGlobs : i.owner ? [`git@github.com:${i.owner}/**`] : []);
 export function globMatch(pattern: string, s: string): boolean {
-  const re = "^" + pattern.split("**").map((part) => part.split("*").map((x) => x.replace(/[.+^${}()|[\]\\?]/g, "\\$&")).join("[^/]*")).join(".*") + "$";
-  return new RegExp(re).test(s);
+  let re = "^";
+  for (let i = 0; i < pattern.length; i++) {
+    const c = pattern[i];
+    if (c === "*" && pattern[i + 1] === "*") { if (pattern[i + 2] === "/") { re += "(?:.*/)?"; i += 2; } else { re += ".*"; i++; } }
+    else if (c === "*") re += "[^/]*";
+    else if (c === "?") re += "[^/]";
+    else re += c.replace(/[.+^${}()|[\]\\]/g, "\\$&");
+  }
+  return new RegExp(re + "$").test(s);
 }
 export const identityMatches = (i: Identity, url: string) => globs(i).some((g) => globMatch(g, url));
 export function identityForUrl(m: Manifest, url: string) { return Object.values(m.identities).find((i) => identityMatches(i, url)); }

@@ -77,8 +77,9 @@ export function table(rows: string[][], header?: string[]) {
 function cancelled(v: unknown): never { p.cancel("cancelled"); process.exit(130); }
 
 async function plainLine(q: string): Promise<string> {
+  if (scripted) throw new Error(`cs: scripted answers exhausted at prompt '${q.trim()}'`);
   const rl = createInterface({ input: process.stdin, output: process.stdout });
-  return new Promise((res) => rl.question(q, (a) => { rl.close(); res(a.trim()); }));
+  return new Promise((res) => { let done = false; rl.on("close", () => { if (!done) { done = true; res(""); } }); rl.question(q, (a) => { done = true; rl.close(); res(a.trim()); }); });
 }
 
 export async function text(message: string, opts: { default?: string; placeholder?: string; validate?: (v: string) => string | undefined } = {}): Promise<string> {
