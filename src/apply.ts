@@ -1,5 +1,5 @@
 /** cs apply: render ~/.claude from <repo>/claude, git identity includes, shell rc block. */
-import { existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, readlinkSync, renameSync, rmdirSync, rmSync, statSync, symlinkSync, unlinkSync, writeFileSync, copyFileSync } from "node:fs";
+import { existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, readlinkSync, realpathSync, renameSync, rmdirSync, rmSync, statSync, symlinkSync, unlinkSync, writeFileSync, copyFileSync } from "node:fs";
 import { basename, dirname, join, resolve } from "node:path";
 import { claudeDir, contract, expand, home, stateDir, toolRoot } from "./paths.js";
 import { shellRc } from "./platform.js";
@@ -24,10 +24,12 @@ function mergeDirInto(src: string, dst: string) {
   walk(dst); rmSync(dst, { recursive: true, force: true });
 }
 const isLink = (p: string) => { try { return lstatSync(p).isSymbolicLink(); } catch { return false; } };
+const real = (p: string) => { try { return realpathSync(p); } catch { return resolve(p); } };
 
 function link(src: string, dst: string, check: boolean, changes: string[]) {
   if (isLink(dst)) {
-    if (resolve(dirname(dst), readlinkSync(dst)) === resolve(src)) return;
+    // a link that resolves to src through another link (e.g. ~/.claude/skills/x → ../../.agents/skills/x → repo) is fine as is
+    if (resolve(dirname(dst), readlinkSync(dst)) === resolve(src) || real(dst) === real(src)) return;
     changes.push(`relink ${contract(dst)}`); if (!check) { unlinkSync(dst); symlinkSync(src, dst); } return;
   }
   if (existsSync(dst)) {
@@ -59,7 +61,11 @@ export function applySettings(repo: string, m: Machine, check: boolean, changes:
 export function applyLinks(repo: string, check: boolean, changes: string[]) {
   const cdir = claudeDir(); mkdirSync(cdir, { recursive: true });
   for (const item of LINK_ITEMS) link(join(repo, "claude", item), join(cdir, item), check, changes);
-  const skills = join(repo, "claude", "skills");
+  // skills.sh (`npx skills add … -g`) installs into ~/.agents/skills and symlinks ~/.claude/skills/<name> there;
+  // make that directory (and its lock file) the repo's claude/skills so installs land in the config repo directly.
+  const skills = join(repo, "claude", "skills"), agents = join(home(), ".agents");
+  link(skills, join(agents, "skills"), check, changes);
+  link(join(repo, "claude", "skill-lock.json"), join(agents, ".skill-lock.json"), check, changes);
   if (existsSync(skills)) { mkdirSync(join(cdir, "skills"), { recursive: true }); for (const e of readdirSync(skills, { withFileTypes: true })) if (e.isDirectory()) link(join(skills, e.name), join(cdir, "skills", e.name), check, changes); }
   link(join(repo, "plans"), join(cdir, "plans"), check, changes);
 }

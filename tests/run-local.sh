@@ -17,6 +17,10 @@ mkdir -p "$HOME/.claude/skills/old-skill" "$HOME/.claude/plans" "$HOME/dev"
 echo '{"theme":"dark","permissions":{"allow":["Bash(ls *)"]}}' > "$HOME/.claude/settings.json"
 echo "# old plan" > "$HOME/.claude/plans/old.md"
 echo "name: old" > "$HOME/.claude/skills/old-skill/SKILL.md"
+# a skill installed by skills.sh (`npx skills add … -g`): real files in ~/.agents/skills, relative link from ~/.claude/skills
+mkdir -p "$HOME/.agents/skills/sh-skill" && echo "name: sh" > "$HOME/.agents/skills/sh-skill/SKILL.md"
+echo '{"skills":{"sh-skill":{"source":"x/y"}}}' > "$HOME/.agents/.skill-lock.json"
+ln -s ../../.agents/skills/sh-skill "$HOME/.claude/skills/sh-skill"
 
 # --- a project with a remote (bare) and a worktree layout project
 git init -q -b main "$HOME/remote-src" && (cd "$HOME/remote-src" && echo hi > README && git add . && git commit -qm init)
@@ -71,6 +75,10 @@ $CS init --repo "$HOME/cfg.git" --name t1 --profiles work --skip deps,ssh,secret
 pass init
 [ -L "$HOME/.claude/CLAUDE.md" ] || die "CLAUDE.md linked"
 [ -L "$HOME/.claude/skills/shared-skill" ] && [ -d "$HOME/.claude/skills/old-skill" ] && [ ! -L "$HOME/.claude/skills/old-skill" ] || die "skills coexist"
+[ -L "$HOME/.agents/skills" ] && [ "$(readlink -f "$HOME/.agents/skills")" = "$(readlink -f "$CS_CONFIG_DIR/repo/claude/skills")" ] || die "~/.agents/skills is the repo skills dir"
+[ -f "$CS_CONFIG_DIR/repo/claude/skills/sh-skill/SKILL.md" ] && [ -f "$HOME/.claude/skills/sh-skill/SKILL.md" ] || die "skills.sh skill adopted into repo"
+[ -L "$HOME/.agents/.skill-lock.json" ] && grep -q sh-skill "$CS_CONFIG_DIR/repo/claude/skill-lock.json" || die "skill lock adopted into repo"
+$CS apply --check | grep -q "up to date" || die "apply idempotent after skills adoption"
 [ -L "$HOME/.claude/plans" ] && [ -f "$CS_CONFIG_DIR/repo/plans/old.md" ] || die "plans adopted into repo"
 python3 - "$HOME/.claude/settings.json" <<'PY' || die "settings merged"
 import json,sys; d=json.load(open(sys.argv[1]))

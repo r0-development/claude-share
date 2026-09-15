@@ -119,13 +119,14 @@ via `cs link`.
 
 | command | what it does |
 |---|---|
-| `cs apply [--check]` | `settings.json` = `settings.base.json` ⊕ `settings.<profile>.json` ⊕ `settings.<machine>.json`; symlink `CLAUDE.md`, `rules/`, `skills/*`, `agents/`, `themes/`, `keybindings.json`, `plans/`; git identity includes; shell rc block |
+| `cs apply [--check]` | `settings.json` = `settings.base.json` ⊕ `settings.<profile>.json` ⊕ `settings.<machine>.json`; symlink `CLAUDE.md`, `rules/`, `skills/*`, `agents/`, `themes/`, `keybindings.json`, `plans/`; `~/.agents/skills` → `claude/skills` so `npx skills add … -g` (skills.sh) installs into the config repo; git identity includes; shell rc block |
 | `cs link [name…] [--check]` | copy `CLAUDE.md`, `.claude/**`, `.mcp.json` from the side-store into each checkout and worktree (hidden from git via `.git/info/exclude`); point `autoMemoryDirectory` at the config repo; newer content flows back |
 | `cs adopt memory <name>` | move existing auto-memory from `~/.claude/projects/…/memory` into the side-store |
 | `cs adopt project <name>` | take existing Claude files from a checkout into the side-store |
 | `cs adopt mcp <name>` | move MCP servers (with secrets) from `~/.claude.json` into the side-store `.mcp.json` with `${VAR}` placeholders |
 
-Global rules for all projects: `claude/CLAUDE.md` and `claude/rules/*.md` in the config repo (`cs apply` links them to `~/.claude`).
+Global rules for all projects: `claude/CLAUDE.md` and `claude/rules/*.md` in the config repo (`cs apply` links them to `~/.claude`, so editing
+`~/.claude/CLAUDE.md` edits the repo). Global skills: `claude/skills/<name>/SKILL.md` — write them there or `npx skills add <owner/repo> -g`.
 
 ---
 

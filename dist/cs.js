@@ -6773,7 +6773,7 @@ __export(apply_exports, {
   runApply: () => runApply,
   settingsLayers: () => settingsLayers
 });
-import { existsSync as existsSync6, lstatSync, mkdirSync as mkdirSync4, readdirSync, readFileSync as readFileSync6, readlinkSync, renameSync, rmSync, statSync as statSync2, symlinkSync, unlinkSync as unlinkSync2, writeFileSync as writeFileSync4, copyFileSync } from "node:fs";
+import { existsSync as existsSync6, lstatSync, mkdirSync as mkdirSync4, readdirSync, readFileSync as readFileSync6, readlinkSync, realpathSync, renameSync, rmSync, statSync as statSync2, symlinkSync, unlinkSync as unlinkSync2, writeFileSync as writeFileSync4, copyFileSync } from "node:fs";
 import { basename, dirname as dirname3, join as join6, resolve as resolve4 } from "node:path";
 function backup(target) {
   const d = join6(stateDir(), "backups", stamp());
@@ -6805,7 +6805,7 @@ function mergeDirInto(src, dst) {
 }
 function link(src, dst, check, changes) {
   if (isLink(dst)) {
-    if (resolve4(dirname3(dst), readlinkSync(dst)) === resolve4(src)) return;
+    if (resolve4(dirname3(dst), readlinkSync(dst)) === resolve4(src) || real(dst) === real(src)) return;
     changes.push(`relink ${contract(dst)}`);
     if (!check) {
       unlinkSync2(dst);
@@ -6870,7 +6870,9 @@ function applyLinks(repo, check, changes) {
   const cdir = claudeDir();
   mkdirSync4(cdir, { recursive: true });
   for (const item of LINK_ITEMS) link(join6(repo, "claude", item), join6(cdir, item), check, changes);
-  const skills = join6(repo, "claude", "skills");
+  const skills = join6(repo, "claude", "skills"), agents = join6(home(), ".agents");
+  link(skills, join6(agents, "skills"), check, changes);
+  link(join6(repo, "claude", "skill-lock.json"), join6(agents, ".skill-lock.json"), check, changes);
   if (existsSync6(skills)) {
     mkdirSync4(join6(cdir, "skills"), { recursive: true });
     for (const e of readdirSync(skills, { withFileTypes: true })) if (e.isDirectory()) link(join6(skills, e.name), join6(cdir, "skills", e.name), check, changes);
@@ -6949,7 +6951,7 @@ function runApply(repo, m, man, check = false) {
   if (!changes.length) ok("~/.claude up to date");
   return changes;
 }
-var LINK_ITEMS, GIT_MARK, GIT_END, stamp, isLink, renderSettings;
+var LINK_ITEMS, GIT_MARK, GIT_END, stamp, isLink, real, renderSettings;
 var init_apply = __esm({
   "src/apply.ts"() {
     "use strict";
@@ -6967,6 +6969,13 @@ var init_apply = __esm({
         return lstatSync(p).isSymbolicLink();
       } catch {
         return false;
+      }
+    };
+    real = (p) => {
+      try {
+        return realpathSync(p);
+      } catch {
+        return resolve4(p);
       }
     };
     renderSettings = (repo, m) => mergeLayers(...settingsLayers(repo, m).map(([, d]) => d));
