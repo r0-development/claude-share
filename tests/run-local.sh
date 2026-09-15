@@ -226,4 +226,16 @@ export HOME4="$(mktemp -d)"
   [ "$(grep -c . "$CS_CONFIG_DIR/machine.toml")" -gt 2 ] || die "machine.toml" )
 pass wizard
 
+# --- project picker: join the first share interactively, select only alpha + gamma → profiles/exclude derived, only their identity set up
+export HOME5="$(mktemp -d)"
+( export HOME="$HOME5" CLAUDE_CONFIG_DIR="$HOME5/.claude" XDG_STATE_HOME="$HOME5/.local/state" CS_CONFIG_DIR="$HOME5/.config/claude-share" SOPS_AGE_KEY_FILE="$HOME5/.config/sops/age/keys.txt"
+  mkdir -p "$HOME5/dev"
+  #            choose  url             machine  projects        workspace  keys token clone
+  CS_ANSWERS='["join","'"$CFG_REMOTE"'","wiz3","alpha,gamma","default","s","n","n"]' $CS init --skip deps,hooks,doctor,secrets >/dev/null || die "picker init"
+  grep -q 'profiles = \[ "personal" \]' "$CS_CONFIG_DIR/machine.toml" || die "profiles derived from picked projects"
+  ($CS status --all || true) | grep -q "beta.*skipped" || die "beta not selected"
+  ($CS status || true) | grep -q "gamma" || die "gamma listed"
+  ($CS status || true) | grep -q " beta " && die "beta must not be listed" || true )
+pass project-picker
+
 echo "ALL PASS (HOME=$HOME)"

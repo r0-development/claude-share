@@ -126,6 +126,20 @@ export async function multiselect<T extends string>(message: string, options: { 
   return v as T[];
 }
 
+export async function groupMultiselect<T extends string>(message: string, groups: Record<string, { value: T; label: string; hint?: string }[]>, initial: T[] = []): Promise<T[]> {
+  const all = Object.values(groups).flat();
+  const a = nextAnswer();
+  if (a !== undefined) return a === "<default>" ? initial : a === "all" ? all.map((o) => o.value) : (a.split(",").map((x) => x.trim()).filter(Boolean) as T[]);
+  if (!isTTY()) {
+    console.log(`? ${message}`); for (const [g, opts] of Object.entries(groups)) console.log(`  ${g}: ${opts.map((o) => o.value).join(", ")}`);
+    const v = await plainLine(`  comma list (Enter = ${initial.length === all.length ? "all" : initial.join(",")}): `);
+    return v ? (v.split(",").map((x) => x.trim()) as T[]) : initial;
+  }
+  const v = await p.groupMultiselect({ message, options: groups as any, initialValues: initial, required: false, selectableGroups: true });
+  if (p.isCancel(v)) cancelled(v);
+  return v as T[];
+}
+
 /** Pause until Enter; returns "" or the skip key. */
 export async function waitEnter(message: string, skipKey = ""): Promise<string> {
   const a = nextAnswer();

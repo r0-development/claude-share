@@ -7,7 +7,7 @@ import * as master from "./master.js";
 import { contract, expand, home, repoDirDefault, templatesDir } from "./paths.js";
 import * as platform from "./platform.js";
 import { loadMachine, machineExists, saveMachine, type Machine } from "./config.js";
-import { checkoutRoot, loadManifest, NAME_RE, selectedProjects, workspace, type Manifest } from "./manifest.js";
+import { checkoutRoot, loadManifest, NAME_RE, selectedProjects, workspace, type Manifest, type Project } from "./manifest.js";
 import { runApply } from "./apply.js";
 import { runLink } from "./link.js";
 import { runDoctor } from "./doctor.js";
@@ -77,11 +77,21 @@ async function machinePhase(repo: string, nm: string, profiles: string[], ws: st
   if (!nm) { if (!interactive) throw new Error("cs: --name <machine-name> is required");
     const dflt = { wsl2: "desktop", macos: "laptop" }[platform.describe() as string] ?? "machine";
     for (;;) { nm = await ui.text("name for this machine", { default: dflt, validate: name }); if (existing.includes(nm) && !(await ui.confirm(`'${nm}' already exists — re-use it (its published keys will be replaced)?`, false))) continue; break; } }
-  if (!profiles.length) { const known = new Set<string>(); try { for (const p of Object.values(loadManifest(repo).projects)) for (const x of p.profiles) if (x !== "all") known.add(x); } catch {}
-    if (interactive && known.size) { profiles = await ui.multiselect("profiles for this machine — which project groups should it get?", [...known].sort().map((k) => ({ value: k, label: k })), ["personal"].filter((x) => known.has(x)));
-      if (!profiles.length) profiles = ["personal"]; }
-    else if (interactive) profiles = (await ui.text("profiles for this machine (comma list — project groups it should get)", { default: "personal" })).split(",").map((x) => x.trim()).filter(Boolean);
-    else profiles = ["personal"]; }
+  let exclude: string[] = [];
+  if (!profiles.length) {
+    let projects: Project[] = []; try { projects = Object.values(loadManifest(repo).projects); } catch {}
+    if (interactive && projects.length) {
+      // pick projects (default: all) → derive profiles + exclude
+      const groups: Record<string, { value: string; label: string; hint?: string }[]> = {};
+      for (const p of projects) { const g = p.profiles.includes("all") ? "every machine" : p.profiles.join(", "); (groups[g] ??= []).push({ value: p.name, label: p.name, hint: p.kind === "git" ? `${p.identity} · ${p.url?.replace(/^git@github\.com:/, "").replace(/\.git$/, "")}` : p.kind }); }
+      const picked = new Set(await ui.groupMultiselect("Which projects should this machine clone and sync?", groups, projects.map((p) => p.name)));
+      profiles = [...new Set(projects.filter((p) => picked.has(p.name)).flatMap((p) => p.profiles).filter((x) => x !== "all"))].sort();
+      if (!profiles.length) profiles = ["personal"];
+      exclude = projects.filter((p) => !picked.has(p.name) && (p.profiles.includes("all") || p.profiles.some((x) => profiles.includes(x)))).map((p) => p.name);
+      ui.step(`${picked.size} of ${projects.length} projects selected  ${ui.dim("profiles " + profiles.join(", ") + (exclude.length ? " · excluded " + exclude.join(", ") : ""))}`);
+    } else if (interactive) profiles = (await ui.text("profiles for this machine (comma list — project groups it should get)", { default: "personal" })).split(",").map((x) => x.trim()).filter(Boolean);
+    else profiles = ["personal"];
+  }
   let workspaceOverride = ws;
   if (ws === undefined && interactive) {
     let dws = "~/dev"; try { dws = loadManifest(repo).workspaceRoot; } catch {}
@@ -99,7 +109,7 @@ async function machinePhase(repo: string, nm: string, profiles: string[], ws: st
     ui.step(`projects live in ${ui.bold(w)}${existed ? "" : ui.dim("  (created)")}`);
     workspaceOverride = w === dws ? undefined : w;
   } else if (ws) mkdirSync(expand(ws), { recursive: true });
-  const m: Machine = { name: nm, profiles, exclude: [], workspace: workspaceOverride, secretsBackend: "sops" }; saveMachine(m);
+  const m: Machine = { name: nm, profiles, exclude, workspace: workspaceOverride, secretsBackend: "sops" }; saveMachine(m);
   ui.step(`machine ${ui.bold(m.name)}  ${ui.dim("profiles " + m.profiles.join(", "))}`); return m;
 }
 async function firstIdentity(repo: string, m: Machine, interactive: boolean) {
@@ -111,7 +121,12 @@ async function firstIdentity(repo: string, m: Machine, interactive: boolean) {
   await identity.add(repo, m, man, id, { owner: own, name: nm, email: em, noToken: true });
 }
 async function keysAndTokens(repo: string, m: Machine, interactive: boolean, skip: string[]) {
-  const man = loadManifest(repo); if (!Object.keys(man.identities).length) return;
+  const full = loadManifest(repo); if (!Object.keys(full.identities).length) return;
+  // only the identities the selected projects actually use (all of them when nothing is selected yet, e.g. a new share)
+  const used = new Set(selectedProjects(full, m).map((p) => p.identity).filter(Boolean));
+  const man: Manifest = used.size ? { ...full, identities: Object.fromEntries(Object.entries(full.identities).filter(([id]) => used.has(id))) } : full;
+  const skipped = Object.keys(full.identities).filter((id) => !(id in man.identities));
+  if (skipped.length) ui.skip(`identities not needed by the selected projects: ${skipped.join(", ")}`);
   if (!skip.includes("ssh")) { ui.section("identity ssh keys"); const ssh = await import("./ssh.js"); let rc = await ssh.setup(repo, m, man); let tries = 0;
     while (rc !== 0 && interactive && tries++ < 5) { if ((await ui.waitEnter("press Enter after adding the key(s) on GitHub", "s")) === "s") break; rc = await ssh.setup(repo, m, man, true); } }
   if (interactive) { const missing = Object.values(man.identities).filter((i) => i.owner && !github.getToken(i.owner));

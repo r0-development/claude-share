@@ -3573,7 +3573,7 @@ function fD({ input: e2 = j, output: u2 = M, overwrite: t = true, hideCursor: F2
     e2.off("keypress", i), F2 && u2.write(import_sisteransi.cursor.show), e2.isTTY && !AD && e2.setRawMode(false), s.terminal = false, s.close();
   };
 }
-var import_sisteransi, import_picocolors, uD, W, tD, eD, FD, sD, w, N, I, R, r, iD, CD, ED, d, oD, y, V, nD, G, _, z, K, aD, k, hD, lD, xD, B, AD, S, gD, vD, h, x, dD, A, kD, $D, H, SD, TD, jD, U, MD, OD, PD, J, LD, RD;
+var import_sisteransi, import_picocolors, uD, W, tD, eD, FD, sD, w, N, I, R, r, iD, CD, ED, d, oD, y, V, nD, G, _, z, K, aD, k, hD, lD, xD, B, AD, S, gD, vD, h, x, dD, mD, bD, Z, q, T, wD, yD, A, _D, TD, jD, U, MD, OD, PD, J, LD, RD;
 var init_dist = __esm({
   "node_modules/@clack/core/dist/index.mjs"() {
     import_sisteransi = __toESM(require_src(), 1);
@@ -3809,42 +3809,62 @@ var init_dist = __esm({
         });
       }
     };
-    A = /* @__PURE__ */ new WeakMap();
-    kD = Object.defineProperty;
-    $D = (e2, u2, t) => u2 in e2 ? kD(e2, u2, { enumerable: true, configurable: true, writable: true, value: t }) : e2[u2] = t;
-    H = (e2, u2, t) => ($D(e2, typeof u2 != "symbol" ? u2 + "" : u2, t), t);
-    SD = class extends x {
+    mD = Object.defineProperty;
+    bD = (e2, u2, t) => u2 in e2 ? mD(e2, u2, { enumerable: true, configurable: true, writable: true, value: t }) : e2[u2] = t;
+    Z = (e2, u2, t) => (bD(e2, typeof u2 != "symbol" ? u2 + "" : u2, t), t);
+    q = (e2, u2, t) => {
+      if (!u2.has(e2)) throw TypeError("Cannot " + t);
+    };
+    T = (e2, u2, t) => (q(e2, u2, "read from private field"), t ? t.call(e2) : u2.get(e2));
+    wD = (e2, u2, t) => {
+      if (u2.has(e2)) throw TypeError("Cannot add the same private member more than once");
+      u2 instanceof WeakSet ? u2.add(e2) : u2.set(e2, t);
+    };
+    yD = (e2, u2, t, F2) => (q(e2, u2, "write to private field"), F2 ? F2.call(e2, t) : u2.set(e2, t), t);
+    _D = class extends x {
       constructor(u2) {
-        super(u2, false), H(this, "options"), H(this, "cursor", 0), this.options = u2.options, this.value = [...u2.initialValues ?? []], this.cursor = Math.max(this.options.findIndex(({ value: t }) => t === u2.cursorAt), 0), this.on("key", (t) => {
-          t === "a" && this.toggleAll();
-        }), this.on("cursor", (t) => {
-          switch (t) {
+        super(u2, false), Z(this, "options"), Z(this, "cursor", 0), wD(this, A, void 0);
+        const { options: t } = u2;
+        yD(this, A, u2.selectableGroups !== false), this.options = Object.entries(t).flatMap(([F2, s]) => [{ value: F2, group: true, label: F2 }, ...s.map((i) => ({ ...i, group: F2 }))]), this.value = [...u2.initialValues ?? []], this.cursor = Math.max(this.options.findIndex(({ value: F2 }) => F2 === u2.cursorAt), T(this, A) ? 0 : 1), this.on("cursor", (F2) => {
+          switch (F2) {
             case "left":
-            case "up":
+            case "up": {
               this.cursor = this.cursor === 0 ? this.options.length - 1 : this.cursor - 1;
+              const s = this.options[this.cursor]?.group === true;
+              !T(this, A) && s && (this.cursor = this.cursor === 0 ? this.options.length - 1 : this.cursor - 1);
               break;
+            }
             case "down":
-            case "right":
+            case "right": {
               this.cursor = this.cursor === this.options.length - 1 ? 0 : this.cursor + 1;
+              const s = this.options[this.cursor]?.group === true;
+              !T(this, A) && s && (this.cursor = this.cursor === this.options.length - 1 ? 0 : this.cursor + 1);
               break;
+            }
             case "space":
               this.toggleValue();
               break;
           }
         });
       }
-      get _value() {
-        return this.options[this.cursor].value;
+      getGroupItems(u2) {
+        return this.options.filter((t) => t.group === u2);
       }
-      toggleAll() {
-        const u2 = this.value.length === this.options.length;
-        this.value = u2 ? [] : this.options.map((t) => t.value);
+      isGroupSelected(u2) {
+        return this.getGroupItems(u2).every((t) => this.value.includes(t.value));
       }
       toggleValue() {
-        const u2 = this.value.includes(this._value);
-        this.value = u2 ? this.value.filter((t) => t !== this._value) : [...this.value, this._value];
+        const u2 = this.options[this.cursor];
+        if (u2.group === true) {
+          const t = u2.value, F2 = this.getGroupItems(t);
+          this.isGroupSelected(t) ? this.value = this.value.filter((s) => F2.findIndex((i) => i.value === s) === -1) : this.value = [...this.value, ...F2.map((s) => s.value)], this.value = Array.from(new Set(this.value));
+        } else {
+          const t = this.value.includes(u2.value);
+          this.value = t ? this.value.filter((F2) => F2 !== u2.value) : [...this.value, u2.value];
+        }
       }
     };
+    A = /* @__PURE__ */ new WeakMap();
     TD = Object.defineProperty;
     jD = (e2, u2, t) => u2 in e2 ? TD(e2, u2, { enumerable: true, configurable: true, writable: true, value: t }) : e2[u2] = t;
     U = (e2, u2, t) => (jD(e2, typeof u2 != "symbol" ? u2 + "" : u2, t), t);
@@ -3918,7 +3938,7 @@ import y2 from "node:process";
 function ce() {
   return y2.platform !== "win32" ? y2.env.TERM !== "linux" : !!y2.env.CI || !!y2.env.WT_SESSION || !!y2.env.TERMINUS_SUBLIME || y2.env.ConEmuTask === "{cmd::Cmder}" || y2.env.TERM_PROGRAM === "Terminus-Sublime" || y2.env.TERM_PROGRAM === "vscode" || y2.env.TERM === "xterm-256color" || y2.env.TERM === "alacritty" || y2.env.TERMINAL_EMULATOR === "JetBrains-JediTerm";
 }
-var import_picocolors2, import_sisteransi2, V2, u, le, L2, W2, C, ue, o, d2, k2, P2, A2, T, F, $e, _2, me, de, pe, q, D, U2, K2, b2, G2, he, ge, ye, ve, fe, Me, xe, Ie, Se, M2, J2, Y2;
+var import_picocolors2, import_sisteransi2, V2, u, le, L2, W2, C, ue, o, d2, k2, P2, A2, T2, F, $e, _2, me, de, pe, q2, D, U2, K2, b2, G2, he, ge, ye, ve, be, Me, xe, Ie, Se, M2, J2, Y2;
 var init_dist2 = __esm({
   "node_modules/@clack/prompts/dist/index.mjs"() {
     init_dist();
@@ -3937,14 +3957,14 @@ var init_dist2 = __esm({
     k2 = u("\u25CF", ">");
     P2 = u("\u25CB", " ");
     A2 = u("\u25FB", "[\u2022]");
-    T = u("\u25FC", "[+]");
+    T2 = u("\u25FC", "[+]");
     F = u("\u25FB", "[ ]");
     $e = u("\u25AA", "\u2022");
     _2 = u("\u2500", "-");
     me = u("\u256E", "+");
     de = u("\u251C", "+");
     pe = u("\u256F", "+");
-    q = u("\u25CF", "\u2022");
+    q2 = u("\u25CF", "\u2022");
     D = u("\u25C6", "*");
     U2 = u("\u25B2", "!");
     K2 = u("\u25A0", "x");
@@ -4064,40 +4084,54 @@ ${import_picocolors2.default.cyan(d2)}
         }
       } }).prompt();
     };
-    fe = (t) => {
-      const n = (r2, i) => {
-        const s = r2.label ?? String(r2.value);
-        return i === "active" ? `${import_picocolors2.default.cyan(A2)} ${s} ${r2.hint ? import_picocolors2.default.dim(`(${r2.hint})`) : ""}` : i === "selected" ? `${import_picocolors2.default.green(T)} ${import_picocolors2.default.dim(s)} ${r2.hint ? import_picocolors2.default.dim(`(${r2.hint})`) : ""}` : i === "cancelled" ? `${import_picocolors2.default.strikethrough(import_picocolors2.default.dim(s))}` : i === "active-selected" ? `${import_picocolors2.default.green(T)} ${s} ${r2.hint ? import_picocolors2.default.dim(`(${r2.hint})`) : ""}` : i === "submitted" ? `${import_picocolors2.default.dim(s)}` : `${import_picocolors2.default.dim(F)} ${import_picocolors2.default.dim(s)}`;
+    be = (t) => {
+      const { selectableGroups: n = true } = t, r2 = (i, s, c = []) => {
+        const a = i.label ?? String(i.value), l2 = typeof i.group == "string", $2 = l2 && (c[c.indexOf(i) + 1] ?? { group: true }), g2 = l2 && $2.group === true, p2 = l2 ? n ? `${g2 ? d2 : o} ` : "  " : "";
+        if (s === "active") return `${import_picocolors2.default.dim(p2)}${import_picocolors2.default.cyan(A2)} ${a} ${i.hint ? import_picocolors2.default.dim(`(${i.hint})`) : ""}`;
+        if (s === "group-active") return `${p2}${import_picocolors2.default.cyan(A2)} ${import_picocolors2.default.dim(a)}`;
+        if (s === "group-active-selected") return `${p2}${import_picocolors2.default.green(T2)} ${import_picocolors2.default.dim(a)}`;
+        if (s === "selected") {
+          const f = l2 || n ? import_picocolors2.default.green(T2) : "";
+          return `${import_picocolors2.default.dim(p2)}${f} ${import_picocolors2.default.dim(a)} ${i.hint ? import_picocolors2.default.dim(`(${i.hint})`) : ""}`;
+        }
+        if (s === "cancelled") return `${import_picocolors2.default.strikethrough(import_picocolors2.default.dim(a))}`;
+        if (s === "active-selected") return `${import_picocolors2.default.dim(p2)}${import_picocolors2.default.green(T2)} ${a} ${i.hint ? import_picocolors2.default.dim(`(${i.hint})`) : ""}`;
+        if (s === "submitted") return `${import_picocolors2.default.dim(a)}`;
+        const v2 = l2 || n ? import_picocolors2.default.dim(F) : "";
+        return `${import_picocolors2.default.dim(p2)}${v2} ${import_picocolors2.default.dim(a)}`;
       };
-      return new SD({ options: t.options, initialValues: t.initialValues, required: t.required ?? true, cursorAt: t.cursorAt, validate(r2) {
-        if (this.required && r2.length === 0) return `Please select at least one option.
+      return new _D({ options: t.options, initialValues: t.initialValues, required: t.required ?? true, cursorAt: t.cursorAt, selectableGroups: n, validate(i) {
+        if (this.required && i.length === 0) return `Please select at least one option.
 ${import_picocolors2.default.reset(import_picocolors2.default.dim(`Press ${import_picocolors2.default.gray(import_picocolors2.default.bgWhite(import_picocolors2.default.inverse(" space ")))} to select, ${import_picocolors2.default.gray(import_picocolors2.default.bgWhite(import_picocolors2.default.inverse(" enter ")))} to submit`))}`;
       }, render() {
-        const r2 = `${import_picocolors2.default.gray(o)}
+        const i = `${import_picocolors2.default.gray(o)}
 ${b2(this.state)}  ${t.message}
-`, i = (s, c) => {
-          const a = this.value.includes(s.value);
-          return c && a ? n(s, "active-selected") : a ? n(s, "selected") : n(s, c ? "active" : "inactive");
-        };
+`;
         switch (this.state) {
           case "submit":
-            return `${r2}${import_picocolors2.default.gray(o)}  ${this.options.filter(({ value: s }) => this.value.includes(s)).map((s) => n(s, "submitted")).join(import_picocolors2.default.dim(", ")) || import_picocolors2.default.dim("none")}`;
+            return `${i}${import_picocolors2.default.gray(o)}  ${this.options.filter(({ value: s }) => this.value.includes(s)).map((s) => r2(s, "submitted")).join(import_picocolors2.default.dim(", "))}`;
           case "cancel": {
-            const s = this.options.filter(({ value: c }) => this.value.includes(c)).map((c) => n(c, "cancelled")).join(import_picocolors2.default.dim(", "));
-            return `${r2}${import_picocolors2.default.gray(o)}  ${s.trim() ? `${s}
+            const s = this.options.filter(({ value: c }) => this.value.includes(c)).map((c) => r2(c, "cancelled")).join(import_picocolors2.default.dim(", "));
+            return `${i}${import_picocolors2.default.gray(o)}  ${s.trim() ? `${s}
 ${import_picocolors2.default.gray(o)}` : ""}`;
           }
           case "error": {
             const s = this.error.split(`
 `).map((c, a) => a === 0 ? `${import_picocolors2.default.yellow(d2)}  ${import_picocolors2.default.yellow(c)}` : `   ${c}`).join(`
 `);
-            return `${r2 + import_picocolors2.default.yellow(o)}  ${G2({ options: this.options, cursor: this.cursor, maxItems: t.maxItems, style: i }).join(`
+            return `${i}${import_picocolors2.default.yellow(o)}  ${this.options.map((c, a, l2) => {
+              const $2 = this.value.includes(c.value) || c.group === true && this.isGroupSelected(`${c.value}`), g2 = a === this.cursor;
+              return !g2 && typeof c.group == "string" && this.options[this.cursor].value === c.group ? r2(c, $2 ? "group-active-selected" : "group-active", l2) : g2 && $2 ? r2(c, "active-selected", l2) : $2 ? r2(c, "selected", l2) : r2(c, g2 ? "active" : "inactive", l2);
+            }).join(`
 ${import_picocolors2.default.yellow(o)}  `)}
 ${s}
 `;
           }
           default:
-            return `${r2}${import_picocolors2.default.cyan(o)}  ${G2({ options: this.options, cursor: this.cursor, maxItems: t.maxItems, style: i }).join(`
+            return `${i}${import_picocolors2.default.cyan(o)}  ${this.options.map((s, c, a) => {
+              const l2 = this.value.includes(s.value) || s.group === true && this.isGroupSelected(`${s.value}`), $2 = c === this.cursor;
+              return !$2 && typeof s.group == "string" && this.options[this.cursor].value === s.group ? r2(s, l2 ? "group-active-selected" : "group-active", a) : $2 && l2 ? r2(s, "active-selected", a) : l2 ? r2(s, "selected", a) : r2(s, $2 ? "active" : "inactive", a);
+            }).join(`
 ${import_picocolors2.default.cyan(o)}  `)}
 ${import_picocolors2.default.cyan(d2)}
 `;
@@ -4145,7 +4179,7 @@ ${import_picocolors2.default.gray(d2)}  ${t}
 `)}
 `);
     }, info: (t) => {
-      M2.message(t, { symbol: import_picocolors2.default.blue(q) });
+      M2.message(t, { symbol: import_picocolors2.default.blue(q2) });
     }, success: (t) => {
       M2.message(t, { symbol: import_picocolors2.default.green(D) });
     }, step: (t) => {
@@ -4178,7 +4212,7 @@ ${import_picocolors2.default.gray(d2)}  ${t}
       }, R2 = (m2) => m2.replace(/\.+$/, ""), O2 = (m2) => {
         const h2 = (performance.now() - m2) / 1e3, w2 = Math.floor(h2 / 60), I2 = Math.floor(h2 % 60);
         return w2 > 0 ? `[${w2}m ${I2}s]` : `[${I2}s]`;
-      }, H2 = (m2 = "") => {
+      }, H = (m2 = "") => {
         a = true, s = fD(), l2 = R2(m2), g2 = performance.now(), process.stdout.write(`${import_picocolors2.default.gray(o)}
 `);
         let h2 = 0, w2 = 0;
@@ -4201,7 +4235,7 @@ ${import_picocolors2.default.gray(d2)}  ${t}
 `) : process.stdout.write(`${w2}  ${l2}
 `), E(), s();
       };
-      return { start: H2, stop: N2, message: (m2 = "") => {
+      return { start: H, stop: N2, message: (m2 = "") => {
         l2 = R2(m2 ?? l2);
       } };
     };
@@ -4266,9 +4300,9 @@ function cancelled(v2) {
   xe("cancelled");
   process.exit(130);
 }
-async function plainLine(q2) {
+async function plainLine(q3) {
   const rl = createInterface2({ input: process.stdin, output: process.stdout });
-  return new Promise((res) => rl.question(q2, (a) => {
+  return new Promise((res) => rl.question(q3, (a) => {
     rl.close();
     res(a.trim());
   }));
@@ -4340,14 +4374,17 @@ async function select(message, options, initial) {
   if (pD(v2)) cancelled(v2);
   return v2;
 }
-async function multiselect(message, options, initial = []) {
+async function groupMultiselect(message, groups, initial = []) {
+  const all = Object.values(groups).flat();
   const a = nextAnswer();
-  if (a !== void 0) return a === "<default>" ? initial : a.split(",").map((x2) => x2.trim()).filter(Boolean);
+  if (a !== void 0) return a === "<default>" ? initial : a === "all" ? all.map((o2) => o2.value) : a.split(",").map((x2) => x2.trim()).filter(Boolean);
   if (!isTTY()) {
-    const v3 = await plainLine(`? ${message} (comma list of: ${options.map((o2) => o2.value).join(", ")}) [${initial.join(",")}]: `);
+    console.log(`? ${message}`);
+    for (const [g2, opts] of Object.entries(groups)) console.log(`  ${g2}: ${opts.map((o2) => o2.value).join(", ")}`);
+    const v3 = await plainLine(`  comma list (Enter = ${initial.length === all.length ? "all" : initial.join(",")}): `);
     return v3 ? v3.split(",").map((x2) => x2.trim()) : initial;
   }
-  const v2 = await fe({ message, options, initialValues: initial, required: false });
+  const v2 = await be({ message, options: groups, initialValues: initial, required: false, selectableGroups: true });
   if (pD(v2)) cancelled(v2);
   return v2;
 }
@@ -4378,8 +4415,8 @@ var init_ui = __esm({
     init_dist2();
     import_picocolors3 = __toESM(require_picocolors(), 1);
     quiet = false;
-    setQuiet = (q2) => {
-      quiet = q2;
+    setQuiet = (q3) => {
+      quiet = q3;
     };
     isTTY = () => Boolean(process.stdin.isTTY && process.stdout.isTTY);
     scripted = process.env.CS_ANSWERS ? JSON.parse(process.env.CS_ANSWERS) : null;
@@ -7543,15 +7580,24 @@ async function machinePhase(repo, nm, profiles, ws, interactive) {
       break;
     }
   }
+  let exclude = [];
   if (!profiles.length) {
-    const known = /* @__PURE__ */ new Set();
+    let projects = [];
     try {
-      for (const p2 of Object.values(loadManifest(repo).projects)) for (const x2 of p2.profiles) if (x2 !== "all") known.add(x2);
+      projects = Object.values(loadManifest(repo).projects);
     } catch {
     }
-    if (interactive && known.size) {
-      profiles = await multiselect("profiles for this machine \u2014 which project groups should it get?", [...known].sort().map((k3) => ({ value: k3, label: k3 })), ["personal"].filter((x2) => known.has(x2)));
+    if (interactive && projects.length) {
+      const groups = {};
+      for (const p2 of projects) {
+        const g2 = p2.profiles.includes("all") ? "every machine" : p2.profiles.join(", ");
+        (groups[g2] ??= []).push({ value: p2.name, label: p2.name, hint: p2.kind === "git" ? `${p2.identity} \xB7 ${p2.url?.replace(/^git@github\.com:/, "").replace(/\.git$/, "")}` : p2.kind });
+      }
+      const picked = new Set(await groupMultiselect("Which projects should this machine clone and sync?", groups, projects.map((p2) => p2.name)));
+      profiles = [...new Set(projects.filter((p2) => picked.has(p2.name)).flatMap((p2) => p2.profiles).filter((x2) => x2 !== "all"))].sort();
       if (!profiles.length) profiles = ["personal"];
+      exclude = projects.filter((p2) => !picked.has(p2.name) && (p2.profiles.includes("all") || p2.profiles.some((x2) => profiles.includes(x2)))).map((p2) => p2.name);
+      step(`${picked.size} of ${projects.length} projects selected  ${dim("profiles " + profiles.join(", ") + (exclude.length ? " \xB7 excluded " + exclude.join(", ") : ""))}`);
     } else if (interactive) profiles = (await text("profiles for this machine (comma list \u2014 project groups it should get)", { default: "personal" })).split(",").map((x2) => x2.trim()).filter(Boolean);
     else profiles = ["personal"];
   }
@@ -7580,7 +7626,7 @@ async function machinePhase(repo, nm, profiles, ws, interactive) {
     step(`projects live in ${bold(w2)}${existed ? "" : dim("  (created)")}`);
     workspaceOverride = w2 === dws ? void 0 : w2;
   } else if (ws) mkdirSync12(expand(ws), { recursive: true });
-  const m2 = { name: nm, profiles, exclude: [], workspace: workspaceOverride, secretsBackend: "sops" };
+  const m2 = { name: nm, profiles, exclude, workspace: workspaceOverride, secretsBackend: "sops" };
   saveMachine(m2);
   step(`machine ${bold(m2.name)}  ${dim("profiles " + m2.profiles.join(", "))}`);
   return m2;
@@ -7601,8 +7647,12 @@ async function firstIdentity(repo, m2, interactive) {
   await add(repo, m2, man, id, { owner: own, name: nm, email: em, noToken: true });
 }
 async function keysAndTokens(repo, m2, interactive, skip2) {
-  const man = loadManifest(repo);
-  if (!Object.keys(man.identities).length) return;
+  const full = loadManifest(repo);
+  if (!Object.keys(full.identities).length) return;
+  const used = new Set(selectedProjects(full, m2).map((p2) => p2.identity).filter(Boolean));
+  const man = used.size ? { ...full, identities: Object.fromEntries(Object.entries(full.identities).filter(([id]) => used.has(id))) } : full;
+  const skipped = Object.keys(full.identities).filter((id) => !(id in man.identities));
+  if (skipped.length) skip(`identities not needed by the selected projects: ${skipped.join(", ")}`);
   if (!skip2.includes("ssh")) {
     section("identity ssh keys");
     const ssh = await Promise.resolve().then(() => (init_ssh(), ssh_exports));
