@@ -154,7 +154,7 @@ cs secrets recovery                        # print a recovery key once → passw
 | `cs hooks install\|status\|remove` | Claude Code hooks (push after each response, pull at session start) + a 15-min timer (systemd user / launchd) |
 | `cs doctor [--fix]` | platform, tools, links, settings drift, identities, remotes, leftover local-scope MCP secrets |
 | `cs deps [--install]` | prerequisites; installs age, sops, fnm, claude user-locally |
-| `cs self-update` | update the tool |
+| `cs update` | update the tool |
 
 Docs: `docs/BOOTSTRAP.md`, `docs/SECRETS.md`, `docs/WINDOWS.md`.
 

@@ -7186,8 +7186,8 @@ async function latest(repo) {
 async function download(url, dest) {
   const r2 = await fetch(url, { headers: { "User-Agent": "claude-share" } });
   if (!r2.ok) throw new Error(`download failed: ${url}`);
-  const { writeFileSync: writeFileSync15 } = await import("node:fs");
-  writeFileSync15(dest, Buffer.from(await r2.arrayBuffer()));
+  const { writeFileSync: writeFileSync16 } = await import("node:fs");
+  writeFileSync16(dest, Buffer.from(await r2.arrayBuffer()));
 }
 async function sopsLinux() {
   const t2 = await latest("getsops/sops");
@@ -9145,8 +9145,10 @@ init_config();
 init_manifest();
 init_paths();
 init_git();
+init_paths();
 import { existsSync as existsSync20, readdirSync as readdirSync9 } from "node:fs";
 import { join as join21 } from "node:path";
+import { readFileSync as readFileSync17, writeFileSync as writeFileSync15, mkdirSync as mkdirSync15 } from "node:fs";
 var pkg = JSON.parse((await import("node:fs")).readFileSync(join21(toolRoot(), "package.json"), "utf8"));
 var csv = (s) => s ? s.split(",").map((x) => x.trim()).filter(Boolean) : [];
 function ctx() {
@@ -9324,8 +9326,8 @@ program2.command("hooks [action]").description("automatic sync: install | remove
     process.exitCode = await group(action === "remove" ? "removed" : "installed", () => runHooks2(repo, m, action, o.timer));
   });
 });
-program2.command("self-update").description("update the cs tool itself").action(async () => {
-  await command("cs self-update", async () => {
+program2.command("update").alias("self-update").description("update the cs tool itself").action(async () => {
+  await command("cs update", async () => {
     const root = toolRoot();
     if (!isRepo(root)) throw new Error(`cs: ${root} is not a git checkout`);
     const before = out(["rev-parse", "--short", "HEAD"], root);
@@ -9339,8 +9341,39 @@ ${r2.err}`);
       ok(`updated ${before} \u2192 ${after}  ${dim(`${n3} commit(s)`)}`);
       for (const l2 of out(["log", "--format=%s", `${before}..${after}`], root).split("\n").slice(0, 8)) info(dim("\u2022 " + l2));
     }
+    writeUpdateCache({ checkedAt: Date.now(), behind: 0 });
   }, { outro: () => dim(`cs ${pkg.version}`) });
 });
+var updateCacheFile = () => join21(stateDir(), "update-check.json");
+function readUpdateCache() {
+  try {
+    return JSON.parse(readFileSync17(updateCacheFile(), "utf8"));
+  } catch {
+    return { checkedAt: 0, behind: 0 };
+  }
+}
+function writeUpdateCache(c2) {
+  try {
+    mkdirSync15(stateDir(), { recursive: true });
+    writeFileSync15(updateCacheFile(), JSON.stringify(c2));
+  } catch {
+  }
+}
+async function startUpdateCheck() {
+  const root = toolRoot();
+  const cache = readUpdateCache();
+  if (process.env.CS_OFFLINE || !isRepo(root)) return async () => 0;
+  if (Date.now() - cache.checkedAt < 24 * 3600 * 1e3) return async () => cache.behind;
+  const { exec: exec4 } = await Promise.resolve().then(() => (init_proc(), proc_exports));
+  const run = exec4("git", ["fetch", "-q", "origin"], { cwd: root, timeout: 3 }).then((r2) => {
+    if (r2.code !== 0) return cache.behind;
+    const branch = currentBranch(root) || "master";
+    const behind = parseInt(out(["rev-list", "--count", `HEAD..origin/${branch}`], root, "0"), 10) || 0;
+    writeUpdateCache({ checkedAt: Date.now(), behind });
+    return behind;
+  }).catch(() => 0);
+  return () => run;
+}
 var sec = program2.command("secrets").description("encrypted secrets in the config repo (sops + age)").enablePositionalOptions();
 var S = () => Promise.resolve().then(() => (init_secretscmd(), secretscmd_exports));
 sec.command("init").action(async () => {
@@ -9451,15 +9484,20 @@ async function main() {
   }
   if (!argv.length) {
     if (machineExists()) {
+      const finish2 = await startUpdateCheck();
       const { repo, m, man } = ctx();
       const { runStatus: runStatus2 } = await Promise.resolve().then(() => (init_status(), status_exports));
       intro2(`claude-share  ${dim(m.name)}`);
       await runStatus2(repo, m, man);
-      outro2(dim("cs sync \xB7 cs new <project> --<identity> \xB7 cs --help"));
+      const behind = await Promise.race([finish2(), new Promise((r2) => setTimeout(() => r2(0), 50))]);
+      outro2(behind > 0 ? yellow(`cs is ${behind} commit(s) behind \u2014 run cs update`) : dim("cs sync \xB7 cs new <project> --<identity> \xB7 cs --help"));
       return;
     }
     program2.help();
   }
+  const cmdName = argv.find((a2) => !a2.startsWith("-"));
+  const wantsCheck = !["update", "self-update", "ui-demo"].includes(cmdName ?? "") && !argv.includes("-q") && !argv.includes("--quiet");
+  const finishCheck = wantsCheck ? await startUpdateCheck() : async () => 0;
   try {
     await program2.parseAsync(process.argv);
   } catch (e) {
@@ -9473,6 +9511,9 @@ async function main() {
       error(what, rest.join("\n").trim());
       process.exitCode = 1;
     } else throw e;
+  } finally {
+    const behind = await Promise.race([finishCheck(), new Promise((r2) => setTimeout(() => r2(0), 50))]);
+    if (behind > 0) console.error(yellow("!") + ` cs is ${behind} commit(s) behind \u2014 run ${bold("cs update")}`);
   }
 }
 main();

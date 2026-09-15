@@ -83,14 +83,35 @@ program.command("deps").description("check (or install) prerequisites").option("
 program.command("hooks [action]").description("automatic sync: install | remove | status").option("--no-timer").action(async (action = "status", o) => { const { repo, m } = ctx(); const { runHooks } = await import("./hooks.js");
   if (action === "status") { ui.intro("cs hooks"); process.exitCode = runHooks(repo, m, action, o.timer); ui.outro(ui.dim("cs hooks install · cs hooks remove")); return; }
   await ui.command(`cs hooks ${action}`, async () => { process.exitCode = await ui.group(action === "remove" ? "removed" : "installed", () => runHooks(repo, m, action, o.timer)); }); });
-program.command("self-update").description("update the cs tool itself").action(async () => { await ui.command("cs self-update", async () => {
+program.command("update").alias("self-update").description("update the cs tool itself").action(async () => { await ui.command("cs update", async () => {
   const root = toolRoot(); if (!git.isRepo(root)) throw new Error(`cs: ${root} is not a git checkout`);
   const before = git.out(["rev-parse", "--short", "HEAD"], root);
   const r = await ui.spin("checking for updates…", () => git.gitA(["pull", "-q", "--ff-only"], root, { check: false, timeout: 60 }));
   if (r.code !== 0) throw new Error(`cs: update failed\n${r.err}`);
   const after = git.out(["rev-parse", "--short", "HEAD"], root);
   if (before === after) ui.ok(`already up to date  ${ui.dim(`(${after})`)}`); else { const n = git.out(["rev-list", "--count", `${before}..${after}`], root); ui.ok(`updated ${before} → ${after}  ${ui.dim(`${n} commit(s)`)}`); for (const l of git.out(["log", "--format=%s", `${before}..${after}`], root).split("\n").slice(0, 8)) ui.info(ui.dim("• " + l)); }
+  writeUpdateCache({ checkedAt: Date.now(), behind: 0 });
   }, { outro: () => ui.dim(`cs ${pkg.version}`) }); });
+
+// ---- outdated check: at most once a day, in the background, never blocking the command
+import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
+import { stateDir } from "./paths.js";
+const updateCacheFile = () => join(stateDir(), "update-check.json");
+function readUpdateCache(): { checkedAt: number; behind: number } { try { return JSON.parse(readFileSync(updateCacheFile(), "utf8")); } catch { return { checkedAt: 0, behind: 0 }; } }
+function writeUpdateCache(c: { checkedAt: number; behind: number }) { try { mkdirSync(stateDir(), { recursive: true }); writeFileSync(updateCacheFile(), JSON.stringify(c)); } catch {} }
+async function startUpdateCheck(): Promise<() => Promise<number>> {
+  const root = toolRoot(); const cache = readUpdateCache();
+  if (process.env.CS_OFFLINE || !git.isRepo(root)) return async () => 0;
+  if (Date.now() - cache.checkedAt < 24 * 3600 * 1000) return async () => cache.behind;
+  const { exec } = await import("./proc.js");
+  const run = exec("git", ["fetch", "-q", "origin"], { cwd: root, timeout: 3 }).then((r) => {
+    if (r.code !== 0) return cache.behind;
+    const branch = git.currentBranch(root) || "master";
+    const behind = parseInt(git.out(["rev-list", "--count", `HEAD..origin/${branch}`], root, "0"), 10) || 0;
+    writeUpdateCache({ checkedAt: Date.now(), behind }); return behind;
+  }).catch(() => 0);
+  return () => run;
+}
 
 const sec = program.command("secrets").description("encrypted secrets in the config repo (sops + age)").enablePositionalOptions();
 const S = () => import("./secretscmd.js");
@@ -130,8 +151,12 @@ async function main() {
   const argv = process.argv.slice(2);
   // `cs new foo --personal` → `--identity personal` (identity id or GitHub owner)
   if (argv[0] === "new" && machineExists()) { try { const { man } = ctx(); for (let i = 1; i < argv.length; i++) { const a = argv[i]; if (a.startsWith("--") && !a.includes("=")) { const hit = identityByFlag(man, a.slice(2)); if (hit) argv.splice(i, 1, "--identity", hit.id); } } process.argv = [...process.argv.slice(0, 2), ...argv]; } catch {} }
-  if (!argv.length) { if (machineExists()) { const { repo, m, man } = ctx(); const { runStatus } = await import("./status.js"); ui.intro(`claude-share  ${ui.dim(m.name)}`); await runStatus(repo, m, man); ui.outro(ui.dim("cs sync · cs new <project> --<identity> · cs --help")); return; } program.help(); }
+  if (!argv.length) { if (machineExists()) { const finish = await startUpdateCheck(); const { repo, m, man } = ctx(); const { runStatus } = await import("./status.js"); ui.intro(`claude-share  ${ui.dim(m.name)}`); await runStatus(repo, m, man); const behind = await Promise.race([finish(), new Promise<number>((r) => setTimeout(() => r(0), 50))]); ui.outro(behind > 0 ? ui.yellow(`cs is ${behind} commit(s) behind — run cs update`) : ui.dim("cs sync · cs new <project> --<identity> · cs --help")); return; } program.help(); }
+  const cmdName = argv.find((a) => !a.startsWith("-"));
+  const wantsCheck = !["update", "self-update", "ui-demo"].includes(cmdName ?? "") && !argv.includes("-q") && !argv.includes("--quiet");
+  const finishCheck = wantsCheck ? await startUpdateCheck() : async () => 0;
   try { await program.parseAsync(process.argv); }
   catch (e: any) { if (e?.handled) { process.exitCode = e.code ?? 1; return; } const msg: string = e?.message ?? String(e); if (msg.startsWith("cs: ")) { const [what, ...rest] = msg.slice(4).split("\n"); ui.error(what, rest.join("\n").trim()); process.exitCode = 1; } else throw e; }
+  finally { const behind = await Promise.race([finishCheck(), new Promise<number>((r) => setTimeout(() => r(0), 50))]); if (behind > 0) console.error(ui.yellow("!") + ` cs is ${behind} commit(s) behind — run ${ui.bold("cs update")}`); }
 }
 main();
