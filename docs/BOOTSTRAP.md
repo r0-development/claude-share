@@ -4,9 +4,9 @@
 curl -fsSL https://raw.githubusercontent.com/r0-development/claude-share/master/install.sh | bash
 ```
 
-Prerequisites are only `git` and `curl` (WSL/Ubuntu has them; macOS: `xcode-select --install`). The installer brings
-Node 22 via fnm when no Node ≥ 18 exists, clones the tool to `~/.local/share/claude-share`, links `~/.local/bin/cs`
-and starts `cs init` — a wizard.
+Nothing to install first. On Debian/Ubuntu (WSL) the installer uses `sudo apt-get` for `git`/`curl`/`tar` if they are
+missing; on macOS it asks for `xcode-select --install`. Node 22 is installed user-locally from nodejs.org when no Node ≥ 18
+exists. Then it clones the tool to `~/.local/share/claude-share`, links `~/.local/bin/cs` and starts `cs init` — a wizard.
 Arguments after `bash -s --` go to `cs init` (e.g. `bash -s -- --repo <url> --name laptop --profiles personal`). Everything is re-runnable; finished steps are skipped.
 
 ## 1. Join an existing share, or create one
