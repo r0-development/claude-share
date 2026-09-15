@@ -181,6 +181,13 @@ export async function spin<T>(label: string, fn: (update: (l: string) => void) =
   catch (e) { s.error(label + " failed"); throw e; }
   finally { activeSpinner = null; }
 }
+/** intro → fn → outro. `fn` returns the outro message (or nothing for the default). */
+export async function command<T>(title: string, fn: () => Promise<T> | T, opts: { outro?: (r: T) => string } = {}): Promise<T> {
+  intro(title);
+  try { const r = await fn(); outro(opts.outro ? opts.outro(r) : pc.dim("done")); return r; }
+  catch (e: any) { const msg: string = e?.message ?? String(e); const [what, ...rest] = (msg.startsWith("cs: ") ? msg.slice(4) : msg).split("\n"); error(what, rest.join("\n").trim()); p.outro(pc.red("failed")); throw Object.assign(new Error("__handled__"), { handled: true, code: 1 }); }
+}
+
 /** Sequential sub-steps under one title (clack tasks). Each task returns its ✓ line. */
 export async function tasks(items: { title: string; task: (message: (m: string) => void) => Promise<string> }[]) {
   if (quiet || !process.stdout.isTTY) { for (const t of items) { const r = await t.task(() => {}); step(r); } return; }

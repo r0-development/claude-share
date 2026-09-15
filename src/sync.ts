@@ -21,7 +21,7 @@ function tryLock(label: string): number | undefined {
 const unlock = (label: string, fd: number) => { closeSync(fd); try { unlinkSync(lockFile(label)); } catch {} };
 
 export interface SyncOpts { pullOnly?: boolean; pushOnly?: boolean; timeout?: number; resolve?: "ours" | "theirs" }
-export function gitSync(repo: string, label: string, machine: string, o: SyncOpts = {}): boolean {
+export async function gitSync(repo: string, label: string, machine: string, o: SyncOpts = {}): Promise<boolean> {
   if (!git.isRepo(repo)) { ui.warn(`${label}: not a git repo (${contract(repo)})`); return false; }
   const timeout = o.timeout ?? 20;
   if (existsSync(marker(label)) && !o.resolve) { ui.fail(`${label}: sync blocked by an earlier conflict — ${readFileSync(marker(label), "utf8").trim()}`); return false; }
@@ -29,12 +29,12 @@ export function gitSync(repo: string, label: string, machine: string, o: SyncOpt
   try {
     if (!o.pullOnly && git.isDirty(repo)) { const n = git.dirtyCount(repo); git.git(["add", "-A"], repo); git.commit(repo, `sync(${machine}): ${n} file(s) ${new Date().toISOString().slice(0, 16).replace("T", " ")}`, "cs", `cs@${machine}`); ui.step(`${label}: committed ${n} change(s)`); }
     if (!git.remoteUrl(repo)) { ui.ok(`${label}: no remote configured; local only`); return true; }
-    const f = git.git(["fetch", "-q", "--prune", "origin"], repo, { check: false, timeout });  // fast; spinner would flicker
+    const f = await ui.spin(`${label}: fetching…`, async () => git.git(["fetch", "-q", "--prune", "origin"], repo, { check: false, timeout }));
     if (f.code !== 0) { ui.warn(`${label}: offline or fetch timed out; will push later`); writeFileSync(join(stateDir(), `last-${label}`), "offline\n"); return true; }
     const branch = git.currentBranch(repo); if (!branch) { ui.fail(`${label}: detached HEAD; refusing to sync`); return false; }
     if (!git.out(["rev-parse", "--abbrev-ref", "@{upstream}"], repo)) {
       if (git.out(["rev-parse", "--verify", "-q", `origin/${branch}`], repo)) git.git(["branch", "-q", `--set-upstream-to=origin/${branch}`, branch], repo);
-      else if (!o.pullOnly) { git.git(["push", "-q", "-u", "origin", branch], repo, { timeout }); ui.ok(`${label}: pushed new branch ${branch}`); return true; }
+      else if (!o.pullOnly) { await ui.spin(`${label}: pushing…`, async () => git.git(["push", "-q", "-u", "origin", branch], repo, { timeout })); ui.ok(`${label}: pushed new branch ${branch}`); return true; }
       else return true;
     }
     let [ahead, behind] = git.aheadBehind(repo) ?? [0, 0];
@@ -54,24 +54,24 @@ export function gitSync(repo: string, label: string, machine: string, o: SyncOpt
       }
     }
     if (existsSync(marker(label))) unlinkSync(marker(label));
-    if (!o.pullOnly) { const ab = git.aheadBehind(repo); if (ab && ab[0]) { const pr = git.git(["push", "-q", "origin", branch], repo, { check: false, timeout });
+    if (!o.pullOnly) { const ab = git.aheadBehind(repo); if (ab && ab[0]) { const pr = await ui.spin(`${label}: pushing…`, async () => git.git(["push", "-q", "origin", branch], repo, { check: false, timeout }));
       if (pr.code !== 0) { ui.warn(`${label}: push rejected, retrying once`); unlock(label, fd); return gitSync(repo, label, machine, o); } ui.ok(`${label}: pushed ${ab[0]} commit(s)`); } }
     writeFileSync(join(stateDir(), `last-${label}`), new Date().toISOString() + "\n");
     return true;
   } finally { try { unlock(label, fd); } catch {} }
 }
-export function runSync(repo: string, m: Machine, man: Manifest, o: SyncOpts & { projects?: boolean; debounce?: number } = {}): number {
+export async function runSync(repo: string, m: Machine, man: Manifest, o: SyncOpts & { projects?: boolean; debounce?: number } = {}): Promise<number> {
   const ws = workspace(man, m); let rc = 0;
   if (o.debounce) { const last = join(stateDir(), "last-config"); if (existsSync(last) && Date.now() - statSync(last).mtimeMs < o.debounce * 1000) return 0; }
   const before = git.out(["rev-parse", "HEAD"], repo);
   if (!o.pullOnly) for (const p of selectedProjects(man, m)) if (checkouts(p, ws).length) syncProject(repo, p, ws);
-  if (!gitSync(repo, "config", m.name, o)) rc = 2;
+  if (!(await gitSync(repo, "config", m.name, o))) rc = 2;
   const after = git.out(["rev-parse", "HEAD"], repo);
   if (after !== before || o.pullOnly) {
     const changed = before ? git.out(["diff", "--name-only", before, after], repo) : "";
     if (o.pullOnly || changed.split("\n").some((x) => x.startsWith("claude/") || x.startsWith("projects.toml") || x.startsWith("plans/"))) runApply(repo, m, man);
     runLink(repo, m, loadManifest(repo));
   }
-  if (o.projects !== false && !o.pullOnly) for (const p of selectedProjects(man, m)) if (p.kind === "synced") { const root = checkoutRoot(p, ws); if (existsSync(root) && git.isRepo(root) && !gitSync(root, p.name, m.name, { timeout: o.timeout })) rc = 2; }
+  if (o.projects !== false && !o.pullOnly) for (const p of selectedProjects(man, m)) if (p.kind === "synced") { const root = checkoutRoot(p, ws); if (existsSync(root) && git.isRepo(root) && !(await gitSync(root, p.name, m.name, { timeout: o.timeout }))) rc = 2; }
   return rc;
 }

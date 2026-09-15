@@ -358,11 +358,11 @@ var require_help = __commonJS({
        * @returns {number}
        */
       longestSubcommandTermLength(cmd, helper) {
-        return helper.visibleCommands(cmd).reduce((max, command) => {
+        return helper.visibleCommands(cmd).reduce((max, command2) => {
           return Math.max(
             max,
             this.displayWidth(
-              helper.styleSubcommandTerm(helper.subcommandTerm(command))
+              helper.styleSubcommandTerm(helper.subcommandTerm(command2))
             )
           );
         }, 0);
@@ -1247,8 +1247,8 @@ var require_command = __commonJS({
        */
       _getCommandAndAncestors() {
         const result = [];
-        for (let command = this; command; command = command.parent) {
-          result.push(command);
+        for (let command2 = this; command2; command2 = command2.parent) {
+          result.push(command2);
         }
         return result;
       }
@@ -1680,21 +1680,21 @@ Expecting one of '${allowedValues.join("', '")}'`);
        * @param {Command} command
        * @private
        */
-      _registerCommand(command) {
+      _registerCommand(command2) {
         const knownBy = (cmd) => {
           return [cmd.name()].concat(cmd.aliases());
         };
-        const alreadyUsed = knownBy(command).find(
+        const alreadyUsed = knownBy(command2).find(
           (name2) => this._findCommand(name2)
         );
         if (alreadyUsed) {
           const existingCmd = knownBy(this._findCommand(alreadyUsed)).join("|");
-          const newCmd = knownBy(command).join("|");
+          const newCmd = knownBy(command2).join("|");
           throw new Error(
             `cannot add command '${newCmd}' as already have command '${existingCmd}'`
           );
         }
-        this.commands.push(command);
+        this.commands.push(command2);
       }
       /**
        * Add an option.
@@ -2861,12 +2861,12 @@ Expecting one of '${allowedValues.join("', '")}'`);
         let suggestion = "";
         if (flag.startsWith("--") && this._showSuggestionAfterError) {
           let candidateFlags = [];
-          let command = this;
+          let command2 = this;
           do {
-            const moreFlags = command.createHelp().visibleOptions(command).filter((option) => option.long).map((option) => option.long);
+            const moreFlags = command2.createHelp().visibleOptions(command2).filter((option) => option.long).map((option) => option.long);
             candidateFlags = candidateFlags.concat(moreFlags);
-            command = command.parent;
-          } while (command && !command._enablePositionalOptions);
+            command2 = command2.parent;
+          } while (command2 && !command2._enablePositionalOptions);
           suggestion = suggestSimilar(flag, candidateFlags);
         }
         const message = `error: unknown option '${flag}'${suggestion}`;
@@ -2896,9 +2896,9 @@ Expecting one of '${allowedValues.join("', '")}'`);
         let suggestion = "";
         if (this._showSuggestionAfterError) {
           const candidateNames = [];
-          this.createHelp().visibleCommands(this).forEach((command) => {
-            candidateNames.push(command.name());
-            if (command.alias()) candidateNames.push(command.alias());
+          this.createHelp().visibleCommands(this).forEach((command2) => {
+            candidateNames.push(command2.name());
+            if (command2.alias()) candidateNames.push(command2.alias());
           });
           suggestion = suggestSimilar(unknownName, candidateNames);
         }
@@ -2969,11 +2969,11 @@ Expecting one of '${allowedValues.join("', '")}'`);
        */
       alias(alias) {
         if (alias === void 0) return this._aliases[0];
-        let command = this;
+        let command2 = this;
         if (this.commands.length !== 0 && this.commands[this.commands.length - 1]._executableHandler) {
-          command = this.commands[this.commands.length - 1];
+          command2 = this.commands[this.commands.length - 1];
         }
-        if (alias === command._name)
+        if (alias === command2._name)
           throw new Error("Command alias can't be the same as its name");
         const matchingCommand = this.parent?._findCommand(alias);
         if (matchingCommand) {
@@ -2982,7 +2982,7 @@ Expecting one of '${allowedValues.join("', '")}'`);
             `cannot add alias '${alias}' to command '${this.name()}' as already have command '${existingCmd}'`
           );
         }
-        command._aliases.push(alias);
+        command2._aliases.push(alias);
         return this;
       }
       /**
@@ -3131,7 +3131,7 @@ Expecting one of '${allowedValues.join("', '")}'`);
           write: outputContext.write,
           command: this
         };
-        this._getCommandAndAncestors().reverse().forEach((command) => command.emit("beforeAllHelp", eventContext));
+        this._getCommandAndAncestors().reverse().forEach((command2) => command2.emit("beforeAllHelp", eventContext));
         this.emit("beforeHelp", eventContext);
         let helpInformation = this.helpInformation({ error: outputContext.error });
         if (deprecatedCallback) {
@@ -3146,7 +3146,7 @@ Expecting one of '${allowedValues.join("', '")}'`);
         }
         this.emit("afterHelp", eventContext);
         this._getCommandAndAncestors().forEach(
-          (command) => command.emit("afterAllHelp", eventContext)
+          (command2) => command2.emit("afterAllHelp", eventContext)
         );
       }
       /**
@@ -5202,6 +5202,20 @@ async function spin(label, fn) {
     throw e;
   } finally {
     activeSpinner = null;
+  }
+}
+async function command(title, fn, opts = {}) {
+  intro2(title);
+  try {
+    const r2 = await fn();
+    outro2(opts.outro ? opts.outro(r2) : import_picocolors.default.dim("done"));
+    return r2;
+  } catch (e) {
+    const msg = e?.message ?? String(e);
+    const [what, ...rest] = (msg.startsWith("cs: ") ? msg.slice(4) : msg).split("\n");
+    error(what, rest.join("\n").trim());
+    outro(import_picocolors.default.red("failed"));
+    throw Object.assign(new Error("__handled__"), { handled: true, code: 1 });
   }
 }
 var import_picocolors, quiet, collecting, setQuiet, strip, isQuiet, isTTY, scripted, isScripted, dim, bold, green, yellow, red, cyan, gray, magenta, activeSpinner, width, clip;
@@ -7784,14 +7798,16 @@ async function edit(repo, m, name2) {
 }
 async function setValues(repo, m, name2, pairs) {
   const b = await getBackend(m);
-  const v = b.loadEnv(repo, name2);
-  for (const p of pairs) {
-    const i2 = p.indexOf("=");
-    if (i2 < 1) throw new Error(`cs: expected KEY=VALUE, got '${p}'`);
-    v[p.slice(0, i2).trim()] = p.slice(i2 + 1);
-  }
-  b.writeEnv(repo, name2, v);
-  commitSecrets(repo, m, `secrets: set ${pairs.length} value(s) in ${name2}`);
+  await spin(`encrypting ${name2}\u2026`, async () => {
+    const v = b.loadEnv(repo, name2);
+    for (const p of pairs) {
+      const i2 = p.indexOf("=");
+      if (i2 < 1) throw new Error(`cs: expected KEY=VALUE, got '${p}'`);
+      v[p.slice(0, i2).trim()] = p.slice(i2 + 1);
+    }
+    b.writeEnv(repo, name2, v);
+    commitSecrets(repo, m, `secrets: set ${pairs.length} value(s) in ${name2}`);
+  });
   ok(`${name2}: ${pairs.map((p) => p.split("=")[0]).join(", ")} stored (encrypted)`);
   return 0;
 }
@@ -7878,7 +7894,7 @@ async function exec2(repo, m, man, project, cmd) {
   const p = spawnSync6(cmd[0], cmd.slice(1), { stdio: "inherit", env: env2 });
   return p.status ?? 1;
 }
-function enroll(repo, m, machine) {
+async function enroll(repo, m, machine) {
   const pf = machinePubFile(repo, machine);
   if (!existsSync13(pf)) throw new Error(`cs: ${contract(pf)} not found \u2014 run cs secrets init on ${machine} and cs sync on both sides first`);
   const pub = readFileSync12(pf, "utf8").trim();
@@ -7888,10 +7904,10 @@ function enroll(repo, m, machine) {
     return 0;
   }
   writeRecipients(repo, [...recs, pub]);
-  const n3 = updatekeys(repo);
+  const n3 = await spin("re-encrypting secrets for the new recipient\u2026", async () => updatekeys(repo));
   git(["add", "-A", ".sops.yaml", "secrets"], repo);
   commit(repo, `secrets: enroll ${machine}`, "cs", `cs@${m.name}`);
-  ok(`enrolled ${machine}; re-encrypted ${n3} file(s). Run cs sync here, then cs sync on ${machine}.`);
+  ok(`${machine} can now decrypt  ${dim(`${n3} file(s) re-encrypted`)}`);
   return 0;
 }
 async function revoke(repo, m, machine) {
@@ -7900,7 +7916,7 @@ async function revoke(repo, m, machine) {
   const recs = recipients(repo);
   if (pub && recs.includes(pub)) {
     writeRecipients(repo, recs.filter((r2) => r2 !== pub));
-    const n3 = updatekeys(repo);
+    const n3 = await spin("re-encrypting secrets without that machine\u2026", async () => updatekeys(repo));
     rmSync4(join14(repo, "machines", machine), { recursive: true, force: true });
     git(["add", "-A", ".sops.yaml", "secrets", "machines"], repo);
     commit(repo, `secrets: revoke ${machine}`, "cs", `cs@${m.name}`);
@@ -8826,7 +8842,7 @@ function tryLock(label) {
     return void 0;
   }
 }
-function gitSync(repo, label, machine, o = {}) {
+async function gitSync(repo, label, machine, o = {}) {
   if (!isRepo(repo)) {
     warn(`${label}: not a git repo (${contract(repo)})`);
     return false;
@@ -8852,7 +8868,7 @@ function gitSync(repo, label, machine, o = {}) {
       ok(`${label}: no remote configured; local only`);
       return true;
     }
-    const f = git(["fetch", "-q", "--prune", "origin"], repo, { check: false, timeout });
+    const f = await spin(`${label}: fetching\u2026`, async () => git(["fetch", "-q", "--prune", "origin"], repo, { check: false, timeout }));
     if (f.code !== 0) {
       warn(`${label}: offline or fetch timed out; will push later`);
       writeFileSync14(join19(stateDir(), `last-${label}`), "offline\n");
@@ -8866,7 +8882,7 @@ function gitSync(repo, label, machine, o = {}) {
     if (!out(["rev-parse", "--abbrev-ref", "@{upstream}"], repo)) {
       if (out(["rev-parse", "--verify", "-q", `origin/${branch}`], repo)) git(["branch", "-q", `--set-upstream-to=origin/${branch}`, branch], repo);
       else if (!o.pullOnly) {
-        git(["push", "-q", "-u", "origin", branch], repo, { timeout });
+        await spin(`${label}: pushing\u2026`, async () => git(["push", "-q", "-u", "origin", branch], repo, { timeout }));
         ok(`${label}: pushed new branch ${branch}`);
         return true;
       } else return true;
@@ -8894,7 +8910,7 @@ function gitSync(repo, label, machine, o = {}) {
     if (!o.pullOnly) {
       const ab = aheadBehind(repo);
       if (ab && ab[0]) {
-        const pr = git(["push", "-q", "origin", branch], repo, { check: false, timeout });
+        const pr = await spin(`${label}: pushing\u2026`, async () => git(["push", "-q", "origin", branch], repo, { check: false, timeout }));
         if (pr.code !== 0) {
           warn(`${label}: push rejected, retrying once`);
           unlock(label, fd);
@@ -8912,7 +8928,7 @@ function gitSync(repo, label, machine, o = {}) {
     }
   }
 }
-function runSync(repo, m, man, o = {}) {
+async function runSync(repo, m, man, o = {}) {
   const ws = workspace(man, m);
   let rc = 0;
   if (o.debounce) {
@@ -8923,7 +8939,7 @@ function runSync(repo, m, man, o = {}) {
   if (!o.pullOnly) {
     for (const p of selectedProjects(man, m)) if (checkouts(p, ws).length) syncProject(repo, p, ws);
   }
-  if (!gitSync(repo, "config", m.name, o)) rc = 2;
+  if (!await gitSync(repo, "config", m.name, o)) rc = 2;
   const after = out(["rev-parse", "HEAD"], repo);
   if (after !== before || o.pullOnly) {
     const changed = before ? out(["diff", "--name-only", before, after], repo) : "";
@@ -8933,7 +8949,7 @@ function runSync(repo, m, man, o = {}) {
   if (o.projects !== false && !o.pullOnly) {
     for (const p of selectedProjects(man, m)) if (p.kind === "synced") {
       const root = checkoutRoot(p, ws);
-      if (existsSync18(root) && isRepo(root) && !gitSync(root, p.name, m.name, { timeout: o.timeout })) rc = 2;
+      if (existsSync18(root) && isRepo(root) && !await gitSync(root, p.name, m.name, { timeout: o.timeout })) rc = 2;
     }
   }
   return rc;
@@ -8989,9 +9005,11 @@ function repoState(path, fetch2) {
   if (!bits.length) bits.push(green("clean"));
   return [branch, bits.join("  "), attention];
 }
-function runStatus(repo, m, man, fetch2 = false, showAll = false) {
+async function runStatus(repo, m, man, fetch2 = false, showAll = false) {
   const ws = workspace(man, m);
-  info(`${bold(m.name)}  ${dim("profiles")} ${m.profiles.join(", ")}  ${dim("workspace")} ${contract(ws)}`);
+  if (fetch2) await spin("fetching all remotes\u2026", async () => {
+  });
+  info(`${dim("profiles")} ${m.profiles.join(", ")}  ${dim("workspace")} ${contract(ws)}`);
   const [branch, state] = repoState(repo, fetch2);
   const mk = join20(stateDir(), "blocked-config");
   table([[bold("config repo"), branch, state + (existsSync19(mk) ? "  " + red("BLOCKED: " + readFileSync16(mk, "utf8").trim()) : "")]]);
@@ -9106,33 +9124,57 @@ config.command("path").description("print the config repo path").action(() => co
 program2.command("apply").description("render ~/.claude + git identity includes from the config repo").option("--check", "report drift, change nothing").action(async (o) => {
   const { repo, m, man } = ctx();
   const { runApply: runApply2 } = await Promise.resolve().then(() => (init_apply(), apply_exports));
-  process.exitCode = o.check && runApply2(repo, m, man, true).length ? 1 : 0;
+  await command(o.check ? "cs apply --check" : "cs apply", async () => {
+    const n3 = (await group(o.check ? "drift" : "~/.claude applied", () => runApply2(repo, m, man, o.check), { done: o.check ? "no drift" : "already up to date" })).length;
+    process.exitCode = o.check && n3 ? 1 : 0;
+  });
 });
 program2.command("link [names...]").description("sync Claude files between side-store and project checkouts").option("--check").action(async (names, o) => {
   const { repo, m, man } = ctx();
   const { runLink: runLink2 } = await Promise.resolve().then(() => (init_link(), link_exports));
-  process.exitCode = o.check && runLink2(repo, m, man, names, true) ? 1 : 0;
+  await command(o.check ? "cs link --check" : "cs link", async () => {
+    const n3 = await group(o.check ? "pending changes" : "project files linked", () => runLink2(repo, m, man, names, o.check), { done: o.check ? "nothing pending" : "already in sync" });
+    process.exitCode = o.check && n3 ? 1 : 0;
+  });
 });
 program2.command("adopt <what> [names...]").description("pull existing local state into the config repo (memory | project | mcp)").option("--all").option("--check").option("--show", "(mcp) print the secret values").action(async (what, names, o) => {
   const { repo, m, man } = ctx();
   const { runAdopt: runAdopt2 } = await Promise.resolve().then(() => (init_adopt(), adopt_exports));
   const { selectedProjects: selectedProjects2 } = await Promise.resolve().then(() => (init_manifest(), manifest_exports));
-  runAdopt2(repo, m, man, what, names.length ? names : o.all ? selectedProjects2(man, m).map((p) => p.name) : [], o.check, o.show);
+  const targets = names.length ? names : o.all ? selectedProjects2(man, m).map((p) => p.name) : [];
+  if (o.show) {
+    runAdopt2(repo, m, man, what, targets, o.check, true);
+    return;
+  }
+  await command(`cs adopt ${what}`, async () => {
+    for (const n3 of targets) await group(n3, () => runAdopt2(repo, m, man, what, [n3], o.check, false), { done: "nothing to adopt" });
+  });
 });
 program2.command("sync").description("commit / pull --rebase / push the config repo (+ synced projects)").option("--pull-only").option("--push-only").option("--timeout <s>", "", "20").option("--resolve <ours|theirs>").option("--no-projects").option("--debounce <s>", "skip if a sync ran less than N seconds ago", "0").option("-q, --quiet").action(async (o) => {
   const { repo, m, man } = ctx();
   const { runSync: runSync2 } = await Promise.resolve().then(() => (init_sync(), sync_exports));
-  process.exitCode = runSync2(repo, m, man, { pullOnly: o.pullOnly, pushOnly: o.pushOnly, timeout: +o.timeout, resolve: o.resolve, projects: o.projects, debounce: +o.debounce });
+  const opts = { pullOnly: o.pullOnly, pushOnly: o.pushOnly, timeout: +o.timeout, resolve: o.resolve, projects: o.projects, debounce: +o.debounce };
+  if (o.quiet || program2.opts().quiet) {
+    process.exitCode = await runSync2(repo, m, man, opts);
+    return;
+  }
+  await command("cs sync", async () => {
+    process.exitCode = await runSync2(repo, m, man, opts);
+  }, { outro: () => process.exitCode ? red("blocked \u2014 see above") : dim("in sync") });
 });
 program2.command("status").description("config repo + projects overview").option("--fetch").option("--all").action(async (o) => {
   const { repo, m, man } = ctx();
   const { runStatus: runStatus2 } = await Promise.resolve().then(() => (init_status(), status_exports));
-  process.exitCode = runStatus2(repo, m, man, o.fetch, o.all);
+  intro2(`cs status  ${dim(m.name)}`);
+  process.exitCode = await runStatus2(repo, m, man, o.fetch, o.all);
+  outro2(dim("cs sync \xB7 cs clone \xB7 cs doctor"));
 });
 program2.command("doctor").description("environment and consistency checks").option("--fix").action(async (o) => {
   const { repo, m, man } = ctx();
   const { runDoctor: runDoctor2 } = await Promise.resolve().then(() => (init_doctor(), doctor_exports));
+  intro2("cs doctor");
   process.exitCode = runDoctor2(repo, m, man, o.fix);
+  outro2(process.exitCode ? red("problems found") : green("all good"));
 });
 program2.command("add [path]").description("register a project (default: cwd) in projects.toml").option("--kind <kind>").option("--profiles <list>").option("--identity <id>").option("--name <name>").option("--description <text>", "", "").option("--no-commit").action(async (p, o) => {
   const { repo, m, man } = ctx();
@@ -9142,7 +9184,9 @@ program2.command("add [path]").description("register a project (default: cwd) in
 program2.command("clone [names...]").description("clone selected projects that are missing on this machine").option("--dry-run").action(async (names, o) => {
   const { repo, m, man } = ctx();
   const { clone: clone2 } = await Promise.resolve().then(() => (init_projects(), projects_exports));
-  process.exitCode = await clone2(repo, m, man, names, o.dryRun);
+  await command("cs clone", async () => {
+    process.exitCode = await group(o.dryRun ? "would clone" : "cloned", () => clone2(repo, m, man, names, o.dryRun), { done: "nothing missing" });
+  });
 });
 program2.command("new <name>").description("create a brand-new project: dir, git, GitHub repo, first push, register, link").option("--identity <id>", "identity id (or --<id> / --<github-owner>, e.g. --personal)").option("--profiles <list>").option("-d, --description <text>", "", "").option("--public").option("--no-github").option("--synced").action(async (name2, o) => {
   const { repo, m, man } = ctx();
@@ -9169,7 +9213,8 @@ token.command("check <owner>").action(async (o) => {
     return;
   }
   try {
-    ok(`token for '${o}' authenticates as ${await gh.whoami(t2)}`);
+    const who = await spin(`checking token for ${o}\u2026`, async () => gh.whoami(t2));
+    ok(`token for '${o}' authenticates as ${who}`);
   } catch (e) {
     fail(e.message);
     process.exitCode = 1;
@@ -9198,45 +9243,61 @@ ident.command("rename <old> <new>").action(async (a2, b) => {
 });
 program2.command("ssh [action]").description("per-machine SSH keys: setup | check | master").action(async (action = "check") => {
   const { repo, m, man } = ctx();
-  if (action === "master") {
-    process.exitCode = await (await Promise.resolve().then(() => (init_master(), master_exports))).setup(repo, isTTY());
-    return;
-  }
-  process.exitCode = await (await Promise.resolve().then(() => (init_ssh(), ssh_exports))).setup(repo, m, man, action === "check");
+  await command(
+    `cs ssh ${action}`,
+    async () => {
+      if (action === "master") process.exitCode = await (await Promise.resolve().then(() => (init_master(), master_exports))).setup(repo, isTTY());
+      else process.exitCode = await (await Promise.resolve().then(() => (init_ssh(), ssh_exports))).setup(repo, m, man, action === "check");
+    },
+    { outro: () => process.exitCode ? yellow("keys still to register \u2014 re-run cs ssh check afterwards") : green("all keys verified") }
+  );
 });
 program2.command("deps").description("check (or install) prerequisites").option("--install").action(async (o) => {
-  process.exitCode = await (await Promise.resolve().then(() => (init_deps(), deps_exports))).runDeps(o.install);
+  await command(o.install ? "cs deps --install" : "cs deps", async () => {
+    process.exitCode = await (await Promise.resolve().then(() => (init_deps(), deps_exports))).runDeps(o.install);
+  }, { outro: () => process.exitCode ? red("required tools missing") : green("all required tools present") });
 });
 program2.command("hooks [action]").description("automatic sync: install | remove | status").option("--no-timer").action(async (action = "status", o) => {
   const { repo, m } = ctx();
-  process.exitCode = (await Promise.resolve().then(() => (init_hooks(), hooks_exports))).runHooks(repo, m, action, o.timer);
+  const { runHooks: runHooks2 } = await Promise.resolve().then(() => (init_hooks(), hooks_exports));
+  if (action === "status") {
+    intro2("cs hooks");
+    process.exitCode = runHooks2(repo, m, action, o.timer);
+    outro2(dim("cs hooks install \xB7 cs hooks remove"));
+    return;
+  }
+  await command(`cs hooks ${action}`, async () => {
+    process.exitCode = await group(action === "remove" ? "removed" : "installed", () => runHooks2(repo, m, action, o.timer));
+  });
 });
-program2.command("self-update").description("git pull the cs tool itself").action(() => {
-  const root = toolRoot();
-  if (!isRepo(root)) {
-    fail(`${root} is not a git checkout`);
-    process.exitCode = 1;
-    return;
-  }
-  const before = out(["rev-parse", "--short", "HEAD"], root);
-  const r2 = git(["pull", "-q", "--ff-only"], root, { check: false, timeout: 60 });
-  if (r2.code !== 0) {
-    fail(`pull failed: ${r2.err}`);
-    process.exitCode = 1;
-    return;
-  }
-  const after = out(["rev-parse", "--short", "HEAD"], root);
-  ok(`cs at ${after}${before === after ? "" : ` (was ${before})`}`);
+program2.command("self-update").description("update the cs tool itself").action(async () => {
+  await command("cs self-update", async () => {
+    const root = toolRoot();
+    if (!isRepo(root)) throw new Error(`cs: ${root} is not a git checkout`);
+    const before = out(["rev-parse", "--short", "HEAD"], root);
+    const r2 = await spin("checking for updates\u2026", async () => git(["pull", "-q", "--ff-only"], root, { check: false, timeout: 60 }));
+    if (r2.code !== 0) throw new Error(`cs: update failed
+${r2.err}`);
+    const after = out(["rev-parse", "--short", "HEAD"], root);
+    if (before === after) ok(`already up to date  ${dim(`(${after})`)}`);
+    else {
+      const n3 = out(["rev-list", "--count", `${before}..${after}`], root);
+      ok(`updated ${before} \u2192 ${after}  ${dim(`${n3} commit(s)`)}`);
+      for (const l2 of out(["log", "--format=%s", `${before}..${after}`], root).split("\n").slice(0, 8)) info(dim("\u2022 " + l2));
+    }
+  }, { outro: () => dim(`cs ${pkg.version}`) });
 });
 var sec = program2.command("secrets").description("encrypted secrets in the config repo (sops + age)").enablePositionalOptions();
 var S = () => Promise.resolve().then(() => (init_secretscmd(), secretscmd_exports));
 sec.command("init").action(async () => {
   const { repo, m } = ctx();
-  await (await S()).init(repo, m, isTTY());
+  await command("cs secrets init", async () => group("secrets", async () => (await S()).init(repo, m, isTTY())));
 });
 sec.command("status").action(async () => {
   const { repo, m } = ctx();
+  intro2("cs secrets status");
   await (await S()).status(repo, m);
+  outro2(dim("cs secrets set \xB7 cs enroll <machine>"));
 });
 sec.command("edit <name>").description("global | <project>").action(async (n3) => {
   const { repo, m } = ctx();
@@ -9266,22 +9327,22 @@ sec.command("diff <project>").action(async (p) => {
   const { repo, m, man } = ctx();
   process.exitCode = await (await S()).diff(repo, m, man, p);
 });
-sec.command("exec [command...]").description("run a command with global + project secrets in its environment").option("-p, --project <name>").passThroughOptions().allowUnknownOption().action(async (command, o) => {
+sec.command("exec [command...]").description("run a command with global + project secrets in its environment").option("-p, --project <name>").passThroughOptions().allowUnknownOption().action(async (command2, o) => {
   const { repo, m, man } = ctx();
-  const cmd = command[0] === "--" ? command.slice(1) : command;
+  const cmd = command2[0] === "--" ? command2.slice(1) : command2;
   process.exitCode = await (await S()).exec(repo, m, man, o.project, cmd);
 });
 sec.command("recovery").action(async () => {
   const { repo, m } = ctx();
-  (await S()).recovery(repo, m);
+  await command("cs secrets recovery", async () => (await S()).recovery(repo, m));
 });
 program2.command("enroll <machine>").description("grant another machine access to secrets").action(async (mc) => {
   const { repo, m } = ctx();
-  (await S()).enroll(repo, m, mc);
+  await command(`cs enroll ${mc}`, async () => group("enrolled", async () => (await S()).enroll(repo, m, mc)), { outro: () => dim(`now: cs sync here, then cs sync on ${mc}`) });
 });
 program2.command("revoke <machine>").description("remove a machine's access to secrets").action(async (mc) => {
   const { repo, m } = ctx();
-  await (await S()).revoke(repo, m, mc);
+  await command(`cs revoke ${mc}`, async () => group("revoked", async () => (await S()).revoke(repo, m, mc)));
 });
 var proj = program2.command("project").description("project helpers");
 proj.command("id").description("print the project name for the cwd").action(() => {
@@ -9315,8 +9376,9 @@ async function main() {
     if (machineExists()) {
       const { repo, m, man } = ctx();
       const { runStatus: runStatus2 } = await Promise.resolve().then(() => (init_status(), status_exports));
-      runStatus2(repo, m, man);
-      console.log(dim("\ncs --help for commands"));
+      intro2(`claude-share  ${dim(m.name)}`);
+      await runStatus2(repo, m, man);
+      outro2(dim("cs sync \xB7 cs new <project> --<identity> \xB7 cs --help"));
       return;
     }
     program2.help();
@@ -9324,6 +9386,10 @@ async function main() {
   try {
     await program2.parseAsync(process.argv);
   } catch (e) {
+    if (e?.handled) {
+      process.exitCode = e.code ?? 1;
+      return;
+    }
     const msg = e?.message ?? String(e);
     if (msg.startsWith("cs: ")) {
       const [what, ...rest] = msg.slice(4).split("\n");

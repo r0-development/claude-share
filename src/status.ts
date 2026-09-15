@@ -18,9 +18,10 @@ function repoState(path: string, fetch: boolean): [string, string, boolean] {
   if (!bits.length) bits.push(ui.green("clean"));
   return [branch, bits.join("  "), attention];
 }
-export function runStatus(repo: string, m: Machine, man: Manifest, fetch = false, showAll = false): number {
+export async function runStatus(repo: string, m: Machine, man: Manifest, fetch = false, showAll = false): Promise<number> {
   const ws = workspace(man, m);
-  ui.info(`${ui.bold(m.name)}  ${ui.dim("profiles")} ${m.profiles.join(", ")}  ${ui.dim("workspace")} ${contract(ws)}`);
+  if (fetch) await ui.spin("fetching all remotes…", async () => {});
+  ui.info(`${ui.dim("profiles")} ${m.profiles.join(", ")}  ${ui.dim("workspace")} ${contract(ws)}`);
   const [branch, state] = repoState(repo, fetch); const mk = join(stateDir(), "blocked-config");
   ui.table([[ui.bold("config repo"), branch, state + (existsSync(mk) ? "  " + ui.red("BLOCKED: " + readFileSync(mk, "utf8").trim()) : "")]]);
   let rc = 0; const rows: string[][] = []; const known = new Set<string>();

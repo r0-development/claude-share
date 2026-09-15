@@ -19,9 +19,11 @@ export async function init(repo: string, m: Machine, interactive = true) { await
 export async function status(repo: string, m: Machine) { ui.info(ui.bold(`secrets backend: ${m.secretsBackend}`)); (await getBackend(m)).status(repo, m); return 0; }
 export async function edit(repo: string, m: Machine, name: string) { (await getBackend(m)).edit(repo, name); commitSecrets(repo, m, `secrets: edit ${name}`); return 0; }
 export async function setValues(repo: string, m: Machine, name: string, pairs: string[]) {
-  const b = await getBackend(m); const v = b.loadEnv(repo, name);
-  for (const p of pairs) { const i = p.indexOf("="); if (i < 1) throw new Error(`cs: expected KEY=VALUE, got '${p}'`); v[p.slice(0, i).trim()] = p.slice(i + 1); }
-  b.writeEnv(repo, name, v); commitSecrets(repo, m, `secrets: set ${pairs.length} value(s) in ${name}`); ui.ok(`${name}: ${pairs.map((p) => p.split("=")[0]).join(", ")} stored (encrypted)`); return 0;
+  const b = await getBackend(m);
+  await ui.spin(`encrypting ${name}…`, async () => { const v = b.loadEnv(repo, name);
+    for (const p of pairs) { const i = p.indexOf("="); if (i < 1) throw new Error(`cs: expected KEY=VALUE, got '${p}'`); v[p.slice(0, i).trim()] = p.slice(i + 1); }
+    b.writeEnv(repo, name, v); commitSecrets(repo, m, `secrets: set ${pairs.length} value(s) in ${name}`); });
+  ui.ok(`${name}: ${pairs.map((p) => p.split("=")[0]).join(", ")} stored (encrypted)`); return 0;
 }
 export async function unsetValues(repo: string, m: Machine, name: string, keys: string[]) { const b = await getBackend(m); const v = b.loadEnv(repo, name); for (const k of keys) delete v[k]; b.writeEnv(repo, name, v); commitSecrets(repo, m, `secrets: unset ${keys.length} value(s) in ${name}`); return 0; }
 export async function get(repo: string, m: Machine, name: string, key: string | undefined, show: boolean) {
@@ -60,15 +62,15 @@ export async function exec(repo: string, m: Machine, man: Manifest, project: str
   const env = await environment(repo, m, man, project);
   const p = spawnSync(cmd[0], cmd.slice(1), { stdio: "inherit", env }); return p.status ?? 1;
 }
-export function enroll(repo: string, m: Machine, machine: string) {
+export async function enroll(repo: string, m: Machine, machine: string) {
   const pf = S.machinePubFile(repo, machine); if (!existsSync(pf)) throw new Error(`cs: ${contract(pf)} not found — run cs secrets init on ${machine} and cs sync on both sides first`);
   const pub = readFileSync(pf, "utf8").trim(); const recs = S.recipients(repo); if (recs.includes(pub)) { ui.ok(`${machine} is already a recipient`); return 0; }
-  S.writeRecipients(repo, [...recs, pub]); const n = S.updatekeys(repo); git.git(["add", "-A", ".sops.yaml", "secrets"], repo); git.commit(repo, `secrets: enroll ${machine}`, "cs", `cs@${m.name}`);
-  ui.ok(`enrolled ${machine}; re-encrypted ${n} file(s). Run cs sync here, then cs sync on ${machine}.`); return 0;
+  S.writeRecipients(repo, [...recs, pub]); const n = await ui.spin("re-encrypting secrets for the new recipient…", async () => S.updatekeys(repo)); git.git(["add", "-A", ".sops.yaml", "secrets"], repo); git.commit(repo, `secrets: enroll ${machine}`, "cs", `cs@${m.name}`);
+  ui.ok(`${machine} can now decrypt  ${ui.dim(`${n} file(s) re-encrypted`)}`); return 0;
 }
 export async function revoke(repo: string, m: Machine, machine: string) {
   const pf = S.machinePubFile(repo, machine); const pub = existsSync(pf) ? readFileSync(pf, "utf8").trim() : ""; const recs = S.recipients(repo);
-  if (pub && recs.includes(pub)) { S.writeRecipients(repo, recs.filter((r) => r !== pub)); const n = S.updatekeys(repo); rmSync(join(repo, "machines", machine), { recursive: true, force: true });
+  if (pub && recs.includes(pub)) { S.writeRecipients(repo, recs.filter((r) => r !== pub)); const n = await ui.spin("re-encrypting secrets without that machine…", async () => S.updatekeys(repo)); rmSync(join(repo, "machines", machine), { recursive: true, force: true });
     git.git(["add", "-A", ".sops.yaml", "secrets", "machines"], repo); git.commit(repo, `secrets: revoke ${machine}`, "cs", `cs@${m.name}`); ui.ok(`revoked ${machine}; re-encrypted ${n} file(s)`); }
   else ui.warn(`${machine} was not a recipient`);
   const b = await getBackend(m); const keys = new Set<string>();
