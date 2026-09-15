@@ -155,7 +155,8 @@ async function finish(repo: string, m: Machine, interactive: boolean, skip: stri
   const man = loadManifest(repo);
   if (!skip.includes("apply")) await ui.group("~/.claude applied", () => runApply(repo, m, man), { done: "already up to date" });
   if (!skip.includes("link")) await ui.group("project files linked", () => runLink(repo, m, man), { done: "already in sync" });
-  if (!skip.includes("secrets") && m.secretsBackend !== "none") await ui.group("secrets", async () => (await import("./secretscmd.js")).init(repo, m, interactive));
+  let secretsOk = true;
+  if (!skip.includes("secrets") && m.secretsBackend !== "none") { const sc = await import("./secretscmd.js"); await ui.group("secrets", () => sc.init(repo, m, interactive)); secretsOk = await sc.ensureRecipient(repo, m, interactive); }
   if (!skip.includes("hooks")) await ui.group("automatic sync", async () => { (await import("./hooks.js")).runHooks(repo, m, "install"); runApply(repo, m, loadManifest(repo)); });
   await ui.group("config repo", () => push(repo), { done: "nothing to push" });
   let rc = 0; if (!skip.includes("doctor")) rc = await ui.group("doctor", () => runDoctor(repo, m, man, false, true), { done: "all checks passed" });
@@ -163,7 +164,8 @@ async function finish(repo: string, m: Machine, interactive: boolean, skip: stri
   if (missing.length && interactive && (await ui.confirm(`clone ${missing.length} project(s) now (${missing.slice(0, 6).map((p) => p.name).join(", ")}${missing.length > 6 ? "…" : ""})?`, true))) await ui.group(`clone ${missing.length} project(s)`, async () => (await import("./projects.js")).clone(repo, m, man, []));
   const rcFile = platform.shellRc().split("/").pop();
   ui.note([`${ui.bold("open a new terminal")} ${ui.dim(`(or: source ~/${rcFile})`)} — that gives you ${ui.bold("cs")} on PATH and the ${ui.bold("claude")} wrapper`,
-    `${ui.bold("claude")}  ${ui.dim("log in once on this machine")}`, `${ui.bold("cs status")}  ${ui.dim("dashboard")}`, `${ui.bold("cs new <project> --<identity>")}  ${ui.dim("start something")}`], "next");
+    `${ui.bold("claude")}  ${ui.dim("log in once on this machine")}`, `${ui.bold("cs status")}  ${ui.dim("dashboard")}`, `${ui.bold("cs new <project> --<identity>")}  ${ui.dim("start something")}`,
+    ...(secretsOk ? [] : ["", ui.yellow(`secrets: not enabled yet — on a trusted machine run  cs sync && cs enroll ${m.name} && cs sync,  then  cs sync  here`)])], "next");
   ui.outro(ui.bold("done"));
   return rc;
 }

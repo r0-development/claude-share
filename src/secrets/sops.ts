@@ -50,7 +50,7 @@ export const SopsBackend: Backend = {
     const recs = recipients(repo);
     if (!recs.length) { writeRecipients(repo, [pub]); git.git(["add", ".sops.yaml"], repo); git.commit(repo, "secrets: first recipient", "cs", `cs@${m.name}`); ui.ok("this is the first machine: registered as the only recipient");
       const hook = join(repo, ".git", "hooks", "pre-commit"), src = join(toolRoot(), "hooks", "pre-commit-secrets-guard.sh"); if (existsSync(src) && !existsSync(hook)) { copyFileSync(src, hook); chmodSync(hook, 0o755); ui.ok("installed pre-commit plaintext guard in the config repo"); } }
-    else if (recs.includes(pub)) ui.ok("this machine can decrypt secrets"); else ui.warn(`this machine is not a recipient yet — on a machine that is, run: cs enroll ${m.name}`);
+    else if (recs.includes(pub)) ui.ok("this machine can decrypt secrets"); else ui.step("this machine is not a recipient yet");
     mkdirSync(join(repo, "secrets", "projects"), { recursive: true });
   },
   ready: (repo) => existsSync(keyFile()) && recipients(repo).includes(publicKey()),

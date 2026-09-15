@@ -15,7 +15,7 @@ so diffs make sense. A pre-commit guard refuses plaintext there.
 | command | |
 |---|---|
 | `cs secrets init` | create this machine's key, publish the public half; first machine becomes the only recipient |
-| `cs enroll <machine>` | (on a machine with access) grant a new machine access; re-encrypts everything |
+| `cs enroll <machine>` | (on a machine with access) grant a new machine access; re-encrypts everything. The setup wizard walks a new machine through this, or accepts the recovery key instead |
 | `cs revoke <machine>` | remove access and list what to rotate |
 | `cs secrets set global KEY=VALUE …` / `unset` / `get [--show]` / `edit` | manage values |
 | `cs secrets set <project> KEY=VALUE` | project-scoped values (override global) |

@@ -192,6 +192,15 @@ if command -v sops >/dev/null && command -v age-keygen >/dev/null; then
   ( export HOME="$HOME2" CLAUDE_CONFIG_DIR="$HOME2/.claude" XDG_STATE_HOME="$HOME2/.local/state" CS_CONFIG_DIR="$HOME2/.config/claude-share" SOPS_AGE_KEY_FILE="$HOME2/.config/sops/age/keys.txt"
     $CS sync >/dev/null; [ "$($CS secrets get global API_KEY --show)" = "abc123" ] || die "m2 decrypts after enroll" )
   $CS revoke t2 >/dev/null 2>&1 || die "revoke"
+  # recovery key: generated here, used on the revoked machine to enroll itself through the wizard
+  RKEY="$($CS secrets recovery 2>/dev/null | grep -o 'AGE-SECRET-KEY-1[A-Z0-9]*' | head -1)"; [ -n "$RKEY" ] || die "recovery key printed"
+  $CS sync >/dev/null || die "sync recovery"
+  ( export HOME="$HOME2" CLAUDE_CONFIG_DIR="$HOME2/.claude" XDG_STATE_HOME="$HOME2/.local/state" CS_CONFIG_DIR="$HOME2/.config/claude-share" SOPS_AGE_KEY_FILE="$HOME2/.config/sops/age/keys.txt"
+    $CS sync >/dev/null 2>&1 || true
+    $CS secrets get global API_KEY --show >/dev/null 2>&1 && die "m2 must be revoked"
+    CS_ANSWERS='["n","recovery","'"$RKEY"'"]' $CS init --skip deps,ssh,hooks,doctor,apply,link >/dev/null 2>&1 || die "wizard recovery enroll"
+    [ "$($CS secrets get global API_KEY --show)" = "abc123" ] || die "m2 decrypts after recovery enroll"
+    [ ! -f "$HOME2/.cache/cs-recovery-"* ] 2>/dev/null || true )
   pass secrets
 else
   echo "SKIP secrets (sops/age not installed)"
@@ -218,7 +227,7 @@ export HOME4="$(mktemp -d)"
   mkdir -p "$HOME4/dev"
   #        choose  url               machine  profiles  (ssh keys: skip)  (token: n)
   #            choose  url                machine  profiles   workspace   keys  token
-  CS_ANSWERS='["wiz2","join","'"$HOME3"'/share.git","personal","default","skip","n"]' \
+  CS_ANSWERS='["wiz2","join","'"$HOME3"'/share.git","personal","default","skip","n","skip"]' \
     $CS init --skip deps,hooks,doctor >/dev/null || die "wizard join"
   grep -q '^\[identities.personal\]' "$CS_CONFIG_DIR/repo/projects.toml" || die "joined share has identity"
   [ -f "$HOME4/.ssh/cs/master" ] && [ -f "$HOME4/.ssh/cs/personal" ] || die "join generated keys"

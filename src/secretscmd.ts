@@ -80,11 +80,53 @@ export async function revoke(repo: string, m: Machine, machine: string) {
 function man_projects(repo: string): Record<string, true> { const d = join(repo, "secrets", "projects"); const out: Record<string, true> = {}; if (existsSync(d)) for (const f of readdirSync(d)) if (f.endsWith(".env")) out[f.slice(0, -4)] = true; return out; }
 export async function recovery(repo: string, m: Machine) {
   const tmp = join(home(), ".cache", `cs-recovery-${process.pid}.txt`); const exe = which("age-keygen") || join(home(), ".local", "bin", "age-keygen");
-  const p = spawnSync(exe, ["-o", tmp], { encoding: "utf8" }); if (p.status !== 0) throw new Error("cs: age-keygen failed");
+  mkdirSync(join(home(), ".cache"), { recursive: true });
+  const p = spawnSync(exe, ["-o", tmp], { encoding: "utf8" }); if (p.status !== 0) throw new Error(`cs: age-keygen failed: ${(p.stderr || "").trim()}`);
   const text = readFileSync(tmp, "utf8"); rmSync(tmp, { force: true });
   const pub = text.split("\n").find((l) => l.startsWith("# public key:"))!.split(":")[1].trim(); const priv = text.split("\n").find((l) => l.startsWith("AGE-SECRET-KEY-"))!;
   const pf = S.machinePubFile(repo, "recovery"); mkdirSync(join(repo, "machines", "recovery"), { recursive: true }); writeFileSync(pf, pub + "\n");
   S.writeRecipients(repo, [...S.recipients(repo), pub]); const n = await S.updatekeys(repo); git.git(["add", "-A", ".sops.yaml", "secrets", "machines/recovery"], repo); git.commit(repo, "secrets: recovery recipient", "cs", `cs@${m.name}`);
   ui.ok(`recovery recipient added; re-encrypted ${n} file(s)`); ui.note([priv, "", ui.dim("On a bare machine: write it to ~/.config/sops/age/keys.txt, run cs secrets init, enroll the machine's own key, delete it.")], "Store this in your password manager now — it is not saved anywhere else");
   return 0;
+}
+
+/** Wizard step: make sure this machine can decrypt — enroll from another machine, or self-enroll with the recovery key. */
+export async function ensureRecipient(repo: string, m: Machine, interactive: boolean): Promise<boolean> {
+  const b = await getBackend(m); if (b.name === "none" || b.ready(repo)) return true;
+  const { existsSync: ex, readdirSync: rd } = await import("node:fs");
+  const md = join(repo, "machines");
+  const others = ex(md) ? rd(md).filter((d) => d !== m.name && d !== "recovery" && S.recipients(repo).includes((() => { try { return readFileSync(join(md, d, "age.pub"), "utf8").trim(); } catch { return ""; } })())) : [];
+  const where = others.length ? `on ${others.map((x) => ui.bold(x)).join(" or ")}` : "on a machine that already has secrets";
+  if (!interactive) { ui.warn(`secrets: not a recipient yet — ${where}: cs sync && cs enroll ${m.name} && cs sync; then cs sync here`); return false; }
+  for (;;) {
+    const choice = await ui.select("This machine cannot decrypt secrets yet. How do you want to enable it?", [
+      { value: "enroll", label: "Enroll it from another machine", hint: "recommended — nothing secret is typed or copied" },
+      { value: "recovery", label: "Use the recovery key", hint: "paste it once; it is discarded afterwards" },
+      { value: "skip", label: "Skip for now", hint: "Claude runs without secrets until then" },
+    ]);
+    if (choice === "skip") return false;
+    if (choice === "recovery") {
+      const priv = await ui.password("recovery key (AGE-SECRET-KEY-…)");
+      if (!/^AGE-SECRET-KEY-1[A-Z0-9]+$/.test(priv.trim())) { ui.warn("that does not look like an age secret key"); continue; }
+      const tmp = join(home(), ".cache", `cs-recovery-${process.pid}.txt`); (await import("node:fs")).mkdirSync(join(home(), ".cache"), { recursive: true });
+      writeFileSync(tmp, priv.trim() + "\n", { mode: 0o600 });
+      const prev = process.env.SOPS_AGE_KEY_FILE; process.env.SOPS_AGE_KEY_FILE = tmp;
+      try {
+        const pub = S.publicKey.call(null); // this machine's own public key comes from its own keys file, not the temp one
+        const own = readFileSync(S.machinePubFile(repo, m.name), "utf8").trim();
+        if (!S.recipients(repo).includes(own)) S.writeRecipients(repo, [...S.recipients(repo), own]);
+        const n = await ui.spin("re-encrypting secrets for this machine…", () => S.updatekeys(repo));
+        git.git(["add", "-A", ".sops.yaml", "secrets"], repo); git.commit(repo, `secrets: enroll ${m.name} (recovery key)`, "cs", `cs@${m.name}`);
+        ui.ok(`enrolled with the recovery key  ${ui.dim(`${n} file(s) re-encrypted`)}`); void pub;
+      } catch (e: any) { ui.fail(`could not enroll: ${e.message}`); continue; }
+      finally { if (prev === undefined) delete process.env.SOPS_AGE_KEY_FILE; else process.env.SOPS_AGE_KEY_FILE = prev; rmSync(tmp, { force: true }); }
+      return b.ready(repo);
+    }
+    ui.note([`${where} run:`, "", `  ${ui.bold(`cs sync && cs enroll ${m.name} && cs sync`)}`, "", ui.dim("that machine re-encrypts the secrets so this one can read them — no secret leaves either machine")], "Enroll this machine");
+    if (!(await ui.proceed("done on the other machine?", "Done — check now", "Skip for now"))) return false;
+    const { runSync } = await import("./sync.js"); const { loadManifest } = await import("./manifest.js");
+    await ui.spin("syncing…", () => runSync(repo, m, loadManifest(repo), { pullOnly: true, timeout: 20 }));
+    if (b.ready(repo)) { ui.ok("this machine can decrypt secrets"); return true; }
+    ui.warn("still not a recipient — did the other machine run cs sync after enrolling?");
+  }
 }

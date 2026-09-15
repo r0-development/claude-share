@@ -46,8 +46,11 @@ On a brand-new share the wizard first asks for your first identity.
 `~/.claude` is rendered, Claude files are linked, this machine's age key is created and published, the Claude Code
 hooks and the 15-minute timer are installed, doctor runs, and cs offers to clone the projects for your profiles.
 
-Afterwards: **open a new terminal** (the `claude()` wrapper), log into Claude Code once (`claude`), and on a machine
-that already has secrets run `cs sync && cs enroll <new-machine>` — until then Claude runs there without secrets.
+The secrets step asks how to enable decryption on this machine: **enroll it from another machine** (the wizard
+shows the exact command — `cs sync && cs enroll <this-machine> && cs sync` — and checks when you say it's done), **use the
+recovery key** (pasted once, discarded), or skip for now.
+
+Afterwards: **open a new terminal** (the `claude()` wrapper) and log into Claude Code once (`claude`).
 
 ## Scripted / non-interactive
 
