@@ -83,11 +83,22 @@ async function machinePhase(repo: string, nm: string, profiles: string[], ws: st
     else if (interactive) profiles = (await ui.text("profiles for this machine (comma list — project groups it should get)", { default: "personal" })).split(",").map((x) => x.trim()).filter(Boolean);
     else profiles = ["personal"]; }
   let workspaceOverride = ws;
-  if (ws === undefined && interactive) { let dws = "~/dev"; try { dws = loadManifest(repo).workspaceRoot; } catch {}
-    let w = await ui.text("where should projects live on this machine", { default: dws, validate: (v) => (v.startsWith("~") || v.startsWith("/") ? undefined : "use an absolute path or ~/…") });
-    if (w.startsWith(home() + "/")) w = "~/" + w.slice(home().length + 1);
-    if (platform.isWSL() && expand(w).startsWith("/mnt/")) { ui.warn("that is the Windows filesystem — git and Claude are far slower there; ~/dev inside WSL is recommended"); if (!(await ui.confirm("use it anyway?", false))) w = dws; }
-    workspaceOverride = w === dws ? undefined : w; mkdirSync(expand(w), { recursive: true }); }
+  if (ws === undefined && interactive) {
+    let dws = "~/dev"; try { dws = loadManifest(repo).workspaceRoot; } catch {}
+    const choice = await ui.select("Where should your projects live on this machine?", [
+      { value: "default", label: `${dws}  (recommended)`, hint: existsSync(expand(dws)) ? "exists" : "will be created" },
+      { value: "custom", label: "Somewhere else…", hint: "any absolute path or ~/…" },
+    ]);
+    let w = dws;
+    if (choice === "custom") {
+      w = await ui.text("project root", { default: dws, validate: (v) => (v.startsWith("~") || v.startsWith("/") ? undefined : "use an absolute path or ~/…") });
+      if (w.startsWith(home() + "/")) w = "~/" + w.slice(home().length + 1);
+      if (platform.isWSL() && expand(w).startsWith("/mnt/")) { ui.warn("that is the Windows filesystem — git and Claude are far slower there; ~/dev inside WSL is recommended"); if (!(await ui.confirm("use it anyway?", false))) w = dws; }
+    }
+    const existed = existsSync(expand(w)); mkdirSync(expand(w), { recursive: true });
+    ui.step(`projects live in ${ui.bold(w)}${existed ? "" : ui.dim("  (created)")}`);
+    workspaceOverride = w === dws ? undefined : w;
+  } else if (ws) mkdirSync(expand(ws), { recursive: true });
   const m: Machine = { name: nm, profiles, exclude: [], workspace: workspaceOverride, secretsBackend: "sops" }; saveMachine(m);
   ui.step(`machine ${ui.bold(m.name)}  ${ui.dim("profiles " + m.profiles.join(", "))}`); return m;
 }

@@ -202,8 +202,8 @@ git init -q --bare "$HOME3/share.git"
 ( export HOME="$HOME3" CLAUDE_CONFIG_DIR="$HOME3/.claude" XDG_STATE_HOME="$HOME3/.local/state" CS_CONFIG_DIR="$HOME3/.config/claude-share" SOPS_AGE_KEY_FILE="$HOME3/.config/sops/age/keys.txt"
   mkdir -p "$HOME3/dev"
   #        choose  name        url               machine  profiles  id        owner    name  email
-  #            choose    name         url                machine  profiles   workspace  id          owner      name        email               keys
-  CS_ANSWERS='["create","<default>","'"$HOME3"'/share.git","wiz1","personal","~/code","personal","someone","Some One","some@example.com","s","n"]' \
+  #            choose    name         url                machine  profiles   workspace(select,text)  id       owner      name        email               keys
+  CS_ANSWERS='["create","<default>","'"$HOME3"'/share.git","wiz1","personal","custom","~/code","personal","someone","Some One","some@example.com","s","n"]' \
     $CS init --skip deps,hooks,doctor >/dev/null || die "wizard create"
   grep -q 'workspace = "~/code"' "$CS_CONFIG_DIR/machine.toml" || die "custom workspace saved"
   [ -f "$HOME3/.ssh/cs/master" ] || die "master key generated"
@@ -218,7 +218,7 @@ export HOME4="$(mktemp -d)"
   mkdir -p "$HOME4/dev"
   #        choose  url               machine  profiles  (ssh keys: skip)  (token: n)
   #            choose  url                machine  profiles   workspace   keys  token
-  CS_ANSWERS='["join","'"$HOME3"'/share.git","wiz2","personal","<default>","s","n"]' \
+  CS_ANSWERS='["join","'"$HOME3"'/share.git","wiz2","personal","default","s","n"]' \
     $CS init --skip deps,hooks,doctor >/dev/null || die "wizard join"
   grep -q '^\[identities.personal\]' "$CS_CONFIG_DIR/repo/projects.toml" || die "joined share has identity"
   [ -f "$HOME4/.ssh/cs/master" ] && [ -f "$HOME4/.ssh/cs/personal" ] || die "join generated keys"

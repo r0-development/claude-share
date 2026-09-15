@@ -7562,15 +7562,24 @@ async function machinePhase(repo, nm, profiles, ws, interactive) {
       dws = loadManifest(repo).workspaceRoot;
     } catch {
     }
-    let w2 = await text("where should projects live on this machine", { default: dws, validate: (v2) => v2.startsWith("~") || v2.startsWith("/") ? void 0 : "use an absolute path or ~/\u2026" });
-    if (w2.startsWith(home() + "/")) w2 = "~/" + w2.slice(home().length + 1);
-    if (isWSL() && expand(w2).startsWith("/mnt/")) {
-      warn("that is the Windows filesystem \u2014 git and Claude are far slower there; ~/dev inside WSL is recommended");
-      if (!await confirm("use it anyway?", false)) w2 = dws;
+    const choice = await select("Where should your projects live on this machine?", [
+      { value: "default", label: `${dws}  (recommended)`, hint: existsSync16(expand(dws)) ? "exists" : "will be created" },
+      { value: "custom", label: "Somewhere else\u2026", hint: "any absolute path or ~/\u2026" }
+    ]);
+    let w2 = dws;
+    if (choice === "custom") {
+      w2 = await text("project root", { default: dws, validate: (v2) => v2.startsWith("~") || v2.startsWith("/") ? void 0 : "use an absolute path or ~/\u2026" });
+      if (w2.startsWith(home() + "/")) w2 = "~/" + w2.slice(home().length + 1);
+      if (isWSL() && expand(w2).startsWith("/mnt/")) {
+        warn("that is the Windows filesystem \u2014 git and Claude are far slower there; ~/dev inside WSL is recommended");
+        if (!await confirm("use it anyway?", false)) w2 = dws;
+      }
     }
-    workspaceOverride = w2 === dws ? void 0 : w2;
+    const existed = existsSync16(expand(w2));
     mkdirSync12(expand(w2), { recursive: true });
-  }
+    step(`projects live in ${bold(w2)}${existed ? "" : dim("  (created)")}`);
+    workspaceOverride = w2 === dws ? void 0 : w2;
+  } else if (ws) mkdirSync12(expand(ws), { recursive: true });
   const m2 = { name: nm, profiles, exclude: [], workspace: workspaceOverride, secretsBackend: "sops" };
   saveMachine(m2);
   step(`machine ${bold(m2.name)}  ${dim("profiles " + m2.profiles.join(", "))}`);
