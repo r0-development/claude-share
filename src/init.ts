@@ -33,23 +33,23 @@ export function newConfigRepo(dest: string, branch = "master"): string {
 
 async function accessLoop(sshUrl: string, gh: [string, string] | undefined, interactive: boolean, machine: string) {
   const { pub, created } = master.ensureKey(machine); if (created) ui.step(`master key generated  ${ui.dim(master.KEY)}`);
-  let [ok, err] = await ui.spin("checking access to the config repo…", async () => master.canAccess(sshUrl));
+  let [ok, err] = await ui.spin("checking access to the config repo…", () => master.canAccess(sshUrl));
   let tries = 0;
   while (!ok) { master.instructions(pub, gh, machine); if (!interactive) throw new Error("cs: config repo not reachable with the master key (see instructions above)");
     if (!(await ui.proceed("added the key?", "Done — check access", "Abort")) || tries++ >= 10) throw new Error("cs: aborted — config repo not reachable");
-    [ok, err] = await ui.spin("checking access…", async () => master.canAccess(sshUrl)); if (!ok) ui.warn(`still no access — ${err}`); }
+    [ok, err] = await ui.spin("checking access…", () => master.canAccess(sshUrl)); if (!ok) ui.warn(`still no access — ${err}`); }
   ui.step("config repo reachable with the master key");
 }
 async function cloneConfig(sshUrl: string, target: string) {
   mkdirSync(dirname(target), { recursive: true });
-  await ui.spin("cloning the config repo…", async () => git.git(["clone", "-q", sshUrl, target], undefined, { sshKey: master.keyPath() }));
+  await ui.spin("cloning the config repo…", () => git.gitA(["clone", "-q", sshUrl, target], undefined, { sshKey: master.keyPath() }));
   master.configureRepo(target); ui.step(`config repo cloned to ${ui.dim(contract(target))}`);
 }
 async function askUrl(prompt: string): Promise<[string, [string, string] | undefined]> {
   for (;;) {
     const raw = await ui.text(prompt, { placeholder: "https://github.com/<owner>/claude-share-config", validate: (v) => (v.trim() ? undefined : "a URL is required") });
     const [sshUrl, gh] = master.parseRepoUrl(raw);
-    if (gh) { const vis = await ui.spin("looking up the repository…", async () => master.isPublic(master.httpsUrl(...gh)));
+    if (gh) { const vis = await ui.spin("looking up the repository…", () => master.isPublic(master.httpsUrl(...gh)));
       if (vis === true) ui.step(`${gh[0]}/${gh[1]} found (public)`); else if (vis === false) ui.step(`${gh[0]}/${gh[1]} found (private) — access via the master key`);
       else { ui.warn(`${gh[0]}/${gh[1]} not found or unreachable`); if (!(await ui.confirm("use this URL anyway?", false))) continue; } }
     return [sshUrl, gh];
@@ -65,7 +65,7 @@ async function create(target: string, interactive: boolean, machine: string) {
   ui.note([ui.cyan("https://github.com/new"), ui.dim("no README, no .gitignore, no license — completely empty")], `Create an empty PRIVATE repository named '${n}' on GitHub`);
   const [sshUrl, gh] = await askUrl("paste the new repo's URL"); await accessLoop(sshUrl, gh, interactive, machine);
   newConfigRepo(target); if (!git.remoteUrl(target)) git.git(["remote", "add", "origin", sshUrl], target); master.configureRepo(target);
-  await ui.spin("pushing the initial config repo…", async () => git.git(["push", "-q", "-u", "origin", git.currentBranch(target)], target)); ui.step(`config repo initialized and pushed  ${ui.dim(sshUrl)}`);
+  await ui.spin("pushing the initial config repo…", () => git.gitA(["push", "-q", "-u", "origin", git.currentBranch(target)], target)); ui.step(`config repo initialized and pushed  ${ui.dim(sshUrl)}`);
 }
 async function machineName(existingName: string, interactive: boolean): Promise<string> {
   if (machineExists()) return existingName || loadMachine().name;

@@ -35,7 +35,11 @@ export function writeRecipients(repo: string, recs: string[]) {
 export const machinePubFile = (repo: string, machine: string) => join(repo, "machines", machine, "age.pub");
 const isEncrypted = (f: string) => { try { return readFileSync(f, "utf8").includes("sops_version="); } catch { return false; } };
 function envFiles(repo: string): string[] { const out: string[] = []; const rec = (d: string) => { if (!existsSync(d)) return; for (const e of readdirSync(d, { withFileTypes: true })) { const f = join(d, e.name); e.isDirectory() ? rec(f) : f.endsWith(".env") && out.push(f); } }; rec(join(repo, "secrets")); return out.sort(); }
-export function updatekeys(repo: string): number { let n = 0; for (const f of envFiles(repo)) if (isEncrypted(f)) { sops(["updatekeys", "-y", relative(repo, f)], repo); n++; } return n; }
+export async function updatekeys(repo: string): Promise<number> {
+  const { exec } = await import("../proc.js"); let n = 0;
+  for (const f of envFiles(repo)) if (isEncrypted(f)) { const p = await exec(exe("sops"), ["updatekeys", "-y", relative(repo, f)], { cwd: repo, env: env() }); if (p.code !== 0) throw new Error(`cs: sops updatekeys failed: ${p.err}`); n++; }
+  return n;
+}
 
 export const SopsBackend: Backend = {
   name: "sops",

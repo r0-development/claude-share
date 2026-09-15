@@ -15,6 +15,14 @@ export function git(args: string[], cwd?: string, opts: { check?: boolean; sshKe
   }
   return r;
 }
+/** Async git for long operations (fetch/pull/push/clone/ls-remote) — keeps spinners alive. */
+export async function gitA(args: string[], cwd?: string, opts: { check?: boolean; sshKey?: string; timeout?: number } = {}): Promise<Res> {
+  const { exec } = await import("./proc.js");
+  const env = { ...process.env }; if (opts.sshKey) env.GIT_SSH_COMMAND = `ssh -i ${opts.sshKey} -o IdentitiesOnly=yes`;
+  const r = await exec("git", args, { cwd, env, timeout: opts.timeout });
+  if (opts.check !== false && r.code !== 0) { const last = r.err.split("\n").filter(Boolean).pop() ?? ""; throw new Error(`cs: git ${args.slice(0, 2).join(" ")} failed in ${cwd ?? "."}\n  ${last}`); }
+  return r;
+}
 export const out = (args: string[], cwd?: string, dflt = "") => { const r = git(args, cwd, { check: false }); return r.code === 0 ? r.out : dflt; };
 export const isRepo = (p: string) => existsSync(join(p, ".git"));
 export const isBare = (p: string) => existsSync(join(p, "HEAD")) && existsSync(join(p, "objects"));

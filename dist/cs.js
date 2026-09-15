@@ -6390,6 +6390,47 @@ var init_manifest = __esm({
   }
 });
 
+// src/proc.ts
+var proc_exports = {};
+__export(proc_exports, {
+  exec: () => exec2,
+  shell: () => shell
+});
+import { spawn } from "node:child_process";
+function exec2(cmd, args, opts = {}) {
+  return new Promise((resolve6) => {
+    const p = spawn(cmd, args, { cwd: opts.cwd, env: opts.env ?? process.env, stdio: ["pipe", "pipe", "pipe"] });
+    let out2 = "", err = "", done = false;
+    const timer = opts.timeout ? setTimeout(() => {
+      if (!done) {
+        p.kill("SIGKILL");
+        err += "\ntimed out";
+      }
+    }, opts.timeout * 1e3) : void 0;
+    p.stdout.on("data", (d) => out2 += d);
+    p.stderr.on("data", (d) => err += d);
+    p.on("error", (e) => {
+      done = true;
+      if (timer) clearTimeout(timer);
+      resolve6({ code: 127, out: out2, err: err + e.message });
+    });
+    p.on("close", (code) => {
+      done = true;
+      if (timer) clearTimeout(timer);
+      resolve6({ code: code ?? 1, out: out2.trim(), err: err.trim() });
+    });
+    if (opts.input !== void 0) p.stdin.write(opts.input);
+    p.stdin.end();
+  });
+}
+var shell;
+var init_proc = __esm({
+  "src/proc.ts"() {
+    "use strict";
+    shell = (cmd, opts = {}) => exec2("bash", ["-lc", cmd], opts);
+  }
+});
+
 // src/git.ts
 import { spawnSync } from "node:child_process";
 import { existsSync as existsSync3, statSync } from "node:fs";
@@ -6399,6 +6440,18 @@ function git(args, cwd, opts = {}) {
   if (opts.sshKey) env2.GIT_SSH_COMMAND = `ssh -i ${opts.sshKey} -o IdentitiesOnly=yes`;
   const p = spawnSync("git", args, { cwd, env: env2, encoding: "utf8", timeout: opts.timeout ? opts.timeout * 1e3 : void 0, input: opts.input, stdio: ["pipe", "pipe", "pipe"] });
   const r2 = { code: p.status ?? 1, out: (p.stdout ?? "").trim(), err: (p.stderr ?? "").trim() };
+  if (opts.check !== false && r2.code !== 0) {
+    const last = r2.err.split("\n").filter(Boolean).pop() ?? "";
+    throw new Error(`cs: git ${args.slice(0, 2).join(" ")} failed in ${cwd ?? "."}
+  ${last}`);
+  }
+  return r2;
+}
+async function gitA(args, cwd, opts = {}) {
+  const { exec: exec4 } = await Promise.resolve().then(() => (init_proc(), proc_exports));
+  const env2 = { ...process.env };
+  if (opts.sshKey) env2.GIT_SSH_COMMAND = `ssh -i ${opts.sshKey} -o IdentitiesOnly=yes`;
+  const r2 = await exec4("git", args, { cwd, env: env2, timeout: opts.timeout });
   if (opts.check !== false && r2.code !== 0) {
     const last = r2.err.split("\n").filter(Boolean).pop() ?? "";
     throw new Error(`cs: git ${args.slice(0, 2).join(" ")} failed in ${cwd ?? "."}
@@ -6600,20 +6653,17 @@ function parseRepoUrl(text3) {
   const m = t2.match(/^(?:https?:\/\/|ssh:\/\/git@|git@)?(?:www\.)?github\.com[/:]([^/]+)\/([^/]+?)(?:\.git)?$/);
   return m ? [`git@github.com:${m[1]}/${m[2]}.git`, [m[1], m[2]]] : [t2, void 0];
 }
-function isPublic(url) {
+async function isPublic(url) {
   if (!url.startsWith("https://") || process.env.CS_OFFLINE) return void 0;
-  const p = spawnSync2("git", ["ls-remote", "--exit-code", url, "HEAD"], { encoding: "utf8", env: { ...process.env, GIT_TERMINAL_PROMPT: "0" }, timeout: 3e4, stdio: ["ignore", "pipe", "pipe"] });
-  if (p.status === 0) return true;
-  return /Authentication failed|could not read Username|Repository not found/.test(p.stderr ?? "") ? false : void 0;
+  const { exec: exec4 } = await Promise.resolve().then(() => (init_proc(), proc_exports));
+  const p = await exec4("git", ["ls-remote", "--exit-code", url, "HEAD"], { env: { ...process.env, GIT_TERMINAL_PROMPT: "0" }, timeout: 30 });
+  if (p.code === 0) return true;
+  return /Authentication failed|could not read Username|Repository not found/.test(p.err) ? false : void 0;
 }
-function canAccess(sshUrl) {
-  const p = spawnSync2("git", ["ls-remote", sshUrl, "HEAD"], {
-    encoding: "utf8",
-    timeout: 3e4,
-    stdio: ["ignore", "pipe", "pipe"],
-    env: { ...process.env, GIT_SSH_COMMAND: `ssh -i ${keyPath2()} -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=accept-new` }
-  });
-  return [p.status === 0, (p.stderr ?? "").trim().split("\n").pop() ?? ""];
+async function canAccess(sshUrl) {
+  const { exec: exec4 } = await Promise.resolve().then(() => (init_proc(), proc_exports));
+  const p = await exec4("git", ["ls-remote", sshUrl, "HEAD"], { timeout: 30, env: { ...process.env, GIT_SSH_COMMAND: `ssh -i ${keyPath2()} -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=accept-new` } });
+  return [p.code === 0, p.err.split("\n").pop() ?? ""];
 }
 async function registerDeployKey(owner2, repo, pub, title) {
   const tok = getToken(owner2);
@@ -6642,11 +6692,11 @@ async function setup(repoDir2, interactive = true) {
   const [sshUrl, gh] = parseRepoUrl(url);
   const { pub, created } = ensureKey();
   kv("master key", KEY + (created ? "  (generated)" : ""));
-  let [ok2] = canAccess(sshUrl);
+  let [ok2] = await spin("checking access\u2026", () => canAccess(sshUrl));
   while (!ok2) {
     instructions(pub, gh, (await Promise.resolve().then(() => (init_config(), config_exports))).loadMachine().name);
     if (!interactive || !await proceed("added the key?")) return 1;
-    [ok2] = canAccess(sshUrl);
+    [ok2] = await spin("checking access\u2026", () => canAccess(sshUrl));
   }
   if (sshUrl !== url) git(["remote", "set-url", "origin", sshUrl], repoDir2);
   configureRepo(repoDir2);
@@ -7151,7 +7201,7 @@ async function ageLinux() {
   mkdirSync6(tmp, { recursive: true });
   const tgz = join8(tmp, "age.tgz");
   await download(`https://github.com/FiloSottile/age/releases/download/${t2}/age-${t2}-linux-${a64()}.tar.gz`, tgz);
-  sh(`tar -xzf ${tgz} -C ${tmp}`);
+  await sh(`tar -xzf ${tgz} -C ${tmp}`);
   mkdirSync6(BIN(), { recursive: true });
   for (const n3 of ["age", "age-keygen"]) {
     copyFileSync2(join8(tmp, "age", n3), join8(BIN(), n3));
@@ -7176,7 +7226,7 @@ async function runDeps(install = false, compact = false) {
     const inst = isMac() ? it.mac : it.linux;
     if (install && inst) {
       try {
-        await spin(`installing ${name2}\u2026`, async () => inst());
+        await spin(`installing ${name2}\u2026`, () => inst());
         path = which(it.cmd);
       } catch (e) {
         warn(`${name2}: install failed: ${e.message}`);
@@ -7218,12 +7268,13 @@ var init_deps = __esm({
       return ((p.stdout || p.stderr || "").split("\n")[0] ?? "").trim();
     };
     a64 = () => ["arm64", "aarch64"].includes(arch()) ? "arm64" : "amd64";
-    sh = (cmd) => {
-      const p = spawnSync3("bash", ["-lc", cmd], { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
-      if (p.status !== 0) throw new Error(`command failed: ${cmd}
-${(p.stderr || p.stdout || "").trim().split("\n").slice(-5).join("\n")}`);
+    sh = async (cmd) => {
+      const { shell: shell2 } = await Promise.resolve().then(() => (init_proc(), proc_exports));
+      const p = await shell2(cmd);
+      if (p.code !== 0) throw new Error(`command failed: ${cmd}
+${(p.err || p.out).split("\n").slice(-5).join("\n")}`);
     };
-    brew = (pkg2) => async () => sh(`brew install ${pkg2}`);
+    brew = (pkg2) => () => sh(`brew install ${pkg2}`);
     CATALOG = {
       git: { cmd: "git", ver: ["git", "--version"], mac: brew("git"), required: true, apt: "git" },
       curl: { cmd: "curl", ver: ["curl", "--version"], required: true, apt: "curl" },
@@ -7232,7 +7283,7 @@ ${(p.stderr || p.stdout || "").trim().split("\n").slice(-5).join("\n")}`);
       sops: { cmd: "sops", ver: ["sops", "--version"], linux: sopsLinux, mac: brew("sops"), required: true },
       node: { cmd: "node", ver: ["node", "--version"], required: true },
       gh: { cmd: "gh", ver: ["gh", "--version"], mac: brew("gh"), required: false, apt: "gh" },
-      claude: { cmd: "claude", ver: ["claude", "--version"], linux: async () => sh("curl -fsSL https://claude.ai/install.sh | bash"), mac: async () => sh("curl -fsSL https://claude.ai/install.sh | bash"), required: true }
+      claude: { cmd: "claude", ver: ["claude", "--version"], linux: () => sh("curl -fsSL https://claude.ai/install.sh | bash"), mac: () => sh("curl -fsSL https://claude.ai/install.sh | bash"), required: true }
     };
   }
 });
@@ -7430,10 +7481,11 @@ function keygen(key, comment) {
   if (p.status !== 0) throw new Error("cs: ssh-keygen failed");
   chmodSync4(key, 384);
 }
-function githubUserForKey(key) {
+async function githubUserForKey(key) {
   if (process.env.CS_OFFLINE) return void 0;
-  const p = spawnSync4("ssh", ["-T", "-i", key, "-o", "IdentitiesOnly=yes", "-o", "StrictHostKeyChecking=accept-new", "-o", "BatchMode=yes", "git@github.com"], { encoding: "utf8", timeout: 2e4, stdio: ["ignore", "pipe", "pipe"] });
-  return ((p.stdout ?? "") + (p.stderr ?? "")).match(/Hi ([^!]+)!/)?.[1];
+  const { exec: exec4 } = await Promise.resolve().then(() => (init_proc(), proc_exports));
+  const p = await exec4("ssh", ["-T", "-i", key, "-o", "IdentitiesOnly=yes", "-o", "StrictHostKeyChecking=accept-new", "-o", "BatchMode=yes", "git@github.com"], { timeout: 20 });
+  return (p.out + p.err).match(/Hi ([^!]+)!/)?.[1];
 }
 function writeSshConfig() {
   const cfg = join11(home(), ".ssh", "config");
@@ -7490,11 +7542,11 @@ async function setup2(repo, m, man, checkOnly = false) {
       git(["add", dest], repo);
       published = true;
     }
-    let user = await spin(`verifying ${i2.id} key on GitHub\u2026`, async () => githubUserForKey(key));
+    let user = await spin(`verifying ${i2.id} key on GitHub\u2026`, () => githubUserForKey(key));
     if (user) state.push(green(`github: ${user}`));
     else if (!checkOnly) {
-      const r2 = await spin(`registering ${i2.id} key\u2026`, async () => register(i2, pub, `cs:${m.name}:${i2.id}`));
-      user = githubUserForKey(key);
+      const r2 = await spin(`registering ${i2.id} key\u2026`, () => register(i2, pub, `cs:${m.name}:${i2.id}`));
+      user = await githubUserForKey(key);
       if (user) state.push(green(`github: ${user}`));
       else {
         state.push(yellow(r2.startsWith("registered") ? "registered, not verified yet" : "needs registering"));
@@ -7591,10 +7643,12 @@ function envFiles(repo) {
   rec(join12(repo, "secrets"));
   return out2.sort();
 }
-function updatekeys(repo) {
+async function updatekeys(repo) {
+  const { exec: exec4 } = await Promise.resolve().then(() => (init_proc(), proc_exports));
   let n3 = 0;
   for (const f of envFiles(repo)) if (isEncrypted(f)) {
-    sops(["updatekeys", "-y", relative3(repo, f)], repo);
+    const p = await exec4(exe("sops"), ["updatekeys", "-y", relative3(repo, f)], { cwd: repo, env: env() });
+    if (p.code !== 0) throw new Error(`cs: sops updatekeys failed: ${p.err}`);
     n3++;
   }
   return n3;
@@ -7768,7 +7822,7 @@ __export(secretscmd_exports, {
   edit: () => edit,
   enroll: () => enroll,
   environment: () => environment,
-  exec: () => exec2,
+  exec: () => exec3,
   get: () => get,
   init: () => init,
   pull: () => pull,
@@ -7887,7 +7941,7 @@ async function environment(repo, m, man, project, warnMissing = true) {
   env2.CS_SECRETS_LOADED = "1";
   return env2;
 }
-async function exec2(repo, m, man, project, cmd) {
+async function exec3(repo, m, man, project, cmd) {
   if (!cmd.length) throw new Error("cs: secrets exec needs a command after --");
   project ??= projectForPath(man, m, process.cwd())?.name;
   const env2 = await environment(repo, m, man, project);
@@ -7904,7 +7958,7 @@ async function enroll(repo, m, machine) {
     return 0;
   }
   writeRecipients(repo, [...recs, pub]);
-  const n3 = await spin("re-encrypting secrets for the new recipient\u2026", async () => updatekeys(repo));
+  const n3 = await spin("re-encrypting secrets for the new recipient\u2026", () => updatekeys(repo));
   git(["add", "-A", ".sops.yaml", "secrets"], repo);
   commit(repo, `secrets: enroll ${machine}`, "cs", `cs@${m.name}`);
   ok(`${machine} can now decrypt  ${dim(`${n3} file(s) re-encrypted`)}`);
@@ -7916,7 +7970,7 @@ async function revoke(repo, m, machine) {
   const recs = recipients(repo);
   if (pub && recs.includes(pub)) {
     writeRecipients(repo, recs.filter((r2) => r2 !== pub));
-    const n3 = await spin("re-encrypting secrets without that machine\u2026", async () => updatekeys(repo));
+    const n3 = await spin("re-encrypting secrets without that machine\u2026", () => updatekeys(repo));
     rmSync4(join14(repo, "machines", machine), { recursive: true, force: true });
     git(["add", "-A", ".sops.yaml", "secrets", "machines"], repo);
     commit(repo, `secrets: revoke ${machine}`, "cs", `cs@${m.name}`);
@@ -7936,7 +7990,7 @@ function man_projects(repo) {
   }
   return out2;
 }
-function recovery(repo, m) {
+async function recovery(repo, m) {
   const tmp = join14(home(), ".cache", `cs-recovery-${process.pid}.txt`);
   const exe2 = which("age-keygen") || join14(home(), ".local", "bin", "age-keygen");
   const p = spawnSync6(exe2, ["-o", tmp], { encoding: "utf8" });
@@ -7949,7 +8003,7 @@ function recovery(repo, m) {
   mkdirSync9(join14(repo, "machines", "recovery"), { recursive: true });
   writeFileSync9(pf, pub + "\n");
   writeRecipients(repo, [...recipients(repo), pub]);
-  const n3 = updatekeys(repo);
+  const n3 = await updatekeys(repo);
   git(["add", "-A", ".sops.yaml", "secrets", "machines/recovery"], repo);
   commit(repo, "secrets: recovery recipient", "cs", `cs@${m.name}`);
   ok(`recovery recipient added; re-encrypted ${n3} file(s)`);
@@ -8170,7 +8224,7 @@ async function clone(repo, m, man, names, dryRun = false) {
         continue;
       }
       await spin(`${p.name}\u2026`, async () => {
-        if (p.url) git(["clone", "-q", p.url, root]);
+        if (p.url) await gitA(["clone", "-q", p.url, root]);
         else mkdirSync11(root, { recursive: true });
       });
       step(`${p.name} \u2192 ${contract(root)}`);
@@ -8182,10 +8236,10 @@ async function clone(repo, m, man, names, dryRun = false) {
       continue;
     }
     mkdirSync11(cont, { recursive: true });
-    let r2 = await spin(`cloning ${p.name}\u2026`, async () => git(["clone", "-q", ...p.branch ? ["-b", p.branch] : [], p.url, root], void 0, { check: false }));
+    let r2 = await spin(`cloning ${p.name}\u2026`, () => gitA(["clone", "-q", ...p.branch ? ["-b", p.branch] : [], p.url, root], void 0, { check: false }));
     let note3 = "";
     if (r2.code !== 0 && p.branch && /Remote branch .* not found/.test(r2.err)) {
-      r2 = await spin(`cloning ${p.name} (default branch)\u2026`, async () => git(["clone", "-q", p.url, root], void 0, { check: false }));
+      r2 = await spin(`cloning ${p.name} (default branch)\u2026`, () => gitA(["clone", "-q", p.url, root], void 0, { check: false }));
       if (r2.code === 0) {
         note3 = yellow(` (branch '${p.branch}' not on remote \u2014 got '${currentBranch(root)}', fix projects.toml)`);
       }
@@ -8276,7 +8330,7 @@ ${o.description ?? ""}`.trimEnd() + "\n");
     step(`first commit on ${branch}  ${dim(`${ident2.name} <${ident2.email}>`)}`);
   }
   if (kind === "git" && url && !o.noGithub && !aheadBehind(root)) {
-    const r2 = await spin("pushing\u2026", async () => git(["push", "-q", "-u", "origin", branch], root, { check: false, timeout: 60 }));
+    const r2 = await spin("pushing\u2026", () => gitA(["push", "-q", "-u", "origin", branch], root, { check: false, timeout: 60 }));
     if (r2.code !== 0) {
       fail(r2.err.split("\n").pop() ?? "push failed");
       return 1;
@@ -8348,20 +8402,20 @@ function newConfigRepo(dest, branch = "master") {
 async function accessLoop(sshUrl, gh, interactive, machine) {
   const { pub, created } = ensureKey(machine);
   if (created) step(`master key generated  ${dim(KEY)}`);
-  let [ok2, err] = await spin("checking access to the config repo\u2026", async () => canAccess(sshUrl));
+  let [ok2, err] = await spin("checking access to the config repo\u2026", () => canAccess(sshUrl));
   let tries = 0;
   while (!ok2) {
     instructions(pub, gh, machine);
     if (!interactive) throw new Error("cs: config repo not reachable with the master key (see instructions above)");
     if (!await proceed("added the key?", "Done \u2014 check access", "Abort") || tries++ >= 10) throw new Error("cs: aborted \u2014 config repo not reachable");
-    [ok2, err] = await spin("checking access\u2026", async () => canAccess(sshUrl));
+    [ok2, err] = await spin("checking access\u2026", () => canAccess(sshUrl));
     if (!ok2) warn(`still no access \u2014 ${err}`);
   }
   step("config repo reachable with the master key");
 }
 async function cloneConfig(sshUrl, target) {
   mkdirSync12(dirname8(target), { recursive: true });
-  await spin("cloning the config repo\u2026", async () => git(["clone", "-q", sshUrl, target], void 0, { sshKey: keyPath2() }));
+  await spin("cloning the config repo\u2026", () => gitA(["clone", "-q", sshUrl, target], void 0, { sshKey: keyPath2() }));
   configureRepo(target);
   step(`config repo cloned to ${dim(contract(target))}`);
 }
@@ -8370,7 +8424,7 @@ async function askUrl(prompt) {
     const raw = await text2(prompt, { placeholder: "https://github.com/<owner>/claude-share-config", validate: (v) => v.trim() ? void 0 : "a URL is required" });
     const [sshUrl, gh] = parseRepoUrl(raw);
     if (gh) {
-      const vis = await spin("looking up the repository\u2026", async () => isPublic(httpsUrl(...gh)));
+      const vis = await spin("looking up the repository\u2026", () => isPublic(httpsUrl(...gh)));
       if (vis === true) step(`${gh[0]}/${gh[1]} found (public)`);
       else if (vis === false) step(`${gh[0]}/${gh[1]} found (private) \u2014 access via the master key`);
       else {
@@ -8399,7 +8453,7 @@ async function create2(target, interactive, machine) {
   newConfigRepo(target);
   if (!remoteUrl(target)) git(["remote", "add", "origin", sshUrl], target);
   configureRepo(target);
-  await spin("pushing the initial config repo\u2026", async () => git(["push", "-q", "-u", "origin", currentBranch(target)], target));
+  await spin("pushing the initial config repo\u2026", () => gitA(["push", "-q", "-u", "origin", currentBranch(target)], target));
   step(`config repo initialized and pushed  ${dim(sshUrl)}`);
 }
 async function machineName(existingName, interactive) {
@@ -8868,7 +8922,7 @@ async function gitSync(repo, label, machine, o = {}) {
       ok(`${label}: no remote configured; local only`);
       return true;
     }
-    const f = await spin(`${label}: fetching\u2026`, async () => git(["fetch", "-q", "--prune", "origin"], repo, { check: false, timeout }));
+    const f = await spin(`${label}: fetching\u2026`, () => gitA(["fetch", "-q", "--prune", "origin"], repo, { check: false, timeout }));
     if (f.code !== 0) {
       warn(`${label}: offline or fetch timed out; will push later`);
       writeFileSync14(join19(stateDir(), `last-${label}`), "offline\n");
@@ -8882,7 +8936,7 @@ async function gitSync(repo, label, machine, o = {}) {
     if (!out(["rev-parse", "--abbrev-ref", "@{upstream}"], repo)) {
       if (out(["rev-parse", "--verify", "-q", `origin/${branch}`], repo)) git(["branch", "-q", `--set-upstream-to=origin/${branch}`, branch], repo);
       else if (!o.pullOnly) {
-        await spin(`${label}: pushing\u2026`, async () => git(["push", "-q", "-u", "origin", branch], repo, { timeout }));
+        await spin(`${label}: pushing\u2026`, () => gitA(["push", "-q", "-u", "origin", branch], repo, { timeout }));
         ok(`${label}: pushed new branch ${branch}`);
         return true;
       } else return true;
@@ -8910,7 +8964,7 @@ async function gitSync(repo, label, machine, o = {}) {
     if (!o.pullOnly) {
       const ab = aheadBehind(repo);
       if (ab && ab[0]) {
-        const pr = await spin(`${label}: pushing\u2026`, async () => git(["push", "-q", "origin", branch], repo, { check: false, timeout }));
+        const pr = await spin(`${label}: pushing\u2026`, () => gitA(["push", "-q", "origin", branch], repo, { check: false, timeout }));
         if (pr.code !== 0) {
           warn(`${label}: push rejected, retrying once`);
           unlock(label, fd);
@@ -9275,7 +9329,7 @@ program2.command("self-update").description("update the cs tool itself").action(
     const root = toolRoot();
     if (!isRepo(root)) throw new Error(`cs: ${root} is not a git checkout`);
     const before = out(["rev-parse", "--short", "HEAD"], root);
-    const r2 = await spin("checking for updates\u2026", async () => git(["pull", "-q", "--ff-only"], root, { check: false, timeout: 60 }));
+    const r2 = await spin("checking for updates\u2026", () => gitA(["pull", "-q", "--ff-only"], root, { check: false, timeout: 60 }));
     if (r2.code !== 0) throw new Error(`cs: update failed
 ${r2.err}`);
     const after = out(["rev-parse", "--short", "HEAD"], root);
@@ -9343,6 +9397,29 @@ program2.command("enroll <machine>").description("grant another machine access t
 program2.command("revoke <machine>").description("remove a machine's access to secrets").action(async (mc) => {
   const { repo, m } = ctx();
   await command(`cs revoke ${mc}`, async () => group("revoked", async () => (await S()).revoke(repo, m, mc)));
+});
+program2.command("ui-demo", { hidden: true }).description("show every UI element with fake data").action(async () => {
+  const sleep = (ms) => new Promise((r2) => setTimeout(r2, ms));
+  await command("cs ui-demo", async () => {
+    await spin("a 2-second spinner (must animate)\u2026", () => sleep(2e3));
+    await group("grouped phase with items", async () => {
+      for (const n3 of ["alpha", "beta", "gamma"]) {
+        await spin(`working on ${n3}\u2026`, () => sleep(600));
+        step(`${n3} done`);
+      }
+    });
+    await group("empty phase", () => {
+    }, { done: "nothing to do" });
+    table([[green("\u2713"), "node", dim("v22")], [yellow("!"), "gh", dim("missing")]]);
+    note2([`title  ${bold("cs:demo:master")}`, `key    ${bold("ssh-ed25519 AAAA\u2026 cs:demo:master")}`], "a note box");
+    warn("a warning");
+    fail("an error line (does not abort)");
+    if (isTTY()) {
+      const v = await select2("a select", [{ value: "a", label: "Option A", hint: "hint" }, { value: "b", label: "Option B" }]);
+      const ok2 = await confirm2(`you picked ${v} \u2014 confirm?`, true);
+      step(`confirm \u2192 ${ok2}`);
+    }
+  }, { outro: () => dim("demo over") });
 });
 var proj = program2.command("project").description("project helpers");
 proj.command("id").description("print the project name for the cwd").action(() => {

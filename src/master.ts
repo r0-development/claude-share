@@ -24,16 +24,17 @@ export function parseRepoUrl(text: string): [string, [string, string] | undefine
   return m ? [`git@github.com:${m[1]}/${m[2]}.git`, [m[1], m[2]]] : [t, undefined];
 }
 export const httpsUrl = (o: string, r: string) => `https://github.com/${o}/${r}.git`;
-export function isPublic(url: string): boolean | undefined {
+export async function isPublic(url: string): Promise<boolean | undefined> {
   if (!url.startsWith("https://") || process.env.CS_OFFLINE) return undefined;
-  const p = spawnSync("git", ["ls-remote", "--exit-code", url, "HEAD"], { encoding: "utf8", env: { ...process.env, GIT_TERMINAL_PROMPT: "0" }, timeout: 30000, stdio: ["ignore", "pipe", "pipe"] });
-  if (p.status === 0) return true;
-  return /Authentication failed|could not read Username|Repository not found/.test(p.stderr ?? "") ? false : undefined;
+  const { exec } = await import("./proc.js");
+  const p = await exec("git", ["ls-remote", "--exit-code", url, "HEAD"], { env: { ...process.env, GIT_TERMINAL_PROMPT: "0" }, timeout: 30 });
+  if (p.code === 0) return true;
+  return /Authentication failed|could not read Username|Repository not found/.test(p.err) ? false : undefined;
 }
-export function canAccess(sshUrl: string): [boolean, string] {
-  const p = spawnSync("git", ["ls-remote", sshUrl, "HEAD"], { encoding: "utf8", timeout: 30000, stdio: ["ignore", "pipe", "pipe"],
-    env: { ...process.env, GIT_SSH_COMMAND: `ssh -i ${keyPath()} -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=accept-new` } });
-  return [p.status === 0, (p.stderr ?? "").trim().split("\n").pop() ?? ""];
+export async function canAccess(sshUrl: string): Promise<[boolean, string]> {
+  const { exec } = await import("./proc.js");
+  const p = await exec("git", ["ls-remote", sshUrl, "HEAD"], { timeout: 30, env: { ...process.env, GIT_SSH_COMMAND: `ssh -i ${keyPath()} -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=accept-new` } });
+  return [p.code === 0, p.err.split("\n").pop() ?? ""];
 }
 export async function registerDeployKey(owner: string, repo: string, pub: string, title: string): Promise<string | undefined> {
   const tok = github.getToken(owner); if (!tok || process.env.CS_OFFLINE) return undefined;
@@ -53,8 +54,8 @@ export async function setup(repoDir: string, interactive = true): Promise<number
   const url = git.remoteUrl(repoDir); if (!url) { ui.warn("config repo has no remote"); return 1; }
   const [sshUrl, gh] = parseRepoUrl(url); const { pub, created } = ensureKey();
   ui.kv("master key", KEY + (created ? "  (generated)" : ""));
-  let [ok] = canAccess(sshUrl);
-  while (!ok) { instructions(pub, gh, (await import("./config.js")).loadMachine().name); if (!interactive || !(await ui.proceed("added the key?"))) return 1; [ok] = canAccess(sshUrl); }
+  let [ok] = await ui.spin("checking access…", () => canAccess(sshUrl));
+  while (!ok) { instructions(pub, gh, (await import("./config.js")).loadMachine().name); if (!interactive || !(await ui.proceed("added the key?"))) return 1; [ok] = await ui.spin("checking access…", () => canAccess(sshUrl)); }
   if (sshUrl !== url) git.git(["remote", "set-url", "origin", sshUrl], repoDir);
   configureRepo(repoDir); ui.ok(`config repo uses the master key (${sshUrl})`); return 0;
 }

@@ -86,7 +86,7 @@ program.command("hooks [action]").description("automatic sync: install | remove 
 program.command("self-update").description("update the cs tool itself").action(async () => { await ui.command("cs self-update", async () => {
   const root = toolRoot(); if (!git.isRepo(root)) throw new Error(`cs: ${root} is not a git checkout`);
   const before = git.out(["rev-parse", "--short", "HEAD"], root);
-  const r = await ui.spin("checking for updates…", async () => git.git(["pull", "-q", "--ff-only"], root, { check: false, timeout: 60 }));
+  const r = await ui.spin("checking for updates…", () => git.gitA(["pull", "-q", "--ff-only"], root, { check: false, timeout: 60 }));
   if (r.code !== 0) throw new Error(`cs: update failed\n${r.err}`);
   const after = git.out(["rev-parse", "--short", "HEAD"], root);
   if (before === after) ui.ok(`already up to date  ${ui.dim(`(${after})`)}`); else { const n = git.out(["rev-list", "--count", `${before}..${after}`], root); ui.ok(`updated ${before} → ${after}  ${ui.dim(`${n} commit(s)`)}`); for (const l of git.out(["log", "--format=%s", `${before}..${after}`], root).split("\n").slice(0, 8)) ui.info(ui.dim("• " + l)); }
@@ -108,6 +108,19 @@ sec.command("exec [command...]").description("run a command with global + projec
 sec.command("recovery").action(async () => { const { repo, m } = ctx(); await ui.command("cs secrets recovery", async () => (await S()).recovery(repo, m)); });
 program.command("enroll <machine>").description("grant another machine access to secrets").action(async (mc) => { const { repo, m } = ctx(); await ui.command(`cs enroll ${mc}`, async () => ui.group("enrolled", async () => (await S()).enroll(repo, m, mc)), { outro: () => ui.dim(`now: cs sync here, then cs sync on ${mc}`) }); });
 program.command("revoke <machine>").description("remove a machine's access to secrets").action(async (mc) => { const { repo, m } = ctx(); await ui.command(`cs revoke ${mc}`, async () => ui.group("revoked", async () => (await S()).revoke(repo, m, mc))); });
+program.command("ui-demo", { hidden: true }).description("show every UI element with fake data").action(async () => {
+  const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+  await ui.command("cs ui-demo", async () => {
+    await ui.spin("a 2-second spinner (must animate)…", () => sleep(2000));
+    await ui.group("grouped phase with items", async () => { for (const n of ["alpha", "beta", "gamma"]) { await ui.spin(`working on ${n}…`, () => sleep(600)); ui.step(`${n} done`); } });
+    await ui.group("empty phase", () => {}, { done: "nothing to do" });
+    ui.table([[ui.green("✓"), "node", ui.dim("v22")], [ui.yellow("!"), "gh", ui.dim("missing")]]);
+    ui.note([`title  ${ui.bold("cs:demo:master")}`, `key    ${ui.bold("ssh-ed25519 AAAA… cs:demo:master")}`], "a note box");
+    ui.warn("a warning"); ui.fail("an error line (does not abort)");
+    if (ui.isTTY()) { const v = await ui.select("a select", [{ value: "a", label: "Option A", hint: "hint" }, { value: "b", label: "Option B" }]); const ok = await ui.confirm(`you picked ${v} — confirm?`, true); ui.step(`confirm → ${ok}`); }
+  }, { outro: () => ui.dim("demo over") });
+});
+
 const proj = program.command("project").description("project helpers");
 proj.command("id").description("print the project name for the cwd").action(() => { const { m, man } = ctx(); const p = projectForPath(man, m, process.cwd()); if (p) console.log(p.name); else process.exitCode = 1; });
 

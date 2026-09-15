@@ -12,10 +12,11 @@ import * as ui from "./ui.js";
 
 const MARK = "# >>> claude-share >>>", END = "# <<< claude-share <<<";
 function keygen(key: string, comment: string) { mkdirSync(dirname(key), { recursive: true, mode: 0o700 }); const p = spawnSync("ssh-keygen", ["-q", "-t", "ed25519", "-N", "", "-C", comment, "-f", key]); if (p.status !== 0) throw new Error("cs: ssh-keygen failed"); chmodSync(key, 0o600); }
-export function githubUserForKey(key: string): string | undefined {
+export async function githubUserForKey(key: string): Promise<string | undefined> {
   if (process.env.CS_OFFLINE) return undefined;
-  const p = spawnSync("ssh", ["-T", "-i", key, "-o", "IdentitiesOnly=yes", "-o", "StrictHostKeyChecking=accept-new", "-o", "BatchMode=yes", "git@github.com"], { encoding: "utf8", timeout: 20000, stdio: ["ignore", "pipe", "pipe"] });
-  return ((p.stdout ?? "") + (p.stderr ?? "")).match(/Hi ([^!]+)!/)?.[1];
+  const { exec } = await import("./proc.js");
+  const p = await exec("ssh", ["-T", "-i", key, "-o", "IdentitiesOnly=yes", "-o", "StrictHostKeyChecking=accept-new", "-o", "BatchMode=yes", "git@github.com"], { timeout: 20 });
+  return (p.out + p.err).match(/Hi ([^!]+)!/)?.[1];
 }
 export function writeSshConfig(): boolean {
   const cfg = join(home(), ".ssh", "config"); const text = existsSync(cfg) ? readFileSync(cfg, "utf8") : "";
@@ -39,9 +40,9 @@ export async function setup(repo: string, m: Machine, man: Manifest, checkOnly =
     if (!existsSync(key)) { if (checkOnly) { rows.push([i.id, keyPath(i), ui.red("missing")]); unregistered.push(i); continue; } keygen(key, `cs:${m.name}:${i.id}`); state.push(ui.green("generated")); }
     const pub = readFileSync(pubf, "utf8").trim(); const dest = join(repo, "machines", m.name, "ssh", `${i.id}.pub`);
     if (!checkOnly && (!existsSync(dest) || readFileSync(dest, "utf8").trim() !== pub)) { mkdirSync(dirname(dest), { recursive: true }); writeFileSync(dest, pub + "\n"); git.git(["add", dest], repo); published = true; }
-    let user = await ui.spin(`verifying ${i.id} key on GitHub…`, async () => githubUserForKey(key));
+    let user = await ui.spin(`verifying ${i.id} key on GitHub…`, () => githubUserForKey(key));
     if (user) state.push(ui.green(`github: ${user}`));
-    else if (!checkOnly) { const r = await ui.spin(`registering ${i.id} key…`, async () => register(i, pub, `cs:${m.name}:${i.id}`)); user = githubUserForKey(key); if (user) state.push(ui.green(`github: ${user}`)); else { state.push(ui.yellow(r.startsWith("registered") ? "registered, not verified yet" : "needs registering")); unregistered.push(i); } }
+    else if (!checkOnly) { const r = await ui.spin(`registering ${i.id} key…`, () => register(i, pub, `cs:${m.name}:${i.id}`)); user = await githubUserForKey(key); if (user) state.push(ui.green(`github: ${user}`)); else { state.push(ui.yellow(r.startsWith("registered") ? "registered, not verified yet" : "needs registering")); unregistered.push(i); } }
     else { state.push(ui.yellow("not accepted by GitHub yet")); unregistered.push(i); }
     rows.push([i.id, keyPath(i), state.join("  ")]);
   }

@@ -65,12 +65,12 @@ export async function exec(repo: string, m: Machine, man: Manifest, project: str
 export async function enroll(repo: string, m: Machine, machine: string) {
   const pf = S.machinePubFile(repo, machine); if (!existsSync(pf)) throw new Error(`cs: ${contract(pf)} not found — run cs secrets init on ${machine} and cs sync on both sides first`);
   const pub = readFileSync(pf, "utf8").trim(); const recs = S.recipients(repo); if (recs.includes(pub)) { ui.ok(`${machine} is already a recipient`); return 0; }
-  S.writeRecipients(repo, [...recs, pub]); const n = await ui.spin("re-encrypting secrets for the new recipient…", async () => S.updatekeys(repo)); git.git(["add", "-A", ".sops.yaml", "secrets"], repo); git.commit(repo, `secrets: enroll ${machine}`, "cs", `cs@${m.name}`);
+  S.writeRecipients(repo, [...recs, pub]); const n = await ui.spin("re-encrypting secrets for the new recipient…", () => S.updatekeys(repo)); git.git(["add", "-A", ".sops.yaml", "secrets"], repo); git.commit(repo, `secrets: enroll ${machine}`, "cs", `cs@${m.name}`);
   ui.ok(`${machine} can now decrypt  ${ui.dim(`${n} file(s) re-encrypted`)}`); return 0;
 }
 export async function revoke(repo: string, m: Machine, machine: string) {
   const pf = S.machinePubFile(repo, machine); const pub = existsSync(pf) ? readFileSync(pf, "utf8").trim() : ""; const recs = S.recipients(repo);
-  if (pub && recs.includes(pub)) { S.writeRecipients(repo, recs.filter((r) => r !== pub)); const n = await ui.spin("re-encrypting secrets without that machine…", async () => S.updatekeys(repo)); rmSync(join(repo, "machines", machine), { recursive: true, force: true });
+  if (pub && recs.includes(pub)) { S.writeRecipients(repo, recs.filter((r) => r !== pub)); const n = await ui.spin("re-encrypting secrets without that machine…", () => S.updatekeys(repo)); rmSync(join(repo, "machines", machine), { recursive: true, force: true });
     git.git(["add", "-A", ".sops.yaml", "secrets", "machines"], repo); git.commit(repo, `secrets: revoke ${machine}`, "cs", `cs@${m.name}`); ui.ok(`revoked ${machine}; re-encrypted ${n} file(s)`); }
   else ui.warn(`${machine} was not a recipient`);
   const b = await getBackend(m); const keys = new Set<string>();
@@ -78,13 +78,13 @@ export async function revoke(repo: string, m: Machine, machine: string) {
   if (keys.size) ui.warn("that machine could read these — rotate them at the source: " + [...keys].sort().join(", ")); return 0;
 }
 function man_projects(repo: string): Record<string, true> { const d = join(repo, "secrets", "projects"); const out: Record<string, true> = {}; if (existsSync(d)) for (const f of readdirSync(d)) if (f.endsWith(".env")) out[f.slice(0, -4)] = true; return out; }
-export function recovery(repo: string, m: Machine) {
+export async function recovery(repo: string, m: Machine) {
   const tmp = join(home(), ".cache", `cs-recovery-${process.pid}.txt`); const exe = which("age-keygen") || join(home(), ".local", "bin", "age-keygen");
   const p = spawnSync(exe, ["-o", tmp], { encoding: "utf8" }); if (p.status !== 0) throw new Error("cs: age-keygen failed");
   const text = readFileSync(tmp, "utf8"); rmSync(tmp, { force: true });
   const pub = text.split("\n").find((l) => l.startsWith("# public key:"))!.split(":")[1].trim(); const priv = text.split("\n").find((l) => l.startsWith("AGE-SECRET-KEY-"))!;
   const pf = S.machinePubFile(repo, "recovery"); mkdirSync(join(repo, "machines", "recovery"), { recursive: true }); writeFileSync(pf, pub + "\n");
-  S.writeRecipients(repo, [...S.recipients(repo), pub]); const n = S.updatekeys(repo); git.git(["add", "-A", ".sops.yaml", "secrets", "machines/recovery"], repo); git.commit(repo, "secrets: recovery recipient", "cs", `cs@${m.name}`);
+  S.writeRecipients(repo, [...S.recipients(repo), pub]); const n = await S.updatekeys(repo); git.git(["add", "-A", ".sops.yaml", "secrets", "machines/recovery"], repo); git.commit(repo, "secrets: recovery recipient", "cs", `cs@${m.name}`);
   ui.ok(`recovery recipient added; re-encrypted ${n} file(s)`); ui.note([priv, "", ui.dim("On a bare machine: write it to ~/.config/sops/age/keys.txt, run cs secrets init, enroll the machine's own key, delete it.")], "Store this in your password manager now — it is not saved anywhere else");
   return 0;
 }

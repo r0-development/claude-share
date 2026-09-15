@@ -37,13 +37,13 @@ export async function clone(repo: string, m: Machine, man: Manifest, names: stri
     if (existsSync(root)) { if (p.kind === "git" && git.isRepo(root) && p.url && git.canonicalGithub(git.remoteUrl(root)) !== git.canonicalGithub(p.url)) { ui.fail(`${p.name}: exists with a different remote (${git.remoteUrl(root)}); not touching it`); rc = 1; } continue; }
     if (p.kind === "local") { ui.info(`${p.name}: local-only, skipped`); continue; }
     if (p.kind === "synced") { if (dryRun) { ui.step(`${p.name}: would ${p.url ? "clone" : "create"} ${contract(root)}`); continue; }
-      await ui.spin(`${p.name}…`, async () => { if (p.url) git.git(["clone", "-q", p.url, root]); else mkdirSync(root, { recursive: true }); }); ui.step(`${p.name} → ${contract(root)}`); cloned.push(p.name); continue; }
+      await ui.spin(`${p.name}…`, async () => { if (p.url) await git.gitA(["clone", "-q", p.url, root]); else mkdirSync(root, { recursive: true }); }); ui.step(`${p.name} → ${contract(root)}`); cloned.push(p.name); continue; }
     if (dryRun) { ui.step(`${p.name}: would clone ${p.url} → ${contract(root)}`); continue; }
     mkdirSync(cont, { recursive: true });
-    let r = await ui.spin(`cloning ${p.name}…`, async () => git.git(["clone", "-q", ...(p.branch ? ["-b", p.branch] : []), p.url!, root], undefined, { check: false }));
+    let r = await ui.spin(`cloning ${p.name}…`, () => git.gitA(["clone", "-q", ...(p.branch ? ["-b", p.branch] : []), p.url!, root], undefined, { check: false }));
     let note = "";
     if (r.code !== 0 && p.branch && /Remote branch .* not found/.test(r.err)) {
-      r = await ui.spin(`cloning ${p.name} (default branch)…`, async () => git.git(["clone", "-q", p.url!, root], undefined, { check: false }));
+      r = await ui.spin(`cloning ${p.name} (default branch)…`, () => git.gitA(["clone", "-q", p.url!, root], undefined, { check: false }));
       if (r.code === 0) { note = ui.yellow(` (branch '${p.branch}' not on remote — got '${git.currentBranch(root)}', fix projects.toml)`); }
     }
     if (r.code !== 0) { ui.fail(`${p.name}: ${r.err.split("\n").pop()}`); rc = 1; continue; }
@@ -83,7 +83,7 @@ export async function create(repo: string, m: Machine, man: Manifest, name: stri
     git.git(["add", "-A"], root); git.commit(root, "init", ident.name, ident.email); ui.step(`first commit on ${branch}  ${ui.dim(`${ident.name} <${ident.email}>`)}`);
   }
   if (kind === "git" && url && !o.noGithub && !git.aheadBehind(root)) {
-    const r = await ui.spin("pushing…", async () => git.git(["push", "-q", "-u", "origin", branch], root, { check: false, timeout: 60 }));
+    const r = await ui.spin("pushing…", () => git.gitA(["push", "-q", "-u", "origin", branch], root, { check: false, timeout: 60 }));
     if (r.code !== 0) { ui.fail(r.err.split("\n").pop() ?? "push failed"); return 1; } ui.step(`pushed ${branch} to ${owner}/${name}`);
   }
   const p: Project = { name, kind: kind === "git" && !url ? "local" : kind, url: kind === "git" ? url : "", identity: kind === "git" ? ident.id : "", profiles: o.profiles, machines: [], branch: kind === "git" ? branch : "", layout: "plain", description: o.description, handoff: {}, sync: {} };
