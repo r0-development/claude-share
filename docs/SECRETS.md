@@ -29,7 +29,7 @@ so diffs make sense. A pre-commit guard refuses plaintext there.
 `cs -q secrets exec -- command claude "$@"`, so every MCP server spawned by Claude inherits the decrypted values.
 Reference them in the side-store `.mcp.json` as `${NAME}` — `cs adopt mcp <project>` writes exactly that.
 IDE-launched Claude bypasses the wrapper: start the IDE from a `cs-shell`, or use
-`"command": "cs", "args": ["-q", "secrets", "exec", "--", "npx", …]` for that server.
+`"command": "cs", "args": ["secrets", "exec", "--", "npx", …]` for that server.
 
 ## Threat model
 

@@ -4,8 +4,9 @@
 curl -fsSL https://raw.githubusercontent.com/r0-development/claude-share/master/install.sh | bash
 ```
 
-Prerequisites are only `git`, `curl`, `python3` (WSL/Ubuntu has them; macOS: `xcode-select --install`). The installer
-clones the tool to `~/.local/share/claude-share`, links `~/.local/bin/cs` and starts `cs init` — a wizard.
+Prerequisites are only `git` and `curl` (WSL/Ubuntu has them; macOS: `xcode-select --install`). The installer brings
+Node 22 via fnm when no Node ≥ 18 exists, clones the tool to `~/.local/share/claude-share`, links `~/.local/bin/cs`
+and starts `cs init` — a wizard.
 Arguments after `bash -s --` go to `cs init` (e.g. `bash -s -- --repo <url> --name laptop --profiles personal`). Everything is re-runnable; finished steps are skipped.
 
 ## 1. Join an existing share, or create one

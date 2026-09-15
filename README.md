@@ -12,8 +12,8 @@ Keep your projects **and** your Claude Code setup identical on every machine.
 - **Secrets** — sops + age, per-machine keys, decrypted into `claude`'s environment at launch so `${VAR}` in `.mcp.json` resolve. Never plaintext in git.
 - **Automatic sync** — Claude Code hooks push after each response and pull at session start; a timer syncs every 15 min.
 
-Two repos: this tool (public) and your own config repo (private, holds all your data). Python 3.9+, git — nothing else.
-WSL2 on Windows, macOS, Linux. Windows-native is unsupported.
+Two repos: this tool (public) and your own config repo (private, holds all your data). Node 18+ and git — nothing else
+(the installer brings Node if it's missing). WSL2 on Windows, macOS, Linux. Windows-native is unsupported.
 
 ## Quick start
 
@@ -21,8 +21,8 @@ WSL2 on Windows, macOS, Linux. Windows-native is unsupported.
 curl -fsSL https://raw.githubusercontent.com/r0-development/claude-share/master/install.sh | bash
 ```
 
-One command on a fresh WSL2 Ubuntu or macOS: installs the tool to `~/.local/share/claude-share`, links `~/.local/bin/cs`,
-and starts `cs init` — a wizard: join an existing share (paste its GitHub URL) or create a new one; a per-machine **master key**
+One command on a fresh WSL2 Ubuntu or macOS: installs Node if needed, the tool to `~/.local/share/claude-share`, links
+`~/.local/bin/cs`, and starts `cs init` — a wizard: join an existing share (paste its GitHub URL) or create a new one; a per-machine **master key**
 gets this machine into the config repo (deploy key); pick a machine name and profiles; identities from the repo get their
 SSH keys and tokens; choose where projects live (default `~/dev`); then everything is applied and projects can be cloned. Details: `docs/BOOTSTRAP.md`.
 
@@ -157,3 +157,12 @@ cs secrets recovery                        # print a recovery key once → passw
 | `cs self-update` | update the tool |
 
 Docs: `docs/BOOTSTRAP.md`, `docs/SECRETS.md`, `docs/WINDOWS.md`.
+
+## Developing
+
+```sh
+git clone https://github.com/r0-development/claude-share.git && cd claude-share
+npm install            # dev toolchain only (TypeScript, esbuild, @clack/prompts, commander, smol-toml)
+npm run build          # → dist/cs.js (committed; bin/cs runs it)
+npm test               # typecheck + build + unit (node:test) + e2e (tests/run-local.sh, throwaway HOME)
+```
