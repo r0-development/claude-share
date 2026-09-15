@@ -5,7 +5,9 @@ import pc from "picocolors";
 import { createInterface } from "node:readline";
 
 let quiet = false;
+let collecting: string[] | null = null;
 export const setQuiet = (q: boolean) => { quiet = q; };
+const strip = (s: string) => s.replace(/\x1b\[[0-9;]*m/g, "");
 export const isQuiet = () => quiet;
 export const isTTY = () => Boolean(process.stdin.isTTY && process.stdout.isTTY);
 
@@ -17,10 +19,23 @@ export const c = pc;
 export const dim = pc.dim, bold = pc.bold, green = pc.green, yellow = pc.yellow, red = pc.red, cyan = pc.cyan, gray = pc.gray, magenta = pc.magenta;
 
 // ---------------------------------------------------------------- messages
-export function info(msg = "") { if (!quiet) p.log.message(msg); }
-export function ok(msg: string) { if (!quiet) p.log.success(msg); }
-export function step(msg: string) { if (!quiet) p.log.step(msg); }
-export function skip(msg: string) { if (!quiet) p.log.message(pc.dim("○ " + msg)); }
+export function info(msg = "") { if (collecting) { if (msg) collecting.push(msg); return; } if (!quiet) p.log.message(msg); }
+export function ok(msg: string) { if (collecting) { collecting.push(msg); return; } if (!quiet) p.log.success(msg); }
+export function step(msg: string) { if (collecting) { collecting.push(msg); return; } if (!quiet) p.log.step(msg); }
+export function skip(msg: string) { if (collecting) return; if (!quiet) p.log.message(pc.dim("○ " + msg)); }
+
+/** Run fn with its step/ok/info output collected; print ONE summary line for the whole task. */
+export async function group<T>(title: string, fn: () => Promise<T> | T, opts: { done?: string; max?: number } = {}): Promise<T> {
+  const prev = collecting; const mine: string[] = []; collecting = mine;
+  let result: T;
+  try { result = await fn(); } finally { collecting = prev; }
+  if (quiet) return result!;
+  const items = mine.map((m) => strip(m).trim()).filter(Boolean);
+  const max = opts.max ?? 8;
+  const summary = items.length ? items.slice(0, max).join(pc.dim(" · ")) + (items.length > max ? pc.dim(` · +${items.length - max} more`) : "") : (opts.done ?? "up to date");
+  p.log.success(pc.bold(title) + "\n" + pc.dim(summary));
+  return result!;
+}
 export function warn(msg: string) { p.log.warn(msg); }
 export function fail(msg: string) { p.log.error(msg); }
 export function error(what: string, why = "", fix = "") {
@@ -36,6 +51,7 @@ export function note(lines: string[], title?: string) { if (!quiet) p.note(lines
 export function kv(key: string, value: string, width = 14) { info(`${pc.dim(key.padEnd(width))} ${value}`); }
 
 export function table(rows: string[][], header?: string[]) {
+  if (collecting) { for (const r of rows) collecting.push(r.join("  ")); return; }
   if (quiet || !rows.length) return;
   const all = header ? [header, ...rows] : rows;
   const ncol = Math.max(...all.map((r) => r.length));
@@ -140,12 +156,9 @@ export async function groupMultiselect<T extends string>(message: string, groups
   return v as T[];
 }
 
-/** Pause until Enter; returns "" or the skip key. */
-export async function waitEnter(message: string, skipKey = ""): Promise<string> {
-  const a = nextAnswer();
-  if (a !== undefined) return a === "<default>" ? "" : a;
-  const v = await text(message + (skipKey ? pc.dim(`  (${skipKey} to skip)`) : ""), { placeholder: "press Enter" });
-  return v.trim();
+/** "Done — check again" / "Skip": returns true to continue checking, false to skip. */
+export async function proceed(message: string, doneLabel = "Done — check again", skipLabel = "Skip for now"): Promise<boolean> {
+  return (await select(message, [{ value: "done", label: doneLabel }, { value: "skip", label: skipLabel }])) === "done";
 }
 
 export async function spin<T>(label: string, fn: (update: (l: string) => void) => Promise<T>): Promise<T> {

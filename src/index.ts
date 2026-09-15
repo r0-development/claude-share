@@ -23,7 +23,7 @@ examples:
   cs sync                                  push/pull the config repo (memory, plans, settings)
   cs identity add acme --owner acme-org --name "Me" --email me@acme.com
   cs secrets set global API_TOKEN=…        encrypted, available to Claude's MCP servers as \${API_TOKEN}`);
-program.hook("preAction", (cmd) => ui.setQuiet(Boolean(program.opts().quiet || (cmd.opts() as any).quiet)));
+program.hook("preAction", (_root, cmd) => ui.setQuiet(Boolean(program.opts().quiet || (cmd.opts() as any).quiet)));
 
 program.command("init").description("set this machine up (wizard) — or --repo <url> / --owner <owner> for scripts")
   .option("--repo <url>", "existing config repo: git URL or local path").option("--owner <owner>", "GitHub user/org to create claude-share-config under")

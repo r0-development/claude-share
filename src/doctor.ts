@@ -25,7 +25,7 @@ export function fix(repo: string, m: Machine, man: Manifest) {
     else ui.warn(`${p.name}: remote ${url} is a different repo than manifest ${p.url}; not changing it`);
   }
 }
-export function runDoctor(repo: string, m: Machine, man: Manifest, doFix = false): number {
+export function runDoctor(repo: string, m: Machine, man: Manifest, doFix = false, compact = false): number {
   if (doFix) fix(repo, m, man);
   const res: R[] = [];
   platform.refuseUnsupported(); res.push(["ok", platform.describe()]);
@@ -48,6 +48,7 @@ export function runDoctor(repo: string, m: Machine, man: Manifest, doFix = false
     if (ident && email !== ident.email) idr.push(["fail", `${p.name}: user.email resolves to '${email || "UNSET"}', expected ${ident.email}`]); }
   res.push(...(idr.length ? idr : [["ok", "git identities resolve per manifest"] as R]));
   const sym = { ok: ui.green("✓"), warn: ui.yellow("!"), fail: ui.red("✗") };
-  ui.table(res.map(([l, msg]) => [sym[l], msg]));
+  if (compact) { const bad = res.filter(([l]) => l !== "ok"); if (bad.length) ui.table(bad.map(([l, msg]) => [sym[l], msg])); ui.step(`${res.length - bad.length} of ${res.length} checks passed`); }
+  else ui.table(res.map(([l, msg]) => [sym[l], msg]));
   return res.some(([l]) => l === "fail") ? 1 : 0;
 }

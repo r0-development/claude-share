@@ -42,11 +42,11 @@ export async function registerDeployKey(owner: string, repo: string, pub: string
     await github.api("POST", `/repos/${owner}/${repo}/keys`, tok, { title, key: pub, read_only: false }); return "registered as deploy key (write)";
   } catch (e: any) { return `could not register via API: ${e.message}`; }
 }
-export function instructions(pub: string, gh?: [string, string]) {
+export function instructions(pub: string, gh: [string, string] | undefined, machine: string) {
   const lines: string[] = [];
-  if (gh) lines.push(`deploy key with write access (recommended): ${ui.cyan(`https://github.com/${gh[0]}/${gh[1]}/settings/keys/new`)}`, `or your account's SSH keys:                 ${ui.cyan("https://github.com/settings/ssh/new")}`, "");
-  lines.push(ui.bold(pub), "", ui.dim("this master key only reaches the config repo; it is separate from your identities"));
-  ui.note(lines, "Add this machine's master public key to the config repo");
+  if (gh) lines.push(`${ui.cyan(`https://github.com/${gh[0]}/${gh[1]}/settings/keys/new`)}  ${ui.dim("→ deploy key, tick \"Allow write access\"")}`, "");
+  lines.push(`title  ${ui.bold(`cs:${machine}:master`)}`, `key    ${ui.bold(pub)}`, "", ui.dim("this key only reaches the config repo; identities get their own keys"));
+  ui.note(lines, "Add this machine's master key to the config repo");
 }
 export const configureRepo = (repoDir: string) => git.git(["config", "core.sshCommand", `ssh -i ${KEY} -o IdentitiesOnly=yes`], repoDir);
 export async function setup(repoDir: string, interactive = true): Promise<number> {
@@ -54,8 +54,7 @@ export async function setup(repoDir: string, interactive = true): Promise<number
   const [sshUrl, gh] = parseRepoUrl(url); const { pub, created } = ensureKey();
   ui.kv("master key", KEY + (created ? "  (generated)" : ""));
   let [ok] = canAccess(sshUrl);
-  if (!ok && gh) { const reg = await registerDeployKey(gh[0], gh[1], pub, "cs:master"); if (reg) { ui.info(reg); [ok] = canAccess(sshUrl); } }
-  while (!ok) { instructions(pub, gh); if (!interactive || (await ui.waitEnter("press Enter when the key is added", "q")) === "q") return 1; [ok] = canAccess(sshUrl); }
+  while (!ok) { instructions(pub, gh, (await import("./config.js")).loadMachine().name); if (!interactive || !(await ui.proceed("added the key?"))) return 1; [ok] = canAccess(sshUrl); }
   if (sshUrl !== url) git.git(["remote", "set-url", "origin", sshUrl], repoDir);
   configureRepo(repoDir); ui.ok(`config repo uses the master key (${sshUrl})`); return 0;
 }

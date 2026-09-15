@@ -11,10 +11,10 @@ default_branch = "master"     # branch `cs new` creates
 #   ssh key  ~/.ssh/cs/<id>  (per machine; `cs ssh setup`)   url match  git@github.com:<owner>/**
 # Add with `cs identity add <id> --owner <owner> --name ".." --email ..`.
 
-[identities.personal]
-owner = "your-github-login"
-name  = "Your Name"
-email = "you@example.com"
+# [identities.personal]           # `cs init` creates your first identity; add more with `cs identity add`
+# owner = "your-github-login"
+# name  = "Your Name"
+# email = "you@example.com"
 
 # [identities.acme]                # one per client/employer org
 # owner = "acme-org"

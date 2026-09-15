@@ -9,33 +9,35 @@ missing; on macOS it asks for `xcode-select --install`. Node 22 is installed use
 exists. Then it clones the tool to `~/.local/share/claude-share`, links `~/.local/bin/cs` and starts `cs init` — a wizard.
 Arguments after `bash -s --` go to `cs init` (e.g. `bash -s -- --repo <url> --name laptop --profiles personal`). Everything is re-runnable; finished steps are skipped.
 
-## 1. Join an existing share, or create one
+## 1. Machine name, then join an existing share or create one
+
+First question: what this machine is called (`desktop-work`, `laptop`, …). Every key it creates carries that name
+(`cs:<machine>:master`, `cs:<machine>:<identity>`), so keys are recognizable on GitHub and revocable per machine.
 
 **Join** — paste the config repo URL in any form (`https://github.com/<owner>/claude-share-config` is fine).
 cs checks whether the repo exists (public or private), then makes sure this machine can reach it:
 
 - a **master key** `~/.ssh/cs/master` is generated. It is this machine's key for the config repo *only* — separate
-  from all identities; without it nothing else works.
-- if a GitHub token for the owner is stored, the key is registered automatically as a **deploy key** (write access).
-  Otherwise the public key is printed with the link `…/settings/keys/new`; add it (deploy key, or your account's SSH keys),
-  press Enter, and cs verifies access.
+  from all identities and never involving a token.
+- the public key is shown with the link `…/settings/keys/new` and the title to use; add it as a **deploy key with write
+  access** (your account's SSH keys work too), choose *Done — check access*, and cs verifies it.
 - the repo is cloned to `~/.config/claude-share/repo`, pinned to the master key.
 
 **Create** — name the repo (default `claude-share-config`), create it *empty and private* on GitHub, paste its URL;
 same master-key step; cs initializes it from the template and pushes.
 
-## 2. Machine
+## 2. Projects and location
 
-Existing machines in the share are listed; pick a name for this one (`desktop-work`, `laptop`…), its profiles —
-the project groups it should get (`personal`, `<org>` …) — and where projects live (default `~/dev`; on WSL keep it in
-the Linux filesystem, not `/mnt/c`).
+Existing machines in the share are listed (a clash asks whether to re-use the name). Then pick **which projects this
+machine should clone and sync** — grouped by profile, everything selected by default — and where they live (`~/dev`
+recommended and created for you; on WSL keep it in the Linux filesystem, not `/mnt/c`).
 
 ## 3. Identities → keys → tokens
 
-From the repo cs knows your identities (owner + name + email). For each one it generates `~/.ssh/cs/<id>` if missing,
-publishes the public half to `machines/<machine>/ssh/`, and registers it on GitHub via the owner's token when the owner
-is a user account — otherwise it prints the key to paste (an org key goes on *your user account* that belongs to the org).
-Then it offers to store a GitHub token per owner (needed for `cs new`; skippable).
+Only the identities used by the selected projects are set up. For each one cs generates `~/.ssh/cs/<id>` if missing,
+publishes the public half to `machines/<machine>/ssh/`, and shows the key with its title and the account it belongs on
+(an org key goes on *your user account* that is a member of the org); *Done — verify* checks it with `ssh -T`.
+Then it offers to store a GitHub token per owner (needed only for `cs new`; skippable).
 
 On a brand-new share the wizard first asks for your first identity.
 

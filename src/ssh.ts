@@ -41,14 +41,15 @@ export async function setup(repo: string, m: Machine, man: Manifest, checkOnly =
     if (!checkOnly && (!existsSync(dest) || readFileSync(dest, "utf8").trim() !== pub)) { mkdirSync(dirname(dest), { recursive: true }); writeFileSync(dest, pub + "\n"); git.git(["add", dest], repo); published = true; }
     let user = githubUserForKey(key);
     if (user) state.push(ui.green(`github: ${user}`));
-    else if (!checkOnly) { state.push(ui.dim(await register(i, pub, `cs:${m.name}:${i.id}`))); user = githubUserForKey(key); if (user) state[state.length - 1] = ui.green(`github: ${user}`); else unregistered.push(i); }
-    else { state.push(ui.red("not accepted by GitHub")); unregistered.push(i); }
+    else if (!checkOnly) { const r = await register(i, pub, `cs:${m.name}:${i.id}`); user = githubUserForKey(key); if (user) state.push(ui.green(`github: ${user}`)); else { state.push(ui.yellow(r.startsWith("registered") ? "registered, not verified yet" : "needs registering")); unregistered.push(i); } }
+    else { state.push(ui.yellow("not accepted by GitHub yet")); unregistered.push(i); }
     rows.push([i.id, keyPath(i), state.join("  ")]);
   }
   if (published) git.commit(repo, `machines: ${m.name} ssh public keys`, "cs", `cs@${m.name}`);
   if (!checkOnly && writeSshConfig()) ui.step("~/.ssh/config: managed block (IdentitiesOnly, AddKeysToAgent)");
   ui.table(rows, ["identity", "key", "state"]);
   for (const i of unregistered) { const pubf = expand(keyPath(i)) + ".pub"; if (!existsSync(pubf)) continue;
-    ui.note([ui.cyan("https://github.com/settings/ssh/new"), "", ui.bold(readFileSync(pubf, "utf8").trim()), "", ui.dim(`title suggestion: cs:${m.name}:${i.id}`)], `Add the '${i.id}' key to ${i.owner ? `the GitHub account that belongs to ${i.owner}` : "your GitHub account"}`); }
+    const who = i.owner && i.owner.toLowerCase() !== i.id.toLowerCase() ? `the ${i.owner} account` : `your GitHub account that is a member of ${i.owner || "the org"}`;
+    ui.note([`${ui.cyan("https://github.com/settings/ssh/new")}  ${ui.dim(`→ logged in as ${who}`)}`, "", `title  ${ui.bold(`cs:${m.name}:${i.id}`)}`, `key    ${ui.bold(readFileSync(pubf, "utf8").trim())}`], `Add the ${i.id} key`); }
   return unregistered.length ? 1 : 0;
 }

@@ -4248,16 +4248,46 @@ function nextAnswer() {
   return scripted && scripted.length ? scripted.shift() : void 0;
 }
 function info(msg = "") {
+  if (collecting) {
+    if (msg) collecting.push(msg);
+    return;
+  }
   if (!quiet) M2.message(msg);
 }
 function ok(msg) {
+  if (collecting) {
+    collecting.push(msg);
+    return;
+  }
   if (!quiet) M2.success(msg);
 }
 function step(msg) {
+  if (collecting) {
+    collecting.push(msg);
+    return;
+  }
   if (!quiet) M2.step(msg);
 }
 function skip(msg) {
+  if (collecting) return;
   if (!quiet) M2.message(import_picocolors3.default.dim("\u25CB " + msg));
+}
+async function group(title, fn, opts = {}) {
+  const prev = collecting;
+  const mine = [];
+  collecting = mine;
+  let result;
+  try {
+    result = await fn();
+  } finally {
+    collecting = prev;
+  }
+  if (quiet) return result;
+  const items = mine.map((m2) => strip(m2).trim()).filter(Boolean);
+  const max = opts.max ?? 8;
+  const summary = items.length ? items.slice(0, max).join(import_picocolors3.default.dim(" \xB7 ")) + (items.length > max ? import_picocolors3.default.dim(` \xB7 +${items.length - max} more`) : "") : opts.done ?? "up to date";
+  M2.success(import_picocolors3.default.bold(title) + "\n" + import_picocolors3.default.dim(summary));
+  return result;
 }
 function warn(msg) {
   M2.warn(msg);
@@ -4287,6 +4317,10 @@ function kv(key, value, width = 14) {
   info(`${import_picocolors3.default.dim(key.padEnd(width))} ${value}`);
 }
 function table(rows, header) {
+  if (collecting) {
+    for (const r2 of rows) collecting.push(r2.join("  "));
+    return;
+  }
   if (quiet || !rows.length) return;
   const all = header ? [header, ...rows] : rows;
   const ncol = Math.max(...all.map((r2) => r2.length));
@@ -4388,11 +4422,8 @@ async function groupMultiselect(message, groups, initial = []) {
   if (pD(v2)) cancelled(v2);
   return v2;
 }
-async function waitEnter(message, skipKey = "") {
-  const a = nextAnswer();
-  if (a !== void 0) return a === "<default>" ? "" : a;
-  const v2 = await text(message + (skipKey ? import_picocolors3.default.dim(`  (${skipKey} to skip)`) : ""), { placeholder: "press Enter" });
-  return v2.trim();
+async function proceed(message, doneLabel = "Done \u2014 check again", skipLabel = "Skip for now") {
+  return await select(message, [{ value: "done", label: doneLabel }, { value: "skip", label: skipLabel }]) === "done";
 }
 async function spin(label, fn) {
   if (quiet || !process.stdout.isTTY) return fn(() => {
@@ -4408,16 +4439,18 @@ async function spin(label, fn) {
     throw e2;
   }
 }
-var import_picocolors3, quiet, setQuiet, isTTY, scripted, isScripted, dim, bold, green, yellow, red, cyan, gray, magenta;
+var import_picocolors3, quiet, collecting, setQuiet, strip, isTTY, scripted, isScripted, dim, bold, green, yellow, red, cyan, gray, magenta;
 var init_ui = __esm({
   "src/ui.ts"() {
     "use strict";
     init_dist2();
     import_picocolors3 = __toESM(require_picocolors(), 1);
     quiet = false;
+    collecting = null;
     setQuiet = (q3) => {
       quiet = q3;
     };
+    strip = (s) => s.replace(/\x1b\[[0-9;]*m/g, "");
     isTTY = () => Boolean(process.stdin.isTTY && process.stdout.isTTY);
     scripted = process.env.CS_ANSWERS ? JSON.parse(process.env.CS_ANSWERS) : null;
     isScripted = () => scripted !== null;
@@ -5369,6 +5402,13 @@ var init_dist3 = __esm({
 });
 
 // src/config.ts
+var config_exports = {};
+__export(config_exports, {
+  loadMachine: () => loadMachine,
+  machineExists: () => machineExists,
+  repoDir: () => repoDir,
+  saveMachine: () => saveMachine
+});
 import { existsSync, mkdirSync, readFileSync as readFileSync2, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 function machineExists() {
@@ -5804,11 +5844,11 @@ async function registerDeployKey(owner2, repo, pub, title) {
     return `could not register via API: ${e2.message}`;
   }
 }
-function instructions(pub, gh) {
+function instructions(pub, gh, machine) {
   const lines = [];
-  if (gh) lines.push(`deploy key with write access (recommended): ${cyan(`https://github.com/${gh[0]}/${gh[1]}/settings/keys/new`)}`, `or your account's SSH keys:                 ${cyan("https://github.com/settings/ssh/new")}`, "");
-  lines.push(bold(pub), "", dim("this master key only reaches the config repo; it is separate from your identities"));
-  note(lines, "Add this machine's master public key to the config repo");
+  if (gh) lines.push(`${cyan(`https://github.com/${gh[0]}/${gh[1]}/settings/keys/new`)}  ${dim('\u2192 deploy key, tick "Allow write access"')}`, "");
+  lines.push(`title  ${bold(`cs:${machine}:master`)}`, `key    ${bold(pub)}`, "", dim("this key only reaches the config repo; identities get their own keys"));
+  note(lines, "Add this machine's master key to the config repo");
 }
 async function setup(repoDir2, interactive = true) {
   const url = remoteUrl(repoDir2);
@@ -5820,16 +5860,9 @@ async function setup(repoDir2, interactive = true) {
   const { pub, created } = ensureKey();
   kv("master key", KEY + (created ? "  (generated)" : ""));
   let [ok2] = canAccess(sshUrl);
-  if (!ok2 && gh) {
-    const reg = await registerDeployKey(gh[0], gh[1], pub, "cs:master");
-    if (reg) {
-      info(reg);
-      [ok2] = canAccess(sshUrl);
-    }
-  }
   while (!ok2) {
-    instructions(pub, gh);
-    if (!interactive || await waitEnter("press Enter when the key is added", "q") === "q") return 1;
+    instructions(pub, gh, (await Promise.resolve().then(() => (init_config(), config_exports))).loadMachine().name);
+    if (!interactive || !await proceed("added the key?")) return 1;
     [ok2] = canAccess(sshUrl);
   }
   if (sshUrl !== url) git(["remote", "set-url", "origin", sshUrl], repoDir2);
@@ -6343,14 +6376,18 @@ async function ageLinux() {
   }
   rmSync2(tmp, { recursive: true, force: true });
 }
-async function runDeps(install = false) {
+async function runDeps(install = false, compact = false) {
   const rows = [];
   let missingRequired = false;
   const apt = [];
+  const present = [];
+  const installed = [];
+  const optional = [];
   for (const [name2, it] of Object.entries(CATALOG)) {
     let path = which(it.cmd);
     if (path) {
       rows.push([green("\u2713"), name2, dim(ver(it.ver).slice(0, 40))]);
+      present.push(name2);
       continue;
     }
     const inst = isMac() ? it.mac : it.linux;
@@ -6364,15 +6401,24 @@ async function runDeps(install = false) {
     }
     if (path) {
       rows.push([green("\u2713"), name2, dim("installed")]);
+      installed.push(name2);
       continue;
     }
     if (it.required) missingRequired = true;
     if (!isMac() && it.apt) apt.push(it.apt);
+    if (!it.required) optional.push(name2 + (it.apt && !isMac() ? ` (sudo apt install -y ${it.apt})` : it.mac ? ` (brew install ${name2})` : ""));
     rows.push([it.required ? red("\u2717") : yellow("!"), name2, dim("missing")]);
   }
-  table(rows);
-  if (apt.length) info(bold("sudo apt install -y " + apt.join(" ")));
-  if (!install && rows.some((r2) => !r2[0].includes("\u2713"))) info(dim("cs deps --install  installs the user-local ones (age, sops, claude)"));
+  if (compact) {
+    step(`${present.length + installed.length} tools ready${installed.length ? ` (installed ${installed.join(", ")})` : ""}`);
+    if (optional.length) step(`optional: ${optional.join(", ")}`);
+    for (const r2 of rows) if (r2[0].includes("\u2717")) step(`missing: ${r2[1]}`);
+  } else {
+    table(rows);
+    if (optional.length) info(dim("optional: " + optional.join(", ")));
+  }
+  if (missingRequired && apt.length) info(bold("sudo apt install -y " + apt.join(" ")));
+  if (!install && !compact && rows.some((r2) => !r2[0].includes("\u2713"))) info(dim("cs deps --install  installs the user-local ones (age, sops, claude)"));
   if (!(process.env.PATH ?? "").split(":").includes(BIN())) warn(`${contract(BIN())} is not on PATH (cs apply adds it to your shell rc)`);
   return missingRequired ? 1 : 0;
 }
@@ -6390,8 +6436,9 @@ var init_deps = __esm({
     };
     a64 = () => ["arm64", "aarch64"].includes(arch()) ? "arm64" : "amd64";
     sh = (cmd) => {
-      const p2 = spawnSync3("bash", ["-lc", cmd], { stdio: "inherit" });
-      if (p2.status !== 0) throw new Error(`command failed: ${cmd}`);
+      const p2 = spawnSync3("bash", ["-lc", cmd], { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
+      if (p2.status !== 0) throw new Error(`command failed: ${cmd}
+${(p2.stderr || p2.stdout || "").trim().split("\n").slice(-5).join("\n")}`);
     };
     brew = (pkg2) => async () => sh(`brew install ${pkg2}`);
     CATALOG = {
@@ -6432,7 +6479,7 @@ function fix(repo, m2, man) {
     } else warn(`${p2.name}: remote ${url} is a different repo than manifest ${p2.url}; not changing it`);
   }
 }
-function runDoctor(repo, m2, man, doFix = false) {
+function runDoctor(repo, m2, man, doFix = false, compact = false) {
   if (doFix) fix(repo, m2, man);
   const res = [];
   refuseUnsupported();
@@ -6478,7 +6525,11 @@ function runDoctor(repo, m2, man, doFix = false) {
   }
   res.push(...idr.length ? idr : [["ok", "git identities resolve per manifest"]]);
   const sym = { ok: green("\u2713"), warn: yellow("!"), fail: red("\u2717") };
-  table(res.map(([l2, msg]) => [sym[l2], msg]));
+  if (compact) {
+    const bad = res.filter(([l2]) => l2 !== "ok");
+    if (bad.length) table(bad.map(([l2, msg]) => [sym[l2], msg]));
+    step(`${res.length - bad.length} of ${res.length} checks passed`);
+  } else table(res.map(([l2, msg]) => [sym[l2], msg]));
   return res.some(([l2]) => l2 === "fail") ? 1 : 0;
 }
 var LINKS;
@@ -6659,12 +6710,15 @@ async function setup2(repo, m2, man, checkOnly = false) {
     let user = githubUserForKey(key);
     if (user) state.push(green(`github: ${user}`));
     else if (!checkOnly) {
-      state.push(dim(await register(i, pub, `cs:${m2.name}:${i.id}`)));
+      const r2 = await register(i, pub, `cs:${m2.name}:${i.id}`);
       user = githubUserForKey(key);
-      if (user) state[state.length - 1] = green(`github: ${user}`);
-      else unregistered.push(i);
+      if (user) state.push(green(`github: ${user}`));
+      else {
+        state.push(yellow(r2.startsWith("registered") ? "registered, not verified yet" : "needs registering"));
+        unregistered.push(i);
+      }
     } else {
-      state.push(red("not accepted by GitHub"));
+      state.push(yellow("not accepted by GitHub yet"));
       unregistered.push(i);
     }
     rows.push([i.id, keyPath(i), state.join("  ")]);
@@ -6675,7 +6729,8 @@ async function setup2(repo, m2, man, checkOnly = false) {
   for (const i of unregistered) {
     const pubf = expand(keyPath(i)) + ".pub";
     if (!existsSync11(pubf)) continue;
-    note([cyan("https://github.com/settings/ssh/new"), "", bold(readFileSync10(pubf, "utf8").trim()), "", dim(`title suggestion: cs:${m2.name}:${i.id}`)], `Add the '${i.id}' key to ${i.owner ? `the GitHub account that belongs to ${i.owner}` : "your GitHub account"}`);
+    const who = i.owner && i.owner.toLowerCase() !== i.id.toLowerCase() ? `the ${i.owner} account` : `your GitHub account that is a member of ${i.owner || "the org"}`;
+    note([`${cyan("https://github.com/settings/ssh/new")}  ${dim(`\u2192 logged in as ${who}`)}`, "", `title  ${bold(`cs:${m2.name}:${i.id}`)}`, `key    ${bold(readFileSync10(pubf, "utf8").trim())}`], `Add the ${i.id} key`);
   }
   return unregistered.length ? 1 : 0;
 }
@@ -7336,7 +7391,11 @@ function clone(repo, m2, man, names, dryRun = false) {
     step(`${p2.name}: git clone ${p2.url} \u2192 ${contract(root)}`);
     if (dryRun) continue;
     mkdirSync11(cont, { recursive: true });
-    const r2 = git(["clone", "-q", ...p2.branch ? ["-b", p2.branch] : [], p2.url, root], void 0, { check: false });
+    let r2 = git(["clone", "-q", ...p2.branch ? ["-b", p2.branch] : [], p2.url, root], void 0, { check: false });
+    if (r2.code !== 0 && p2.branch && /Remote branch .* not found/.test(r2.err)) {
+      r2 = git(["clone", "-q", p2.url, root], void 0, { check: false });
+      if (r2.code === 0) warn(`${p2.name}: branch '${p2.branch}' does not exist on the remote; cloned its default '${currentBranch(root)}' \u2014 fix projects.toml`);
+    }
     if (r2.code !== 0) {
       fail(`${p2.name}: ${r2.err.split("\n").pop()}`);
       rc = 1;
@@ -7482,22 +7541,15 @@ function newConfigRepo(dest, branch = "master") {
   if (isDirty(dest) || !out(["rev-parse", "--verify", "-q", "HEAD"], dest)) commit(dest, "claude-share config skeleton");
   return dest;
 }
-async function accessLoop(sshUrl, gh, interactive) {
-  const { pub, created } = ensureKey();
+async function accessLoop(sshUrl, gh, interactive, machine) {
+  const { pub, created } = ensureKey(machine);
   if (created) step(`master key generated  ${dim(KEY)}`);
   let [ok2, err] = await spin("checking access to the config repo\u2026", async () => canAccess(sshUrl));
-  if (!ok2 && gh) {
-    const reg = await spin("registering the master key as a deploy key\u2026", async () => registerDeployKey(gh[0], gh[1], pub, `cs:master:${describe()}`));
-    if (reg) {
-      step(reg);
-      [ok2, err] = canAccess(sshUrl);
-    }
-  }
   let tries = 0;
   while (!ok2) {
-    instructions(pub, gh);
+    instructions(pub, gh, machine);
     if (!interactive) throw new Error("cs: config repo not reachable with the master key (see instructions above)");
-    if (await waitEnter("press Enter once the key is added", "q") === "q" || tries++ >= 10) throw new Error("cs: aborted \u2014 config repo not reachable");
+    if (!await proceed("added the key?", "Done \u2014 check access", "Abort") || tries++ >= 10) throw new Error("cs: aborted \u2014 config repo not reachable");
     [ok2, err] = await spin("checking access\u2026", async () => canAccess(sshUrl));
     if (!ok2) warn(`still no access \u2014 ${err}`);
   }
@@ -7525,26 +7577,33 @@ async function askUrl(prompt) {
     return [sshUrl, gh];
   }
 }
-async function join_(target, interactive, repoUrl = "") {
+async function join_(target, interactive, machine, repoUrl = "") {
   if (existsSync16(target) && isRepo(target)) {
     skip(`config repo already at ${contract(target)}`);
     configureRepo(target);
     return;
   }
   const [sshUrl, gh] = repoUrl ? parseRepoUrl(repoUrl) : await askUrl("config repo URL");
-  await accessLoop(sshUrl, gh, interactive);
+  await accessLoop(sshUrl, gh, interactive, machine);
   await cloneConfig(sshUrl, target);
 }
-async function create2(target, interactive) {
+async function create2(target, interactive, machine) {
   const n = await text("name for your new config repo", { default: CONFIG_REPO_NAME, validate: name });
   note([cyan("https://github.com/new"), dim("no README, no .gitignore, no license \u2014 completely empty")], `Create an empty PRIVATE repository named '${n}' on GitHub`);
   const [sshUrl, gh] = await askUrl("paste the new repo's URL");
-  await accessLoop(sshUrl, gh, interactive);
+  await accessLoop(sshUrl, gh, interactive, machine);
   newConfigRepo(target);
   if (!remoteUrl(target)) git(["remote", "add", "origin", sshUrl], target);
   configureRepo(target);
   await spin("pushing the initial config repo\u2026", async () => git(["push", "-q", "-u", "origin", currentBranch(target)], target));
   step(`config repo initialized and pushed  ${dim(sshUrl)}`);
+}
+async function machineName(existingName, interactive) {
+  if (machineExists()) return existingName || loadMachine().name;
+  if (existingName) return existingName;
+  if (!interactive) throw new Error("cs: --name <machine-name> is required");
+  const dflt = { wsl2: "desktop", macos: "laptop" }[describe()] ?? "machine";
+  return text("What should this machine be called?", { default: dflt, placeholder: "desktop-work, laptop, \u2026", validate: name });
 }
 async function machinePhase(repo, nm, profiles, ws, interactive) {
   if (machineExists()) {
@@ -7570,15 +7629,11 @@ async function machinePhase(repo, nm, profiles, ws, interactive) {
   }
   const md = join17(repo, "machines");
   const existing = existsSync16(md) ? readdirSync6(md, { withFileTypes: true }).filter((d3) => d3.isDirectory() && d3.name !== "recovery").map((d3) => d3.name).sort() : [];
-  if (existing.length) info("machines already in this share: " + existing.map((x2) => bold(x2)).join(", "));
-  if (!nm) {
-    if (!interactive) throw new Error("cs: --name <machine-name> is required");
-    const dflt = { wsl2: "desktop", macos: "laptop" }[describe()] ?? "machine";
-    for (; ; ) {
-      nm = await text("name for this machine", { default: dflt, validate: name });
-      if (existing.includes(nm) && !await confirm(`'${nm}' already exists \u2014 re-use it (its published keys will be replaced)?`, false)) continue;
-      break;
-    }
+  if (existing.length) step(`machines already in this share: ${existing.map((x2) => bold(x2)).join(", ")}`);
+  while (existing.includes(nm)) {
+    if (!interactive) throw new Error(`cs: machine '${nm}' already exists in the share`);
+    if (await confirm(`'${nm}' already exists \u2014 re-use it (its published keys will be replaced)?`, false)) break;
+    nm = await text("name for this machine", { validate: name });
   }
   let exclude = [];
   if (!profiles.length) {
@@ -7593,11 +7648,12 @@ async function machinePhase(repo, nm, profiles, ws, interactive) {
         const g2 = p2.profiles.includes("all") ? "every machine" : p2.profiles.join(", ");
         (groups[g2] ??= []).push({ value: p2.name, label: p2.name, hint: p2.kind === "git" ? `${p2.identity} \xB7 ${p2.url?.replace(/^git@github\.com:/, "").replace(/\.git$/, "")}` : p2.kind });
       }
-      const picked = new Set(await groupMultiselect("Which projects should this machine clone and sync?", groups, projects.map((p2) => p2.name)));
+      const names = new Set(projects.map((p2) => p2.name));
+      const picked = new Set((await groupMultiselect("Which projects should this machine clone and sync?", groups, projects.map((p2) => p2.name))).filter((v2) => names.has(v2)));
       profiles = [...new Set(projects.filter((p2) => picked.has(p2.name)).flatMap((p2) => p2.profiles).filter((x2) => x2 !== "all"))].sort();
       if (!profiles.length) profiles = ["personal"];
       exclude = projects.filter((p2) => !picked.has(p2.name) && (p2.profiles.includes("all") || p2.profiles.some((x2) => profiles.includes(x2)))).map((p2) => p2.name);
-      step(`${picked.size} of ${projects.length} projects selected  ${dim("profiles " + profiles.join(", ") + (exclude.length ? " \xB7 excluded " + exclude.join(", ") : ""))}`);
+      step(`${picked.size} of ${projects.length} projects selected  ${dim("profiles " + profiles.join(", ") + (exclude.length ? " \xB7 not here: " + exclude.join(", ") : ""))}`);
     } else if (interactive) profiles = (await text("profiles for this machine (comma list \u2014 project groups it should get)", { default: "personal" })).split(",").map((x2) => x2.trim()).filter(Boolean);
     else profiles = ["personal"];
   }
@@ -7628,7 +7684,6 @@ async function machinePhase(repo, nm, profiles, ws, interactive) {
   } else if (ws) mkdirSync12(expand(ws), { recursive: true });
   const m2 = { name: nm, profiles, exclude, workspace: workspaceOverride, secretsBackend: "sops" };
   saveMachine(m2);
-  step(`machine ${bold(m2.name)}  ${dim("profiles " + m2.profiles.join(", "))}`);
   return m2;
 }
 async function firstIdentity(repo, m2, interactive) {
@@ -7659,7 +7714,7 @@ async function keysAndTokens(repo, m2, interactive, skip2) {
     let rc = await ssh.setup(repo, m2, man);
     let tries = 0;
     while (rc !== 0 && interactive && tries++ < 5) {
-      if (await waitEnter("press Enter after adding the key(s) on GitHub", "s") === "s") break;
+      if (!await proceed("added the key(s) on GitHub?", "Done \u2014 verify", "Skip for now")) break;
       rc = await ssh.setup(repo, m2, man, true);
     }
   }
@@ -7689,32 +7744,19 @@ function push2(repo) {
 }
 async function finish(repo, m2, interactive, skip2) {
   const man = loadManifest(repo);
-  if (!skip2.includes("apply")) {
-    section("apply ~/.claude");
-    runApply(repo, m2, man);
-  }
-  if (!skip2.includes("link")) {
-    section("link project files");
-    runLink(repo, m2, man);
-  }
-  if (!skip2.includes("secrets") && m2.secretsBackend !== "none") {
-    section("secrets");
-    await (await Promise.resolve().then(() => (init_secretscmd(), secretscmd_exports))).init(repo, m2, interactive);
-  }
-  if (!skip2.includes("hooks")) {
-    section("automatic sync");
+  if (!skip2.includes("apply")) await group("~/.claude applied", () => runApply(repo, m2, man), { done: "already up to date" });
+  if (!skip2.includes("link")) await group("project files linked", () => runLink(repo, m2, man), { done: "already in sync" });
+  if (!skip2.includes("secrets") && m2.secretsBackend !== "none") await group("secrets", async () => (await Promise.resolve().then(() => (init_secretscmd(), secretscmd_exports))).init(repo, m2, interactive));
+  if (!skip2.includes("hooks")) await group("automatic sync", async () => {
     (await Promise.resolve().then(() => (init_hooks(), hooks_exports))).runHooks(repo, m2, "install");
     runApply(repo, m2, loadManifest(repo));
-  }
-  push2(repo);
+  });
+  await group("config repo", () => push2(repo), { done: "nothing to push" });
   let rc = 0;
-  if (!skip2.includes("doctor")) {
-    section("doctor");
-    rc = runDoctor(repo, m2, man);
-  }
+  if (!skip2.includes("doctor")) rc = await group("doctor", () => runDoctor(repo, m2, man, false, true), { done: "all checks passed" });
   const ws = workspace(man, m2);
   const missing = selectedProjects(man, m2).filter((p2) => p2.kind !== "local" && !existsSync16(checkoutRoot(p2, ws)));
-  if (missing.length && interactive && await confirm(`clone ${missing.length} project(s) now (${missing.slice(0, 6).map((p2) => p2.name).join(", ")}${missing.length > 6 ? "\u2026" : ""})?`, true)) (await Promise.resolve().then(() => (init_projects(), projects_exports))).clone(repo, m2, man, []);
+  if (missing.length && interactive && await confirm(`clone ${missing.length} project(s) now (${missing.slice(0, 6).map((p2) => p2.name).join(", ")}${missing.length > 6 ? "\u2026" : ""})?`, true)) await group(`${missing.length} project(s) cloned`, async () => (await Promise.resolve().then(() => (init_projects(), projects_exports))).clone(repo, m2, man, []));
   outro(bold("done") + "  " + dim("open a new terminal (claude() wrapper) \xB7 cs status \xB7 cs new <project> --<identity>"));
   return rc;
 }
@@ -7725,16 +7767,13 @@ async function init2(o2) {
   const target = repoDirDefault();
   const localSrc = o2.repo && !/:\/\/|^git@/.test(o2.repo) ? expand(o2.repo) : void 0;
   intro("claude-share setup");
-  if (!skip2.includes("deps")) {
-    section("prerequisites");
-    await runDeps(o2.installDeps);
-  }
+  if (!skip2.includes("deps")) await group("prerequisites", () => runDeps(o2.installDeps, true));
+  const nm = await machineName(o2.name ?? "", interactive);
   const already = existsSync16(target) && isRepo(target);
   if (already) {
     skip(`config repo already at ${contract(target)}`);
     if (remoteUrl(target)) configureRepo(target);
   } else if (!skip2.includes("repo")) {
-    section("config repo");
     if (localSrc) {
       if (!(isRepo(localSrc) || isBare(localSrc))) throw new Error(`cs: ${localSrc} is not a git repo`);
       mkdirSync12(dirname8(target), { recursive: true });
@@ -7747,7 +7786,7 @@ async function init2(o2) {
         git(["clone", "-q", sshUrl, target], void 0, { sshKey: expand(o2.key) });
         git(["config", "core.sshCommand", `ssh -i ${contract(expand(o2.key))} -o IdentitiesOnly=yes`], target);
       } else {
-        await accessLoop(sshUrl, gh, interactive);
+        await accessLoop(sshUrl, gh, interactive, nm);
         await cloneConfig(sshUrl, target);
       }
     } else if (o2.owner) {
@@ -7757,20 +7796,19 @@ async function init2(o2) {
         ok(`created private repo ${o2.owner}/${CONFIG_REPO_NAME}`);
         newConfigRepo(target);
         git(["remote", "add", "origin", url], target);
-        await accessLoop(url, [o2.owner, CONFIG_REPO_NAME], interactive);
+        await accessLoop(url, [o2.owner, CONFIG_REPO_NAME], interactive, nm);
         configureRepo(target);
       } else {
-        await accessLoop(url, [o2.owner, CONFIG_REPO_NAME], interactive);
+        await accessLoop(url, [o2.owner, CONFIG_REPO_NAME], interactive, nm);
         await cloneConfig(url, target);
       }
     } else if (interactive) {
       const choice = await select("What would you like to do?", [{ value: "join", label: "Join an existing share", hint: "you already have a config repo (from another machine)" }, { value: "create", label: "Create a new share", hint: "first machine, no config repo yet" }]);
-      if (choice === "create") await create2(target, true);
-      else await join_(target, true);
+      if (choice === "create") await create2(target, true, nm);
+      else await join_(target, true, nm);
     } else throw new Error("cs: pass --repo <url|path> or --owner <github-owner>, or run cs init in a terminal");
   }
-  section("machine");
-  const m2 = await machinePhase(target, o2.name ?? "", o2.profiles ?? [], o2.workspace, interactive);
+  const m2 = await machinePhase(target, nm, o2.profiles ?? [], o2.workspace, interactive);
   await firstIdentity(target, m2, interactive);
   await keysAndTokens(target, m2, interactive, skip2);
   return finish(target, m2, interactive, skip2);
@@ -8250,7 +8288,7 @@ examples:
   cs sync                                  push/pull the config repo (memory, plans, settings)
   cs identity add acme --owner acme-org --name "Me" --email me@acme.com
   cs secrets set global API_TOKEN=\u2026        encrypted, available to Claude's MCP servers as \${API_TOKEN}`);
-program2.hook("preAction", (cmd) => setQuiet(Boolean(program2.opts().quiet || cmd.opts().quiet)));
+program2.hook("preAction", (_root, cmd) => setQuiet(Boolean(program2.opts().quiet || cmd.opts().quiet)));
 program2.command("init").description("set this machine up (wizard) \u2014 or --repo <url> / --owner <owner> for scripts").option("--repo <url>", "existing config repo: git URL or local path").option("--owner <owner>", "GitHub user/org to create claude-share-config under").option("--key <path>", "ssh key for cloning --repo (instead of the master key)").option("--non-interactive").option("--name <name>", "machine name").option("--profiles <list>", "comma list").option("--workspace <path>").option("--skip <phases>", "comma list: deps,repo,ssh,apply,link,secrets,hooks,doctor").option("--install-deps").action(async (o2) => {
   const { init: init3 } = await Promise.resolve().then(() => (init_init(), init_exports));
   process.exitCode = await init3({ repo: o2.repo, owner: o2.owner, key: o2.key, name: o2.name, profiles: csv(o2.profiles), workspace: o2.workspace, skip: csv(o2.skip), installDeps: o2.installDeps, interactive: !o2.nonInteractive && (isTTY() || isScripted()) });

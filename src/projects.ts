@@ -39,7 +39,11 @@ export function clone(repo: string, m: Machine, man: Manifest, names: string[], 
     if (p.kind === "synced") { ui.step(`${p.name}: ${p.url ? "clone " + p.url : "mkdir"} → ${contract(root)}`); if (!dryRun) { if (p.url) git.git(["clone", "-q", p.url, root]); else mkdirSync(root, { recursive: true }); cloned.push(p.name); } continue; }
     ui.step(`${p.name}: git clone ${p.url} → ${contract(root)}`); if (dryRun) continue;
     mkdirSync(cont, { recursive: true });
-    const r = git.git(["clone", "-q", ...(p.branch ? ["-b", p.branch] : []), p.url!, root], undefined, { check: false });
+    let r = git.git(["clone", "-q", ...(p.branch ? ["-b", p.branch] : []), p.url!, root], undefined, { check: false });
+    if (r.code !== 0 && p.branch && /Remote branch .* not found/.test(r.err)) {
+      r = git.git(["clone", "-q", p.url!, root], undefined, { check: false });
+      if (r.code === 0) ui.warn(`${p.name}: branch '${p.branch}' does not exist on the remote; cloned its default '${git.currentBranch(root)}' — fix projects.toml`);
+    }
     if (r.code !== 0) { ui.fail(`${p.name}: ${r.err.split("\n").pop()}`); rc = 1; continue; }
     const ident = p.identity ? man.identities[p.identity] : undefined; const email = git.configGet(root, "user.email");
     if (ident && email !== ident.email) { ui.warn(`${p.name}: user.email resolved to '${email || "UNSET"}' — setting per-repo identity as fallback`); git.git(["config", "user.name", ident.name], root); git.git(["config", "user.email", ident.email], root); }

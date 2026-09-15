@@ -31,13 +31,12 @@ export function newConfigRepo(dest: string, branch = "master"): string {
   return dest;
 }
 
-async function accessLoop(sshUrl: string, gh: [string, string] | undefined, interactive: boolean) {
-  const { pub, created } = master.ensureKey(); if (created) ui.step(`master key generated  ${ui.dim(master.KEY)}`);
+async function accessLoop(sshUrl: string, gh: [string, string] | undefined, interactive: boolean, machine: string) {
+  const { pub, created } = master.ensureKey(machine); if (created) ui.step(`master key generated  ${ui.dim(master.KEY)}`);
   let [ok, err] = await ui.spin("checking access to the config repo…", async () => master.canAccess(sshUrl));
-  if (!ok && gh) { const reg = await ui.spin("registering the master key as a deploy key…", async () => master.registerDeployKey(gh[0], gh[1], pub, `cs:master:${platform.describe()}`)); if (reg) { ui.step(reg); [ok, err] = master.canAccess(sshUrl); } }
   let tries = 0;
-  while (!ok) { master.instructions(pub, gh); if (!interactive) throw new Error("cs: config repo not reachable with the master key (see instructions above)");
-    if ((await ui.waitEnter("press Enter once the key is added", "q")) === "q" || tries++ >= 10) throw new Error("cs: aborted — config repo not reachable");
+  while (!ok) { master.instructions(pub, gh, machine); if (!interactive) throw new Error("cs: config repo not reachable with the master key (see instructions above)");
+    if (!(await ui.proceed("added the key?", "Done — check access", "Abort")) || tries++ >= 10) throw new Error("cs: aborted — config repo not reachable");
     [ok, err] = await ui.spin("checking access…", async () => master.canAccess(sshUrl)); if (!ok) ui.warn(`still no access — ${err}`); }
   ui.step("config repo reachable with the master key");
 }
@@ -56,39 +55,48 @@ async function askUrl(prompt: string): Promise<[string, [string, string] | undef
     return [sshUrl, gh];
   }
 }
-async function join_(target: string, interactive: boolean, repoUrl = "") {
+async function join_(target: string, interactive: boolean, machine: string, repoUrl = "") {
   if (existsSync(target) && git.isRepo(target)) { ui.skip(`config repo already at ${contract(target)}`); master.configureRepo(target); return; }
   const [sshUrl, gh] = repoUrl ? master.parseRepoUrl(repoUrl) : await askUrl("config repo URL");
-  await accessLoop(sshUrl, gh, interactive); await cloneConfig(sshUrl, target);
+  await accessLoop(sshUrl, gh, interactive, machine); await cloneConfig(sshUrl, target);
 }
-async function create(target: string, interactive: boolean) {
+async function create(target: string, interactive: boolean, machine: string) {
   const n = await ui.text("name for your new config repo", { default: CONFIG_REPO_NAME, validate: name });
   ui.note([ui.cyan("https://github.com/new"), ui.dim("no README, no .gitignore, no license — completely empty")], `Create an empty PRIVATE repository named '${n}' on GitHub`);
-  const [sshUrl, gh] = await askUrl("paste the new repo's URL"); await accessLoop(sshUrl, gh, interactive);
+  const [sshUrl, gh] = await askUrl("paste the new repo's URL"); await accessLoop(sshUrl, gh, interactive, machine);
   newConfigRepo(target); if (!git.remoteUrl(target)) git.git(["remote", "add", "origin", sshUrl], target); master.configureRepo(target);
   await ui.spin("pushing the initial config repo…", async () => git.git(["push", "-q", "-u", "origin", git.currentBranch(target)], target)); ui.step(`config repo initialized and pushed  ${ui.dim(sshUrl)}`);
+}
+async function machineName(existingName: string, interactive: boolean): Promise<string> {
+  if (machineExists()) return existingName || loadMachine().name;
+  if (existingName) return existingName;
+  if (!interactive) throw new Error("cs: --name <machine-name> is required");
+  const dflt = { wsl2: "desktop", macos: "laptop" }[platform.describe() as string] ?? "machine";
+  return ui.text("What should this machine be called?", { default: dflt, placeholder: "desktop-work, laptop, …", validate: name });
 }
 async function machinePhase(repo: string, nm: string, profiles: string[], ws: string | undefined, interactive: boolean): Promise<Machine> {
   if (machineExists()) { const m = loadMachine(); let changed = false;
     if (nm && m.name !== nm) { m.name = nm; changed = true; } if (profiles.length && JSON.stringify(m.profiles) !== JSON.stringify(profiles)) { m.profiles = profiles; changed = true; } if (ws && m.workspace !== ws) { m.workspace = ws; changed = true; }
     if (changed) { saveMachine(m); ui.step("machine settings updated"); } else ui.skip(`machine ${m.name}  ${m.profiles.join(", ")}`); return m; }
   const md = join(repo, "machines"); const existing = existsSync(md) ? readdirSync(md, { withFileTypes: true }).filter((d) => d.isDirectory() && d.name !== "recovery").map((d) => d.name).sort() : [];
-  if (existing.length) ui.info("machines already in this share: " + existing.map((x) => ui.bold(x)).join(", "));
-  if (!nm) { if (!interactive) throw new Error("cs: --name <machine-name> is required");
-    const dflt = { wsl2: "desktop", macos: "laptop" }[platform.describe() as string] ?? "machine";
-    for (;;) { nm = await ui.text("name for this machine", { default: dflt, validate: name }); if (existing.includes(nm) && !(await ui.confirm(`'${nm}' already exists — re-use it (its published keys will be replaced)?`, false))) continue; break; } }
+  if (existing.length) ui.step(`machines already in this share: ${existing.map((x) => ui.bold(x)).join(", ")}`);
+  while (existing.includes(nm)) {
+    if (!interactive) throw new Error(`cs: machine '${nm}' already exists in the share`);
+    if (await ui.confirm(`'${nm}' already exists — re-use it (its published keys will be replaced)?`, false)) break;
+    nm = await ui.text("name for this machine", { validate: name });
+  }
   let exclude: string[] = [];
   if (!profiles.length) {
     let projects: Project[] = []; try { projects = Object.values(loadManifest(repo).projects); } catch {}
     if (interactive && projects.length) {
-      // pick projects (default: all) → derive profiles + exclude
       const groups: Record<string, { value: string; label: string; hint?: string }[]> = {};
       for (const p of projects) { const g = p.profiles.includes("all") ? "every machine" : p.profiles.join(", "); (groups[g] ??= []).push({ value: p.name, label: p.name, hint: p.kind === "git" ? `${p.identity} · ${p.url?.replace(/^git@github\.com:/, "").replace(/\.git$/, "")}` : p.kind }); }
-      const picked = new Set(await ui.groupMultiselect("Which projects should this machine clone and sync?", groups, projects.map((p) => p.name)));
+      const names = new Set(projects.map((p) => p.name));
+      const picked = new Set((await ui.groupMultiselect("Which projects should this machine clone and sync?", groups, projects.map((p) => p.name))).filter((v) => names.has(v)));
       profiles = [...new Set(projects.filter((p) => picked.has(p.name)).flatMap((p) => p.profiles).filter((x) => x !== "all"))].sort();
       if (!profiles.length) profiles = ["personal"];
       exclude = projects.filter((p) => !picked.has(p.name) && (p.profiles.includes("all") || p.profiles.some((x) => profiles.includes(x)))).map((p) => p.name);
-      ui.step(`${picked.size} of ${projects.length} projects selected  ${ui.dim("profiles " + profiles.join(", ") + (exclude.length ? " · excluded " + exclude.join(", ") : ""))}`);
+      ui.step(`${picked.size} of ${projects.length} projects selected  ${ui.dim("profiles " + profiles.join(", ") + (exclude.length ? " · not here: " + exclude.join(", ") : ""))}`);
     } else if (interactive) profiles = (await ui.text("profiles for this machine (comma list — project groups it should get)", { default: "personal" })).split(",").map((x) => x.trim()).filter(Boolean);
     else profiles = ["personal"];
   }
@@ -110,7 +118,7 @@ async function machinePhase(repo: string, nm: string, profiles: string[], ws: st
     workspaceOverride = w === dws ? undefined : w;
   } else if (ws) mkdirSync(expand(ws), { recursive: true });
   const m: Machine = { name: nm, profiles, exclude, workspace: workspaceOverride, secretsBackend: "sops" }; saveMachine(m);
-  ui.step(`machine ${ui.bold(m.name)}  ${ui.dim("profiles " + m.profiles.join(", "))}`); return m;
+  return m;
 }
 async function firstIdentity(repo: string, m: Machine, interactive: boolean) {
   const man = loadManifest(repo); if (Object.keys(man.identities).length) return;
@@ -128,7 +136,7 @@ async function keysAndTokens(repo: string, m: Machine, interactive: boolean, ski
   const skipped = Object.keys(full.identities).filter((id) => !(id in man.identities));
   if (skipped.length) ui.skip(`identities not needed by the selected projects: ${skipped.join(", ")}`);
   if (!skip.includes("ssh")) { ui.section("identity ssh keys"); const ssh = await import("./ssh.js"); let rc = await ssh.setup(repo, m, man); let tries = 0;
-    while (rc !== 0 && interactive && tries++ < 5) { if ((await ui.waitEnter("press Enter after adding the key(s) on GitHub", "s")) === "s") break; rc = await ssh.setup(repo, m, man, true); } }
+    while (rc !== 0 && interactive && tries++ < 5) { if (!(await ui.proceed("added the key(s) on GitHub?", "Done — verify", "Skip for now"))) break; rc = await ssh.setup(repo, m, man, true); } }
   if (interactive) { const missing = Object.values(man.identities).filter((i) => i.owner && !github.getToken(i.owner));
     if (missing.length) { ui.section("GitHub tokens"); ui.info("a token per owner lets cs new --<id> create repos — optional now, cs token set <owner> later");
       for (const i of missing) if (await ui.confirm(`store a token for ${i.owner} (identity ${i.id}) now?`, false)) { try { await github.ensureToken(i.owner); ui.ok(`token for ${i.owner} stored`); } catch (e: any) { ui.warn(e.message); } } } }
@@ -139,14 +147,14 @@ function push(repo: string) {
 }
 async function finish(repo: string, m: Machine, interactive: boolean, skip: string[]): Promise<number> {
   const man = loadManifest(repo);
-  if (!skip.includes("apply")) { ui.section("apply ~/.claude"); runApply(repo, m, man); }
-  if (!skip.includes("link")) { ui.section("link project files"); runLink(repo, m, man); }
-  if (!skip.includes("secrets") && m.secretsBackend !== "none") { ui.section("secrets"); await (await import("./secretscmd.js")).init(repo, m, interactive); }
-  if (!skip.includes("hooks")) { ui.section("automatic sync"); (await import("./hooks.js")).runHooks(repo, m, "install"); runApply(repo, m, loadManifest(repo)); }
-  push(repo);
-  let rc = 0; if (!skip.includes("doctor")) { ui.section("doctor"); rc = runDoctor(repo, m, man); }
+  if (!skip.includes("apply")) await ui.group("~/.claude applied", () => runApply(repo, m, man), { done: "already up to date" });
+  if (!skip.includes("link")) await ui.group("project files linked", () => runLink(repo, m, man), { done: "already in sync" });
+  if (!skip.includes("secrets") && m.secretsBackend !== "none") await ui.group("secrets", async () => (await import("./secretscmd.js")).init(repo, m, interactive));
+  if (!skip.includes("hooks")) await ui.group("automatic sync", async () => { (await import("./hooks.js")).runHooks(repo, m, "install"); runApply(repo, m, loadManifest(repo)); });
+  await ui.group("config repo", () => push(repo), { done: "nothing to push" });
+  let rc = 0; if (!skip.includes("doctor")) rc = await ui.group("doctor", () => runDoctor(repo, m, man, false, true), { done: "all checks passed" });
   const ws = workspace(man, m); const missing = selectedProjects(man, m).filter((p) => p.kind !== "local" && !existsSync(checkoutRoot(p, ws)));
-  if (missing.length && interactive && (await ui.confirm(`clone ${missing.length} project(s) now (${missing.slice(0, 6).map((p) => p.name).join(", ")}${missing.length > 6 ? "…" : ""})?`, true))) (await import("./projects.js")).clone(repo, m, man, []);
+  if (missing.length && interactive && (await ui.confirm(`clone ${missing.length} project(s) now (${missing.slice(0, 6).map((p) => p.name).join(", ")}${missing.length > 6 ? "…" : ""})?`, true))) await ui.group(`${missing.length} project(s) cloned`, async () => (await import("./projects.js")).clone(repo, m, man, []));
   ui.outro(ui.bold("done") + "  " + ui.dim("open a new terminal (claude() wrapper) · cs status · cs new <project> --<identity>"));
   return rc;
 }
@@ -156,23 +164,23 @@ export async function init(o: InitOpts): Promise<number> {
   const interactive = o.interactive ?? (ui.isTTY() || ui.isScripted()); const target = repoDirDefault();
   const localSrc = o.repo && !/:\/\/|^git@/.test(o.repo) ? expand(o.repo) : undefined;
   ui.intro("claude-share setup");
-  if (!skip.includes("deps")) { ui.section("prerequisites"); await runDeps(o.installDeps); }
+  if (!skip.includes("deps")) await ui.group("prerequisites", () => runDeps(o.installDeps, true));
+  const nm = await machineName(o.name ?? "", interactive);
   const already = existsSync(target) && git.isRepo(target);
   if (already) { ui.skip(`config repo already at ${contract(target)}`); if (git.remoteUrl(target)) master.configureRepo(target); }
   else if (!skip.includes("repo")) {
-    ui.section("config repo");
     if (localSrc) { if (!(git.isRepo(localSrc) || git.isBare(localSrc))) throw new Error(`cs: ${localSrc} is not a git repo`); mkdirSync(dirname(target), { recursive: true }); git.git(["clone", "-q", localSrc, target]); ui.ok(`config repo cloned from ${contract(localSrc)}`); }
     else if (o.repo) { const [sshUrl, gh] = master.parseRepoUrl(o.repo);
       if (o.key) { mkdirSync(dirname(target), { recursive: true }); git.git(["clone", "-q", sshUrl, target], undefined, { sshKey: expand(o.key) }); git.git(["config", "core.sshCommand", `ssh -i ${contract(expand(o.key))} -o IdentitiesOnly=yes`], target); }
-      else { await accessLoop(sshUrl, gh, interactive); await cloneConfig(sshUrl, target); } }
+      else { await accessLoop(sshUrl, gh, interactive, nm); await cloneConfig(sshUrl, target); } }
     else if (o.owner) { const token = await github.ensureToken(o.owner, interactive); const url = `git@github.com:${o.owner}/${CONFIG_REPO_NAME}.git`;
-      if (await github.ensureRepo(o.owner, CONFIG_REPO_NAME, token, true, "claude-share config (private)")) { ui.ok(`created private repo ${o.owner}/${CONFIG_REPO_NAME}`); newConfigRepo(target); git.git(["remote", "add", "origin", url], target); await accessLoop(url, [o.owner, CONFIG_REPO_NAME], interactive); master.configureRepo(target); }
-      else { await accessLoop(url, [o.owner, CONFIG_REPO_NAME], interactive); await cloneConfig(url, target); } }
+      if (await github.ensureRepo(o.owner, CONFIG_REPO_NAME, token, true, "claude-share config (private)")) { ui.ok(`created private repo ${o.owner}/${CONFIG_REPO_NAME}`); newConfigRepo(target); git.git(["remote", "add", "origin", url], target); await accessLoop(url, [o.owner, CONFIG_REPO_NAME], interactive, nm); master.configureRepo(target); }
+      else { await accessLoop(url, [o.owner, CONFIG_REPO_NAME], interactive, nm); await cloneConfig(url, target); } }
     else if (interactive) { const choice = await ui.select("What would you like to do?", [{ value: "join", label: "Join an existing share", hint: "you already have a config repo (from another machine)" }, { value: "create", label: "Create a new share", hint: "first machine, no config repo yet" }]);
-      if (choice === "create") await create(target, true); else await join_(target, true); }
+      if (choice === "create") await create(target, true, nm); else await join_(target, true, nm); }
     else throw new Error("cs: pass --repo <url|path> or --owner <github-owner>, or run cs init in a terminal");
   }
-  ui.section("machine"); const m = await machinePhase(target, o.name ?? "", o.profiles ?? [], o.workspace, interactive);
+  const m = await machinePhase(target, nm, o.profiles ?? [], o.workspace, interactive);
   await firstIdentity(target, m, interactive); await keysAndTokens(target, m, interactive, skip);
   return finish(target, m, interactive, skip);
 }
