@@ -24,16 +24,27 @@ export function ok(msg: string) { if (collecting) { collecting.push(msg); return
 export function step(msg: string) { if (collecting) { collecting.push(msg); return; } if (!quiet) p.log.step(msg); }
 export function skip(msg: string) { if (collecting) return; if (!quiet) p.log.message(pc.dim("○ " + msg)); }
 
-/** Run fn with its step/ok/info output collected; print ONE summary line for the whole task. */
+let activeSpinner: { message: (s: string) => void } | null = null;
+const width = () => Math.max(40, (process.stdout.columns || 100) - 6);
+const clip = (s: string, w = width()) => (strip(s).length > w ? s.slice(0, w - 1) + "…" : s);
+
+/** One phase = spinner with the title while it runs, then the title and one ✓ line per collected step. */
 export async function group<T>(title: string, fn: () => Promise<T> | T, opts: { done?: string; max?: number } = {}): Promise<T> {
   const prev = collecting; const mine: string[] = []; collecting = mine;
+  const useSpin = !quiet && process.stdout.isTTY && !activeSpinner;
+  const sp = useSpin ? p.spinner() : null;
+  if (sp) { sp.start(title); activeSpinner = sp; }
   let result: T;
-  try { result = await fn(); } finally { collecting = prev; }
+  try { result = await fn(); }
+  catch (e) { if (sp) { sp.error(title); activeSpinner = null; } collecting = prev; throw e; }
+  finally { collecting = prev; }
+  if (sp) { sp.clear(); activeSpinner = null; }
   if (quiet) return result!;
-  const items = mine.map((m) => strip(m).trim()).filter(Boolean);
-  const max = opts.max ?? 8;
-  const summary = items.length ? items.slice(0, max).join(pc.dim(" · ")) + (items.length > max ? pc.dim(` · +${items.length - max} more`) : "") : (opts.done ?? "up to date");
-  p.log.success(pc.bold(title) + "\n" + pc.dim(summary));
+  const items = mine.map((m) => m.trim()).filter(Boolean);
+  const max = opts.max ?? 12;
+  const lines = items.length ? items.slice(0, max).map((i) => `${pc.green("✓")} ${clip(i)}`) : [pc.dim(opts.done ?? "up to date")];
+  if (items.length > max) lines.push(pc.dim(`… ${items.length - max} more`));
+  p.log.success(pc.bold(title) + "\n" + lines.join("\n"));
   return result!;
 }
 export function warn(msg: string) { p.log.warn(msg); }
@@ -162,9 +173,16 @@ export async function proceed(message: string, doneLabel = "Done — check again
 }
 
 export async function spin<T>(label: string, fn: (update: (l: string) => void) => Promise<T>): Promise<T> {
+  if (activeSpinner) { const outer = activeSpinner; outer.message(label); return fn((l) => outer.message(l)); }
   if (quiet || !process.stdout.isTTY) return fn(() => {});
   const s = p.spinner();
-  s.start(label);
+  s.start(label); activeSpinner = s;
   try { const r = await fn((l) => s.message(l)); s.stop(label); return r; }
-  catch (e) { s.stop(pc.red(label + " failed")); throw e; }
+  catch (e) { s.error(label + " failed"); throw e; }
+  finally { activeSpinner = null; }
+}
+/** Sequential sub-steps under one title (clack tasks). Each task returns its ✓ line. */
+export async function tasks(items: { title: string; task: (message: (m: string) => void) => Promise<string> }[]) {
+  if (quiet || !process.stdout.isTTY) { for (const t of items) { const r = await t.task(() => {}); step(r); } return; }
+  await p.tasks(items);
 }

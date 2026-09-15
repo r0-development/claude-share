@@ -29,28 +29,31 @@ export function add(repo: string, m: Machine, man: Manifest, path: string | unde
   if (!o.noCommit && git.isRepo(repo)) { git.git(["add", "projects.toml"], repo); git.commit(repo, `projects: add ${name}`, "cs", `cs@${m.name}`); }
   return p;
 }
-export function clone(repo: string, m: Machine, man: Manifest, names: string[], dryRun = false): number {
+export async function clone(repo: string, m: Machine, man: Manifest, names: string[], dryRun = false): Promise<number> {
   const ws = workspace(man, m); let rc = 0; const cloned: string[] = [];
   for (const p of selectedProjects(man, m)) {
     if (names.length && !names.includes(p.name)) continue;
     const root = checkoutRoot(p, ws), cont = container(p, ws);
     if (existsSync(root)) { if (p.kind === "git" && git.isRepo(root) && p.url && git.canonicalGithub(git.remoteUrl(root)) !== git.canonicalGithub(p.url)) { ui.fail(`${p.name}: exists with a different remote (${git.remoteUrl(root)}); not touching it`); rc = 1; } continue; }
     if (p.kind === "local") { ui.info(`${p.name}: local-only, skipped`); continue; }
-    if (p.kind === "synced") { ui.step(`${p.name}: ${p.url ? "clone " + p.url : "mkdir"} → ${contract(root)}`); if (!dryRun) { if (p.url) git.git(["clone", "-q", p.url, root]); else mkdirSync(root, { recursive: true }); cloned.push(p.name); } continue; }
-    ui.step(`${p.name}: git clone ${p.url} → ${contract(root)}`); if (dryRun) continue;
+    if (p.kind === "synced") { if (dryRun) { ui.step(`${p.name}: would ${p.url ? "clone" : "create"} ${contract(root)}`); continue; }
+      await ui.spin(`${p.name}…`, async () => { if (p.url) git.git(["clone", "-q", p.url, root]); else mkdirSync(root, { recursive: true }); }); ui.step(`${p.name} → ${contract(root)}`); cloned.push(p.name); continue; }
+    if (dryRun) { ui.step(`${p.name}: would clone ${p.url} → ${contract(root)}`); continue; }
     mkdirSync(cont, { recursive: true });
-    let r = git.git(["clone", "-q", ...(p.branch ? ["-b", p.branch] : []), p.url!, root], undefined, { check: false });
+    let r = await ui.spin(`cloning ${p.name}…`, async () => git.git(["clone", "-q", ...(p.branch ? ["-b", p.branch] : []), p.url!, root], undefined, { check: false }));
+    let note = "";
     if (r.code !== 0 && p.branch && /Remote branch .* not found/.test(r.err)) {
-      r = git.git(["clone", "-q", p.url!, root], undefined, { check: false });
-      if (r.code === 0) ui.warn(`${p.name}: branch '${p.branch}' does not exist on the remote; cloned its default '${git.currentBranch(root)}' — fix projects.toml`);
+      r = await ui.spin(`cloning ${p.name} (default branch)…`, async () => git.git(["clone", "-q", p.url!, root], undefined, { check: false }));
+      if (r.code === 0) { note = ui.yellow(` (branch '${p.branch}' not on remote — got '${git.currentBranch(root)}', fix projects.toml)`); }
     }
     if (r.code !== 0) { ui.fail(`${p.name}: ${r.err.split("\n").pop()}`); rc = 1; continue; }
+    ui.step(`${p.name} → ${contract(root)}${p.layout === "worktrees" ? ui.dim(" (worktree layout)") : ""}${note}`);
     const ident = p.identity ? man.identities[p.identity] : undefined; const email = git.configGet(root, "user.email");
     if (ident && email !== ident.email) { ui.warn(`${p.name}: user.email resolved to '${email || "UNSET"}' — setting per-repo identity as fallback`); git.git(["config", "user.name", ident.name], root); git.git(["config", "user.email", ident.email], root); }
     if (p.postClone) spawnSync("bash", ["-lc", p.postClone], { cwd: cont, stdio: "inherit" });
     cloned.push(p.name);
   }
-  if (cloned.length) runLink(repo, m, man, cloned);
+  if (cloned.length) { const wasQuiet = ui.isQuiet(); ui.setQuiet(true); try { runLink(repo, m, man, cloned); } finally { ui.setQuiet(wasQuiet); } ui.step(`Claude files linked into ${cloned.length} project(s)`); }
   return rc;
 }
 export async function create(repo: string, m: Machine, man: Manifest, name: string, ident: Identity, o: { profiles: string[]; description?: string; priv?: boolean; noGithub?: boolean; kind?: "git" | "synced" }): Promise<number> {

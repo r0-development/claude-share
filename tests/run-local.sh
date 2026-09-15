@@ -231,7 +231,7 @@ export HOME5="$(mktemp -d)"
 ( export HOME="$HOME5" CLAUDE_CONFIG_DIR="$HOME5/.claude" XDG_STATE_HOME="$HOME5/.local/state" CS_CONFIG_DIR="$HOME5/.config/claude-share" SOPS_AGE_KEY_FILE="$HOME5/.config/sops/age/keys.txt"
   mkdir -p "$HOME5/dev"
   #            choose  url             machine  projects        workspace  keys token clone
-  CS_ANSWERS='["wiz3","join","'"$CFG_REMOTE"'","alpha,gamma","default","skip","n","n"]' $CS init --skip deps,hooks,doctor,secrets >/dev/null || die "picker init"
+  CS_ANSWERS='["wiz3","join","'"$CFG_REMOTE"'","alpha,gamma","done","default","skip","n","n"]' $CS init --skip deps,hooks,doctor,secrets >/dev/null || die "picker init"
   grep -q 'profiles = \[ "personal" \]' "$CS_CONFIG_DIR/machine.toml" || die "profiles derived from picked projects"
   ($CS status --all || true) | grep -q "beta.*skipped" || die "beta not selected"
   ($CS status || true) | grep -q "gamma" || die "gamma listed"

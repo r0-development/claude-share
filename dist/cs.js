@@ -5,11 +5,11 @@ var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
 var __getOwnPropNames = Object.getOwnPropertyNames;
 var __getProtoOf = Object.getPrototypeOf;
 var __hasOwnProp = Object.prototype.hasOwnProperty;
-var __require = /* @__PURE__ */ ((x2) => typeof require !== "undefined" ? require : typeof Proxy !== "undefined" ? new Proxy(x2, {
-  get: (a, b3) => (typeof require !== "undefined" ? require : a)[b3]
-}) : x2)(function(x2) {
+var __require = /* @__PURE__ */ ((x) => typeof require !== "undefined" ? require : typeof Proxy !== "undefined" ? new Proxy(x, {
+  get: (a2, b) => (typeof require !== "undefined" ? require : a2)[b]
+}) : x)(function(x) {
   if (typeof require !== "undefined") return require.apply(this, arguments);
-  throw Error('Dynamic require of "' + x2 + '" is not supported');
+  throw Error('Dynamic require of "' + x + '" is not supported');
 });
 var __esm = (fn, res) => function __init() {
   return fn && (res = (0, fn[__getOwnPropNames(fn)[0]])(fn = 0)), res;
@@ -236,8 +236,8 @@ var require_help = __commonJS({
           visibleCommands.push(helpCommand);
         }
         if (this.sortSubcommands) {
-          visibleCommands.sort((a, b3) => {
-            return a.name().localeCompare(b3.name());
+          visibleCommands.sort((a2, b) => {
+            return a2.name().localeCompare(b.name());
           });
         }
         return visibleCommands;
@@ -249,11 +249,11 @@ var require_help = __commonJS({
        * @param {Option} b
        * @returns {number}
        */
-      compareOptions(a, b3) {
+      compareOptions(a2, b) {
         const getSortKey = (option) => {
           return option.short ? option.short.replace(/^-/, "") : option.long.replace(/^--/, "");
         };
-        return getSortKey(a).localeCompare(getSortKey(b3));
+        return getSortKey(a2).localeCompare(getSortKey(b));
       }
       /**
        * Get an array of the visible options. Includes a placeholder for the implicit help option, if there is one.
@@ -730,8 +730,8 @@ ${itemIndentStr}`);
        * @param {number} width
        * @returns {string}
        */
-      boxWrap(str, width) {
-        if (width < this.minWidthToWrap) return str;
+      boxWrap(str, width2) {
+        if (width2 < this.minWidthToWrap) return str;
         const rawLines = str.split(/\r\n|\n/);
         const chunkPattern = /[\s]*[^\s]+/g;
         const wrappedLines = [];
@@ -745,7 +745,7 @@ ${itemIndentStr}`);
           let sumWidth = this.displayWidth(sumChunks[0]);
           chunks.forEach((chunk) => {
             const visibleWidth = this.displayWidth(chunk);
-            if (sumWidth + visibleWidth <= width) {
+            if (sumWidth + visibleWidth <= width2) {
               sumChunks.push(chunk);
               sumWidth += visibleWidth;
               return;
@@ -1074,38 +1074,38 @@ var require_option = __commonJS({
 var require_suggestSimilar = __commonJS({
   "node_modules/commander/lib/suggestSimilar.js"(exports) {
     var maxDistance = 3;
-    function editDistance(a, b3) {
-      if (Math.abs(a.length - b3.length) > maxDistance)
-        return Math.max(a.length, b3.length);
-      const d3 = [];
-      for (let i = 0; i <= a.length; i++) {
-        d3[i] = [i];
+    function editDistance(a2, b) {
+      if (Math.abs(a2.length - b.length) > maxDistance)
+        return Math.max(a2.length, b.length);
+      const d = [];
+      for (let i2 = 0; i2 <= a2.length; i2++) {
+        d[i2] = [i2];
       }
-      for (let j2 = 0; j2 <= b3.length; j2++) {
-        d3[0][j2] = j2;
+      for (let j = 0; j <= b.length; j++) {
+        d[0][j] = j;
       }
-      for (let j2 = 1; j2 <= b3.length; j2++) {
-        for (let i = 1; i <= a.length; i++) {
+      for (let j = 1; j <= b.length; j++) {
+        for (let i2 = 1; i2 <= a2.length; i2++) {
           let cost = 1;
-          if (a[i - 1] === b3[j2 - 1]) {
+          if (a2[i2 - 1] === b[j - 1]) {
             cost = 0;
           } else {
             cost = 1;
           }
-          d3[i][j2] = Math.min(
-            d3[i - 1][j2] + 1,
+          d[i2][j] = Math.min(
+            d[i2 - 1][j] + 1,
             // deletion
-            d3[i][j2 - 1] + 1,
+            d[i2][j - 1] + 1,
             // insertion
-            d3[i - 1][j2 - 1] + cost
+            d[i2 - 1][j - 1] + cost
             // substitution
           );
-          if (i > 1 && j2 > 1 && a[i - 1] === b3[j2 - 2] && a[i - 2] === b3[j2 - 1]) {
-            d3[i][j2] = Math.min(d3[i][j2], d3[i - 2][j2 - 2] + 1);
+          if (i2 > 1 && j > 1 && a2[i2 - 1] === b[j - 2] && a2[i2 - 2] === b[j - 1]) {
+            d[i2][j] = Math.min(d[i2][j], d[i2 - 2][j - 2] + 1);
           }
         }
       }
-      return d3[a.length][b3.length];
+      return d[a2.length][b.length];
     }
     function suggestSimilar(word, candidates) {
       if (!candidates || candidates.length === 0) return "";
@@ -1132,7 +1132,7 @@ var require_suggestSimilar = __commonJS({
           }
         }
       });
-      similar.sort((a, b3) => a.localeCompare(b3));
+      similar.sort((a2, b) => a2.localeCompare(b));
       if (searchingOptions) {
         similar = similar.map((candidate) => `--${candidate}`);
       }
@@ -1770,8 +1770,8 @@ Expecting one of '${allowedValues.join("', '")}'`);
         } else if (fn instanceof RegExp) {
           const regex = fn;
           fn = (val, def) => {
-            const m2 = regex.exec(val);
-            return m2 ? m2[0] : def;
+            const m = regex.exec(val);
+            return m ? m[0] : def;
           };
           option.default(defaultValue).argParser(fn);
         } else {
@@ -2313,8 +2313,8 @@ Expecting one of '${allowedValues.join("', '")}'`);
        * @private
        */
       _checkNumberOfArguments() {
-        this.registeredArguments.forEach((arg, i) => {
-          if (arg.required && this.args[i] == null) {
+        this.registeredArguments.forEach((arg, i2) => {
+          if (arg.required && this.args[i2] == null) {
             this.missingArgument(arg.name());
           }
         });
@@ -2352,8 +2352,8 @@ Expecting one of '${allowedValues.join("', '")}'`);
             if (index < this.args.length) {
               value = this.args.slice(index);
               if (declaredArg.parseArg) {
-                value = value.reduce((processed, v2) => {
-                  return myParseArg(declaredArg, v2, processed);
+                value = value.reduce((processed, v) => {
+                  return myParseArg(declaredArg, v, processed);
                 }, declaredArg.defaultValue);
               }
             } else if (value === void 0) {
@@ -2694,8 +2694,8 @@ Expecting one of '${allowedValues.join("', '")}'`);
         if (this._storeOptionsAsProperties) {
           const result = {};
           const len = this.options.length;
-          for (let i = 0; i < len; i++) {
-            const key = this.options[i].attributeName();
+          for (let i2 = 0; i2 < len; i2++) {
+            const key = this.options[i2].attributeName();
             result[key] = key === this._versionOptionName ? this._version : this[key];
           }
           return result;
@@ -3076,9 +3076,9 @@ Expecting one of '${allowedValues.join("', '")}'`);
           helpWidth: context.helpWidth,
           outputHasColors: context.hasColors
         });
-        const text2 = helper.formatHelp(this, helper);
-        if (context.hasColors) return text2;
-        return this._outputConfiguration.stripColor(text2);
+        const text3 = helper.formatHelp(this, helper);
+        if (context.hasColors) return text3;
+        return this._outputConfiguration.stripColor(text3);
       }
       /**
        * @typedef HelpContext
@@ -3232,7 +3232,7 @@ Expecting one of '${allowedValues.join("', '")}'`);
        * @param {(string | Function)} text - string to add, or a function returning a string
        * @return {Command} `this` command for chaining
        */
-      addHelpText(position, text2) {
+      addHelpText(position, text3) {
         const allowedValues = ["beforeAll", "before", "after", "afterAll"];
         if (!allowedValues.includes(position)) {
           throw new Error(`Unexpected value for position to addHelpText.
@@ -3241,10 +3241,10 @@ Expecting one of '${allowedValues.join("', '")}'`);
         const helpEvent = `${position}Help`;
         this.on(helpEvent, (context) => {
           let helpStr;
-          if (typeof text2 === "function") {
-            helpStr = text2({ error: context.error, command: context.command });
+          if (typeof text3 === "function") {
+            helpStr = text3({ error: context.error, command: context.command });
           } else {
-            helpStr = text2;
+            helpStr = text3;
           }
           if (helpStr) {
             context.write(`${helpStr}
@@ -3331,81 +3331,1603 @@ var require_commander = __commonJS({
   }
 });
 
+// node_modules/fast-string-truncated-width/dist/utils.js
+var getCodePointsLength, isFullWidth, isWideNotCJKTNotEmoji;
+var init_utils = __esm({
+  "node_modules/fast-string-truncated-width/dist/utils.js"() {
+    getCodePointsLength = /* @__PURE__ */ (() => {
+      const SURROGATE_PAIR_RE = /[\uD800-\uDBFF][\uDC00-\uDFFF]/g;
+      return (input) => {
+        let surrogatePairsNr = 0;
+        SURROGATE_PAIR_RE.lastIndex = 0;
+        while (SURROGATE_PAIR_RE.test(input)) {
+          surrogatePairsNr += 1;
+        }
+        return input.length - surrogatePairsNr;
+      };
+    })();
+    isFullWidth = (x) => {
+      return x === 12288 || x >= 65281 && x <= 65376 || x >= 65504 && x <= 65510;
+    };
+    isWideNotCJKTNotEmoji = (x) => {
+      return x === 8987 || x === 9001 || x >= 12272 && x <= 12287 || x >= 12289 && x <= 12350 || x >= 12441 && x <= 12543 || x >= 12549 && x <= 12591 || x >= 12593 && x <= 12686 || x >= 12688 && x <= 12771 || x >= 12783 && x <= 12830 || x >= 12832 && x <= 12871 || x >= 12880 && x <= 19903 || x >= 65040 && x <= 65049 || x >= 65072 && x <= 65106 || x >= 65108 && x <= 65126 || x >= 65128 && x <= 65131 || x >= 127488 && x <= 127490 || x >= 127504 && x <= 127547 || x >= 127552 && x <= 127560 || x >= 131072 && x <= 196605 || x >= 196608 && x <= 262141;
+    };
+  }
+});
+
+// node_modules/fast-string-truncated-width/dist/index.js
+var ANSI_RE, CONTROL_RE, CJKT_WIDE_RE, TAB_RE, EMOJI_RE, LATIN_RE, MODIFIER_RE, NO_TRUNCATION, getStringTruncatedWidth, dist_default;
+var init_dist = __esm({
+  "node_modules/fast-string-truncated-width/dist/index.js"() {
+    init_utils();
+    ANSI_RE = /[\u001b\u009b][[()#;?]*(?:[0-9]{1,4}(?:;[0-9]{0,4})*)?[0-9A-ORZcf-nqry=><]|\u001b\]8;[^;]*;.*?(?:\u0007|\u001b\u005c)/y;
+    CONTROL_RE = /[\x00-\x08\x0A-\x1F\x7F-\x9F]{1,1000}/y;
+    CJKT_WIDE_RE = /(?:(?![\uFF61-\uFF9F\uFF00-\uFFEF])[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}\p{Script=Tangut}]){1,1000}/yu;
+    TAB_RE = /\t{1,1000}/y;
+    EMOJI_RE = new RegExp("[\\u{1F1E6}-\\u{1F1FF}]{2}|\\u{1F3F4}[\\u{E0061}-\\u{E007A}]{2}[\\u{E0030}-\\u{E0039}\\u{E0061}-\\u{E007A}]{1,3}\\u{E007F}|(?:\\p{Emoji}\\uFE0F\\u20E3?|\\p{Emoji_Modifier_Base}\\p{Emoji_Modifier}?|\\p{Emoji_Presentation})(?:\\u200D(?:\\p{Emoji_Modifier_Base}\\p{Emoji_Modifier}?|\\p{Emoji_Presentation}|\\p{Emoji}\\uFE0F\\u20E3?))*", "yu");
+    LATIN_RE = /(?:[\x20-\x7E\xA0-\xFF](?!\uFE0F)){1,1000}/y;
+    MODIFIER_RE = new RegExp("\\p{M}+", "gu");
+    NO_TRUNCATION = { limit: Infinity, ellipsis: "" };
+    getStringTruncatedWidth = (input, truncationOptions = {}, widthOptions = {}) => {
+      const LIMIT = truncationOptions.limit ?? Infinity;
+      const ELLIPSIS = truncationOptions.ellipsis ?? "";
+      const ELLIPSIS_WIDTH = truncationOptions?.ellipsisWidth ?? (ELLIPSIS ? getStringTruncatedWidth(ELLIPSIS, NO_TRUNCATION, widthOptions).width : 0);
+      const ANSI_WIDTH = 0;
+      const CONTROL_WIDTH = widthOptions.controlWidth ?? 0;
+      const TAB_WIDTH = widthOptions.tabWidth ?? 8;
+      const EMOJI_WIDTH = widthOptions.emojiWidth ?? 2;
+      const FULL_WIDTH_WIDTH = 2;
+      const REGULAR_WIDTH = widthOptions.regularWidth ?? 1;
+      const WIDE_WIDTH = widthOptions.wideWidth ?? FULL_WIDTH_WIDTH;
+      const PARSE_BLOCKS = [
+        [LATIN_RE, REGULAR_WIDTH],
+        [ANSI_RE, ANSI_WIDTH],
+        [CONTROL_RE, CONTROL_WIDTH],
+        [TAB_RE, TAB_WIDTH],
+        [EMOJI_RE, EMOJI_WIDTH],
+        [CJKT_WIDE_RE, WIDE_WIDTH]
+      ];
+      let indexPrev = 0;
+      let index = 0;
+      let length = input.length;
+      let lengthExtra = 0;
+      let truncationEnabled = false;
+      let truncationIndex = length;
+      let truncationLimit = Math.max(0, LIMIT - ELLIPSIS_WIDTH);
+      let unmatchedStart = 0;
+      let unmatchedEnd = 0;
+      let width2 = 0;
+      let widthExtra = 0;
+      outer: while (true) {
+        if (unmatchedEnd > unmatchedStart || index >= length && index > indexPrev) {
+          const unmatched = input.slice(unmatchedStart, unmatchedEnd) || input.slice(indexPrev, index);
+          lengthExtra = 0;
+          for (const char of unmatched.replaceAll(MODIFIER_RE, "")) {
+            const codePoint = char.codePointAt(0) || 0;
+            if (isFullWidth(codePoint)) {
+              widthExtra = FULL_WIDTH_WIDTH;
+            } else if (isWideNotCJKTNotEmoji(codePoint)) {
+              widthExtra = WIDE_WIDTH;
+            } else {
+              widthExtra = REGULAR_WIDTH;
+            }
+            if (width2 + widthExtra > truncationLimit) {
+              truncationIndex = Math.min(truncationIndex, Math.max(unmatchedStart, indexPrev) + lengthExtra);
+            }
+            if (width2 + widthExtra > LIMIT) {
+              truncationEnabled = true;
+              break outer;
+            }
+            lengthExtra += char.length;
+            width2 += widthExtra;
+          }
+          unmatchedStart = unmatchedEnd = 0;
+        }
+        if (index >= length) {
+          break outer;
+        }
+        for (let i2 = 0, l2 = PARSE_BLOCKS.length; i2 < l2; i2++) {
+          const [BLOCK_RE, BLOCK_WIDTH] = PARSE_BLOCKS[i2];
+          BLOCK_RE.lastIndex = index;
+          if (BLOCK_RE.test(input)) {
+            lengthExtra = BLOCK_RE === CJKT_WIDE_RE ? getCodePointsLength(input.slice(index, BLOCK_RE.lastIndex)) : BLOCK_RE === EMOJI_RE ? 1 : BLOCK_RE.lastIndex - index;
+            widthExtra = lengthExtra * BLOCK_WIDTH;
+            if (width2 + widthExtra > truncationLimit) {
+              truncationIndex = Math.min(truncationIndex, index + Math.floor((truncationLimit - width2) / BLOCK_WIDTH));
+            }
+            if (width2 + widthExtra > LIMIT) {
+              truncationEnabled = true;
+              break outer;
+            }
+            width2 += widthExtra;
+            unmatchedStart = indexPrev;
+            unmatchedEnd = index;
+            index = indexPrev = BLOCK_RE.lastIndex;
+            continue outer;
+          }
+        }
+        index += 1;
+      }
+      return {
+        width: truncationEnabled ? truncationLimit : width2,
+        index: truncationEnabled ? truncationIndex : length,
+        truncated: truncationEnabled,
+        ellipsed: truncationEnabled && LIMIT >= ELLIPSIS_WIDTH
+      };
+    };
+    dist_default = getStringTruncatedWidth;
+  }
+});
+
+// node_modules/fast-string-width/dist/index.js
+var NO_TRUNCATION2, fastStringWidth, dist_default2;
+var init_dist2 = __esm({
+  "node_modules/fast-string-width/dist/index.js"() {
+    init_dist();
+    NO_TRUNCATION2 = {
+      limit: Infinity,
+      ellipsis: "",
+      ellipsisWidth: 0
+    };
+    fastStringWidth = (input, options = {}) => {
+      return dist_default(input, NO_TRUNCATION2, options).width;
+    };
+    dist_default2 = fastStringWidth;
+  }
+});
+
+// node_modules/fast-wrap-ansi/lib/main.js
+function wrapAnsi(string, columns, options) {
+  return String(string).normalize().split(CRLF_OR_LF).map((line) => exec(line, columns, options)).join("\n");
+}
+var ESC, CSI, END_CODE, ANSI_ESCAPE_BELL, ANSI_CSI, ANSI_OSC, ANSI_SGR_TERMINATOR, ANSI_ESCAPE_LINK, GROUP_REGEX, getClosingCode, wrapAnsiCode, wrapAnsiHyperlink, wrapWord, stringVisibleTrimSpacesRight, exec, CRLF_OR_LF;
+var init_main = __esm({
+  "node_modules/fast-wrap-ansi/lib/main.js"() {
+    init_dist2();
+    ESC = "\x1B";
+    CSI = "\x9B";
+    END_CODE = 39;
+    ANSI_ESCAPE_BELL = "\x07";
+    ANSI_CSI = "[";
+    ANSI_OSC = "]";
+    ANSI_SGR_TERMINATOR = "m";
+    ANSI_ESCAPE_LINK = `${ANSI_OSC}8;;`;
+    GROUP_REGEX = new RegExp(`(?:\\${ANSI_CSI}(?<code>\\d+)m|\\${ANSI_ESCAPE_LINK}(?<uri>.*)${ANSI_ESCAPE_BELL})`, "y");
+    getClosingCode = (openingCode) => {
+      if (openingCode >= 30 && openingCode <= 37)
+        return 39;
+      if (openingCode >= 90 && openingCode <= 97)
+        return 39;
+      if (openingCode >= 40 && openingCode <= 47)
+        return 49;
+      if (openingCode >= 100 && openingCode <= 107)
+        return 49;
+      if (openingCode === 1 || openingCode === 2)
+        return 22;
+      if (openingCode === 3)
+        return 23;
+      if (openingCode === 4)
+        return 24;
+      if (openingCode === 7)
+        return 27;
+      if (openingCode === 8)
+        return 28;
+      if (openingCode === 9)
+        return 29;
+      if (openingCode === 0)
+        return 0;
+      return void 0;
+    };
+    wrapAnsiCode = (code) => `${ESC}${ANSI_CSI}${code}${ANSI_SGR_TERMINATOR}`;
+    wrapAnsiHyperlink = (url) => `${ESC}${ANSI_ESCAPE_LINK}${url}${ANSI_ESCAPE_BELL}`;
+    wrapWord = (rows, word, columns) => {
+      const characters = word[Symbol.iterator]();
+      let isInsideEscape = false;
+      let isInsideLinkEscape = false;
+      let lastRow = rows.at(-1);
+      let visible = lastRow === void 0 ? 0 : dist_default2(lastRow);
+      let currentCharacter = characters.next();
+      let nextCharacter = characters.next();
+      let rawCharacterIndex = 0;
+      while (!currentCharacter.done) {
+        const character = currentCharacter.value;
+        const characterLength = dist_default2(character);
+        if (visible + characterLength <= columns) {
+          rows[rows.length - 1] += character;
+        } else {
+          rows.push(character);
+          visible = 0;
+        }
+        if (character === ESC || character === CSI) {
+          isInsideEscape = true;
+          isInsideLinkEscape = word.startsWith(ANSI_ESCAPE_LINK, rawCharacterIndex + 1);
+        }
+        if (isInsideEscape) {
+          if (isInsideLinkEscape) {
+            if (character === ANSI_ESCAPE_BELL) {
+              isInsideEscape = false;
+              isInsideLinkEscape = false;
+            }
+          } else if (character === ANSI_SGR_TERMINATOR) {
+            isInsideEscape = false;
+          }
+        } else {
+          visible += characterLength;
+          if (visible === columns && !nextCharacter.done) {
+            rows.push("");
+            visible = 0;
+          }
+        }
+        currentCharacter = nextCharacter;
+        nextCharacter = characters.next();
+        rawCharacterIndex += character.length;
+      }
+      lastRow = rows.at(-1);
+      if (!visible && lastRow !== void 0 && lastRow.length && rows.length > 1) {
+        rows[rows.length - 2] += rows.pop();
+      }
+    };
+    stringVisibleTrimSpacesRight = (string) => {
+      const words = string.split(" ");
+      let last = words.length;
+      while (last) {
+        if (dist_default2(words[last - 1])) {
+          break;
+        }
+        last--;
+      }
+      if (last === words.length) {
+        return string;
+      }
+      return words.slice(0, last).join(" ") + words.slice(last).join("");
+    };
+    exec = (string, columns, options = {}) => {
+      if (options.trim !== false && string.trim() === "") {
+        return "";
+      }
+      let returnValue = "";
+      let escapeCode;
+      let escapeUrl;
+      const words = string.split(" ");
+      let rows = [""];
+      let rowLength = 0;
+      for (let index = 0; index < words.length; index++) {
+        const word = words[index];
+        if (options.trim !== false) {
+          const row = rows.at(-1) ?? "";
+          const trimmed = row.trimStart();
+          if (row.length !== trimmed.length) {
+            rows[rows.length - 1] = trimmed;
+            rowLength = dist_default2(trimmed);
+          }
+        }
+        if (index !== 0) {
+          if (rowLength >= columns && (options.wordWrap === false || options.trim === false)) {
+            rows.push("");
+            rowLength = 0;
+          }
+          if (rowLength || options.trim === false) {
+            rows[rows.length - 1] += " ";
+            rowLength++;
+          }
+        }
+        const wordLength = dist_default2(word);
+        if (options.hard && wordLength > columns) {
+          const remainingColumns = columns - rowLength;
+          const breaksStartingThisLine = 1 + Math.floor((wordLength - remainingColumns - 1) / columns);
+          const breaksStartingNextLine = Math.floor((wordLength - 1) / columns);
+          if (breaksStartingNextLine < breaksStartingThisLine) {
+            rows.push("");
+          }
+          wrapWord(rows, word, columns);
+          rowLength = dist_default2(rows.at(-1) ?? "");
+          continue;
+        }
+        if (rowLength + wordLength > columns && rowLength && wordLength) {
+          if (options.wordWrap === false && rowLength < columns) {
+            wrapWord(rows, word, columns);
+            rowLength = dist_default2(rows.at(-1) ?? "");
+            continue;
+          }
+          rows.push("");
+          rowLength = 0;
+        }
+        if (rowLength + wordLength > columns && options.wordWrap === false) {
+          wrapWord(rows, word, columns);
+          rowLength = dist_default2(rows.at(-1) ?? "");
+          continue;
+        }
+        rows[rows.length - 1] += word;
+        rowLength += wordLength;
+      }
+      if (options.trim !== false) {
+        rows = rows.map((row) => stringVisibleTrimSpacesRight(row));
+      }
+      const preString = rows.join("\n");
+      let inSurrogate = false;
+      for (let i2 = 0; i2 < preString.length; i2++) {
+        const character = preString[i2];
+        returnValue += character;
+        if (!inSurrogate) {
+          inSurrogate = character >= "\uD800" && character <= "\uDBFF";
+          if (inSurrogate) {
+            continue;
+          }
+        } else {
+          inSurrogate = false;
+        }
+        if (character === ESC || character === CSI) {
+          GROUP_REGEX.lastIndex = i2 + 1;
+          const groupsResult = GROUP_REGEX.exec(preString);
+          const groups = groupsResult?.groups;
+          if (groups?.code !== void 0) {
+            const code = Number.parseFloat(groups.code);
+            escapeCode = code === END_CODE ? void 0 : code;
+          } else if (groups?.uri !== void 0) {
+            escapeUrl = groups.uri.length === 0 ? void 0 : groups.uri;
+          }
+        }
+        if (preString[i2 + 1] === "\n") {
+          if (escapeUrl) {
+            returnValue += wrapAnsiHyperlink("");
+          }
+          const closingCode = escapeCode ? getClosingCode(escapeCode) : void 0;
+          if (escapeCode && closingCode) {
+            returnValue += wrapAnsiCode(closingCode);
+          }
+        } else if (character === "\n") {
+          if (escapeCode && getClosingCode(escapeCode)) {
+            returnValue += wrapAnsiCode(escapeCode);
+          }
+          if (escapeUrl) {
+            returnValue += wrapAnsiHyperlink(escapeUrl);
+          }
+        }
+      }
+      return returnValue;
+    };
+    CRLF_OR_LF = /\r?\n/;
+  }
+});
+
 // node_modules/sisteransi/src/index.js
 var require_src = __commonJS({
   "node_modules/sisteransi/src/index.js"(exports, module) {
     "use strict";
-    var ESC = "\x1B";
-    var CSI = `${ESC}[`;
+    var ESC2 = "\x1B";
+    var CSI2 = `${ESC2}[`;
     var beep = "\x07";
-    var cursor = {
-      to(x2, y3) {
-        if (!y3) return `${CSI}${x2 + 1}G`;
-        return `${CSI}${y3 + 1};${x2 + 1}H`;
+    var cursor3 = {
+      to(x, y2) {
+        if (!y2) return `${CSI2}${x + 1}G`;
+        return `${CSI2}${y2 + 1};${x + 1}H`;
       },
-      move(x2, y3) {
+      move(x, y2) {
         let ret = "";
-        if (x2 < 0) ret += `${CSI}${-x2}D`;
-        else if (x2 > 0) ret += `${CSI}${x2}C`;
-        if (y3 < 0) ret += `${CSI}${-y3}A`;
-        else if (y3 > 0) ret += `${CSI}${y3}B`;
+        if (x < 0) ret += `${CSI2}${-x}D`;
+        else if (x > 0) ret += `${CSI2}${x}C`;
+        if (y2 < 0) ret += `${CSI2}${-y2}A`;
+        else if (y2 > 0) ret += `${CSI2}${y2}B`;
         return ret;
       },
-      up: (count = 1) => `${CSI}${count}A`,
-      down: (count = 1) => `${CSI}${count}B`,
-      forward: (count = 1) => `${CSI}${count}C`,
-      backward: (count = 1) => `${CSI}${count}D`,
-      nextLine: (count = 1) => `${CSI}E`.repeat(count),
-      prevLine: (count = 1) => `${CSI}F`.repeat(count),
-      left: `${CSI}G`,
-      hide: `${CSI}?25l`,
-      show: `${CSI}?25h`,
-      save: `${ESC}7`,
-      restore: `${ESC}8`
+      up: (count = 1) => `${CSI2}${count}A`,
+      down: (count = 1) => `${CSI2}${count}B`,
+      forward: (count = 1) => `${CSI2}${count}C`,
+      backward: (count = 1) => `${CSI2}${count}D`,
+      nextLine: (count = 1) => `${CSI2}E`.repeat(count),
+      prevLine: (count = 1) => `${CSI2}F`.repeat(count),
+      left: `${CSI2}G`,
+      hide: `${CSI2}?25l`,
+      show: `${CSI2}?25h`,
+      save: `${ESC2}7`,
+      restore: `${ESC2}8`
     };
     var scroll = {
-      up: (count = 1) => `${CSI}S`.repeat(count),
-      down: (count = 1) => `${CSI}T`.repeat(count)
+      up: (count = 1) => `${CSI2}S`.repeat(count),
+      down: (count = 1) => `${CSI2}T`.repeat(count)
     };
-    var erase = {
-      screen: `${CSI}2J`,
-      up: (count = 1) => `${CSI}1J`.repeat(count),
-      down: (count = 1) => `${CSI}J`.repeat(count),
-      line: `${CSI}2K`,
-      lineEnd: `${CSI}K`,
-      lineStart: `${CSI}1K`,
+    var erase3 = {
+      screen: `${CSI2}2J`,
+      up: (count = 1) => `${CSI2}1J`.repeat(count),
+      down: (count = 1) => `${CSI2}J`.repeat(count),
+      line: `${CSI2}2K`,
+      lineEnd: `${CSI2}K`,
+      lineStart: `${CSI2}1K`,
       lines(count) {
         let clear = "";
-        for (let i = 0; i < count; i++)
-          clear += this.line + (i < count - 1 ? cursor.up() : "");
+        for (let i2 = 0; i2 < count; i2++)
+          clear += this.line + (i2 < count - 1 ? cursor3.up() : "");
         if (count)
-          clear += cursor.left;
+          clear += cursor3.left;
         return clear;
       }
     };
-    module.exports = { cursor, scroll, erase, beep };
+    module.exports = { cursor: cursor3, scroll, erase: erase3, beep };
+  }
+});
+
+// node_modules/@clack/core/dist/index.mjs
+import { styleText } from "node:util";
+import { stdout, stdin } from "node:process";
+import * as l from "node:readline";
+import l__default from "node:readline";
+import { ReadStream } from "node:tty";
+function findCursor(s, o, l2) {
+  if (!l2.some((r2) => !r2.disabled))
+    return s;
+  const t2 = s + o, n3 = Math.max(l2.length - 1, 0), e = t2 < 0 ? n3 : t2 > n3 ? 0 : t2;
+  return l2[e]?.disabled ? findCursor(e, o < 0 ? -1 : 1, l2) : e;
+}
+function isAccessible(n3) {
+  if (n3 !== void 0) return n3;
+  if (settings.accessible !== void 0) return settings.accessible;
+  const e = process.env.ACCESSIBLE;
+  return e !== void 0 && e !== "" && e !== "0" && e !== "false";
+}
+function isActionKey(n3, e) {
+  if (typeof n3 == "string")
+    return settings.aliases.get(n3) === e;
+  for (const s of n3)
+    if (s !== void 0 && isActionKey(s, e))
+      return true;
+  return false;
+}
+function diffLines(i2, s) {
+  if (i2 === s) return;
+  const e = i2.split(`
+`), t2 = s.split(`
+`), r2 = Math.max(e.length, t2.length), f = [];
+  for (let n3 = 0; n3 < r2; n3++)
+    e[n3] !== t2[n3] && f.push(n3);
+  return {
+    lines: f,
+    numLinesBefore: e.length,
+    numLinesAfter: t2.length,
+    numLines: r2
+  };
+}
+function isCancel(e) {
+  return e === CANCEL_SYMBOL;
+}
+function setRawMode(e, r2) {
+  const o = e;
+  o.isTTY && o.setRawMode(r2);
+}
+function block({
+  input: e = stdin,
+  output: r2 = stdout,
+  overwrite: o = true,
+  hideCursor: n3 = true
+} = {}) {
+  const s = l.createInterface({
+    input: e,
+    output: r2,
+    prompt: "",
+    tabSize: 1
+  });
+  l.emitKeypressEvents(e, s), e instanceof ReadStream && e.isTTY && e.setRawMode(true);
+  const t2 = (f, { name: a2, sequence: w }) => {
+    const c2 = String(f);
+    if (isActionKey([c2, a2, w], "cancel")) {
+      n3 && r2.write(import_sisteransi.cursor.show), process.exit(0);
+      return;
+    }
+    if (!o) return;
+    const i2 = a2 === "return" ? 0 : -1, m = a2 === "return" ? -1 : 0;
+    l.moveCursor(r2, i2, m, () => {
+      l.clearLine(r2, 1, () => {
+        e.once("keypress", t2);
+      });
+    });
+  };
+  return n3 && r2.write(import_sisteransi.cursor.hide), e.once("keypress", t2), () => {
+    e.off("keypress", t2), n3 && r2.write(import_sisteransi.cursor.show), e instanceof ReadStream && e.isTTY && !R && e.setRawMode(false), s.terminal = false, s.close();
+  };
+}
+function wrapTextWithPrefix(e, r2, o, n3 = o, s = o, t2) {
+  const f = getColumns(e ?? stdout);
+  return wrapAnsi(r2, f - o.length, {
+    hard: true,
+    trim: false
+  }).split(`
+`).map((c2, i2, m) => {
+    const d = t2 ? t2(c2, i2) : c2;
+    return i2 === 0 ? `${n3}${d}` : i2 === m.length - 1 ? `${s}${d}` : `${o}${d}`;
+  }).join(`
+`);
+}
+function runValidation(e, a2) {
+  if ("~standard" in e) {
+    const n3 = e["~standard"].validate(a2);
+    return n3 instanceof Promise ? n3.then((r2) => r2.issues?.at(0)?.message) : n3.issues?.at(0)?.message;
+  }
+  return e(a2);
+}
+var import_sisteransi, a$1, t, settings, R, CANCEL_SYMBOL, getColumns, getRows, y, r, u$2, u$1, n$1, n2;
+var init_dist3 = __esm({
+  "node_modules/@clack/core/dist/index.mjs"() {
+    init_main();
+    import_sisteransi = __toESM(require_src(), 1);
+    a$1 = ["up", "down", "left", "right", "space", "enter", "cancel"];
+    t = [
+      "January",
+      "February",
+      "March",
+      "April",
+      "May",
+      "June",
+      "July",
+      "August",
+      "September",
+      "October",
+      "November",
+      "December"
+    ];
+    settings = {
+      actions: new Set(a$1),
+      aliases: /* @__PURE__ */ new Map([
+        // vim support
+        ["k", "up"],
+        ["j", "down"],
+        ["h", "left"],
+        ["l", "right"],
+        ["", "cancel"],
+        // opinionated defaults!
+        ["escape", "cancel"]
+      ]),
+      messages: {
+        cancel: "Canceled",
+        error: "Something went wrong"
+      },
+      withGuide: true,
+      accessible: void 0,
+      date: {
+        monthNames: [...t],
+        messages: {
+          required: "Please enter a valid date",
+          invalidMonth: "There are only 12 months in a year",
+          invalidDay: (n3, e) => `There are only ${n3} days in ${e}`,
+          afterMin: (n3) => `Date must be on or after ${n3.toISOString().slice(0, 10)}`,
+          beforeMax: (n3) => `Date must be on or before ${n3.toISOString().slice(0, 10)}`
+        }
+      }
+    };
+    R = globalThis.process.platform.startsWith("win");
+    CANCEL_SYMBOL = Symbol("clack:cancel");
+    getColumns = (e) => "columns" in e && typeof e.columns == "number" ? e.columns : 80;
+    getRows = (e) => "rows" in e && typeof e.rows == "number" ? e.rows : 20;
+    y = class {
+      input;
+      output;
+      _abortSignal;
+      rl;
+      opts;
+      _render;
+      _track = false;
+      _prevFrame = "";
+      _subscribers = /* @__PURE__ */ new Map();
+      _cursor = 0;
+      state = "initial";
+      error = "";
+      value;
+      userInput = "";
+      /**
+       * Whether accessible (static, screen-reader friendly) output is enabled for
+       * this prompt, resolved from the `accessible` option, the global setting,
+       * and the `ACCESSIBLE` env var.
+       */
+      get accessible() {
+        return isAccessible(this.opts.accessible);
+      }
+      constructor(t2, e = true) {
+        const { input: i2 = stdin, output: s = stdout, render: r2, signal: n3, ...o } = t2;
+        this.opts = o, this.onKeypress = this.onKeypress.bind(this), this.close = this.close.bind(this), this.render = this.render.bind(this), this._render = r2.bind(this), this._track = e, this._abortSignal = n3, this.input = i2, this.output = s;
+      }
+      /**
+       * Unsubscribe all listeners
+       */
+      unsubscribe() {
+        this._subscribers.clear();
+      }
+      /**
+       * Set a subscriber with opts
+       * @param event - The event name
+       */
+      setSubscriber(t2, e) {
+        const i2 = this._subscribers.get(t2) ?? [];
+        i2.push(e), this._subscribers.set(t2, i2);
+      }
+      /**
+       * Subscribe to an event
+       * @param event - The event name
+       * @param cb - The callback
+       */
+      on(t2, e) {
+        this.setSubscriber(t2, { cb: e });
+      }
+      /**
+       * Subscribe to an event once
+       * @param event - The event name
+       * @param cb - The callback
+       */
+      once(t2, e) {
+        this.setSubscriber(t2, { cb: e, once: true });
+      }
+      /**
+       * Emit an event with data
+       * @param event - The event name
+       * @param data - The data to pass to the callback
+       */
+      emit(t2, ...e) {
+        const i2 = this._subscribers.get(t2) ?? [], s = [];
+        for (const r2 of i2)
+          r2.cb(...e), r2.once && s.push(() => i2.splice(i2.indexOf(r2), 1));
+        for (const r2 of s)
+          r2();
+      }
+      prompt() {
+        return new Promise((t2) => {
+          if (this._abortSignal) {
+            if (this._abortSignal.aborted)
+              return this.state = "cancel", this.close(), t2(CANCEL_SYMBOL);
+            this._abortSignal.addEventListener(
+              "abort",
+              () => {
+                this.state = "cancel", this.close();
+              },
+              { once: true }
+            );
+          }
+          this.rl = l__default.createInterface({
+            input: this.input,
+            tabSize: 2,
+            prompt: "",
+            escapeCodeTimeout: 50,
+            terminal: true
+          }), this.rl.prompt(), this.opts.initialUserInput !== void 0 && this._setUserInput(this.opts.initialUserInput, true), this.input.on("keypress", this.onKeypress), setRawMode(this.input, true), this.output.on("resize", this.render), this.render(), this.once("submit", () => {
+            this.output.write(import_sisteransi.cursor.show), this.output.off("resize", this.render), setRawMode(this.input, false), t2(this.value);
+          }), this.once("cancel", () => {
+            this.output.write(import_sisteransi.cursor.show), this.output.off("resize", this.render), setRawMode(this.input, false), t2(CANCEL_SYMBOL);
+          });
+        });
+      }
+      _isActionKey(t2, e) {
+        return t2 === "	";
+      }
+      _shouldSubmit(t2, e) {
+        return true;
+      }
+      _setValue(t2) {
+        this.value = t2, this.emit("value", this.value);
+      }
+      _setUserInput(t2, e) {
+        this.userInput = t2 ?? "", this.emit("userInput", this.userInput), e && this._track && this.rl && (this.rl.write(this.userInput), this._cursor = this.rl.cursor);
+      }
+      _clearUserInput() {
+        this.rl?.write(null, { ctrl: true, name: "u" }), this._setUserInput("");
+      }
+      async onKeypress(t2, e) {
+        if (this.state !== "validating") {
+          if (this._track && e.name !== "return" && (e.name && this._isActionKey(t2, e) && this.rl?.write(null, { ctrl: true, name: "h" }), this._cursor = this.rl?.cursor ?? 0, this._setUserInput(this.rl?.line)), this.state === "error" && (this.state = "active"), e?.name && (!this._track && settings.aliases.has(e.name) && this.emit("cursor", settings.aliases.get(e.name)), settings.actions.has(e.name) && this.emit("cursor", e.name)), t2 && (t2.toLowerCase() === "y" || t2.toLowerCase() === "n") && this.emit("confirm", t2.toLowerCase() === "y"), this.emit("key", t2, e), e?.name === "return" && this._shouldSubmit(t2, e)) {
+            if (this.opts.validate) {
+              const i2 = runValidation(this.opts.validate, this.value);
+              let s;
+              i2 instanceof Promise ? (this.state = "validating", this.render(), s = await i2) : s = i2, s && (this.error = s instanceof Error ? s.message : s, this.state = "error", this.rl?.write(this.userInput));
+            }
+            this.state !== "error" && (this.state = "submit");
+          }
+          isActionKey([t2, e?.name, e?.sequence], "cancel") && (this.state = "cancel"), (this.state === "submit" || this.state === "cancel") && this.emit("finalize"), this.render(), (this.state === "submit" || this.state === "cancel") && this.close();
+        }
+      }
+      close() {
+        this.input.unpipe(), this.input.removeListener("keypress", this.onKeypress), this.output.write(`
+`), setRawMode(this.input, false), this.rl?.close(), this.rl = void 0, this.emit(`${this.state}`, this.value), this.unsubscribe();
+      }
+      restoreCursor() {
+        const t2 = wrapAnsi(this._prevFrame, process.stdout.columns, { hard: true, trim: false }).split(`
+`).length - 1;
+        this.output.write(import_sisteransi.cursor.move(-999, t2 * -1));
+      }
+      render() {
+        const t2 = wrapAnsi(this._render(this) ?? "", process.stdout.columns, {
+          hard: true,
+          trim: false
+        });
+        if (t2 !== this._prevFrame) {
+          if (this.state === "initial")
+            this.output.write(import_sisteransi.cursor.hide);
+          else {
+            const e = diffLines(this._prevFrame, t2), i2 = getRows(this.output);
+            if (this.restoreCursor(), e) {
+              const s = Math.max(0, e.numLinesAfter - i2), r2 = Math.max(0, e.numLinesBefore - i2);
+              let n3 = e.lines.find((o) => o >= s);
+              if (n3 === void 0) {
+                this._prevFrame = t2;
+                return;
+              }
+              if (e.lines.length === 1) {
+                this.output.write(import_sisteransi.cursor.move(0, n3 - r2)), this.output.write(import_sisteransi.erase.lines(1));
+                const o = t2.split(`
+`);
+                this.output.write(o[n3]), this._prevFrame = t2, this.output.write(import_sisteransi.cursor.move(0, o.length - n3 - 1));
+                return;
+              } else if (e.lines.length > 1) {
+                if (s < r2)
+                  n3 = s;
+                else {
+                  const h2 = n3 - r2;
+                  h2 > 0 && this.output.write(import_sisteransi.cursor.move(0, h2));
+                }
+                this.output.write(import_sisteransi.erase.down());
+                const f = t2.split(`
+`).slice(n3);
+                this.output.write(f.join(`
+`)), this._prevFrame = t2;
+                return;
+              }
+            }
+            this.output.write(import_sisteransi.erase.down());
+          }
+          this.output.write(t2), this.state === "initial" && (this.state = "active"), this._prevFrame = t2;
+        }
+      }
+    };
+    r = class extends y {
+      get cursor() {
+        return this.value ? 0 : 1;
+      }
+      get _value() {
+        return this.cursor === 0;
+      }
+      constructor(t2) {
+        super(t2, false), this.value = !!t2.initialValue, this.on("userInput", () => {
+          this.value = this._value;
+        }), this.on("confirm", (i2) => {
+          this.output.write(import_sisteransi.cursor.move(0, -1)), this.value = i2, this.state = "submit", this.close();
+        }), this.on("cursor", () => {
+          this.value = !this.value;
+        });
+      }
+    };
+    u$2 = class u extends y {
+      options;
+      cursor = 0;
+      #t;
+      getGroupItems(t2) {
+        return this.options.filter((r2) => r2.group === t2);
+      }
+      isGroupSelected(t2) {
+        const r2 = this.getGroupItems(t2), e = this.value;
+        return e === void 0 ? false : r2.every((s) => e.includes(s.value));
+      }
+      toggleValue() {
+        const t2 = this.options[this.cursor];
+        if (t2 !== void 0)
+          if (this.value === void 0 && (this.value = []), t2.group === true) {
+            const r2 = t2.value, e = this.getGroupItems(r2);
+            this.isGroupSelected(r2) ? this.value = this.value.filter(
+              (s) => e.findIndex((i2) => i2.value === s) === -1
+            ) : this.value = [...this.value, ...e.map((s) => s.value)], this.value = Array.from(new Set(this.value));
+          } else {
+            const r2 = this.value.includes(t2.value);
+            this.value = r2 ? this.value.filter((e) => e !== t2.value) : [...this.value, t2.value];
+          }
+      }
+      constructor(t2) {
+        super(t2, false);
+        const { options: r2 } = t2;
+        this.#t = t2.selectableGroups !== false, this.options = Object.entries(r2).flatMap(([e, s]) => [
+          { value: e, group: true, label: e },
+          ...s.map((i2) => ({ ...i2, group: e }))
+        ]), this.value = [...t2.initialValues ?? []], this.cursor = Math.max(
+          this.options.findIndex(({ value: e }) => e === t2.cursorAt),
+          this.#t ? 0 : 1
+        ), this.on("cursor", (e) => {
+          switch (e) {
+            case "left":
+            case "up": {
+              this.cursor = this.cursor === 0 ? this.options.length - 1 : this.cursor - 1;
+              const s = this.options[this.cursor]?.group === true;
+              !this.#t && s && (this.cursor = this.cursor === 0 ? this.options.length - 1 : this.cursor - 1);
+              break;
+            }
+            case "down":
+            case "right": {
+              this.cursor = this.cursor === this.options.length - 1 ? 0 : this.cursor + 1;
+              const s = this.options[this.cursor]?.group === true;
+              !this.#t && s && (this.cursor = this.cursor === this.options.length - 1 ? 0 : this.cursor + 1);
+              break;
+            }
+            case "space":
+              this.toggleValue();
+              break;
+          }
+        });
+      }
+    };
+    u$1 = class u2 extends y {
+      _mask = "\u2022";
+      get cursor() {
+        return this._cursor;
+      }
+      get masked() {
+        return this.userInput.replaceAll(/./g, this._mask);
+      }
+      get userInputWithCursor() {
+        if (this.state === "submit" || this.state === "cancel")
+          return this.masked;
+        const t2 = this.userInput;
+        if (this.cursor >= t2.length)
+          return `${this.masked}${styleText(["inverse", "hidden"], "_")}`;
+        const s = this.masked, r2 = s.slice(0, this.cursor), i2 = s.slice(this.cursor, this.cursor + 1), o = s.slice(this.cursor + 1);
+        return `${r2}${styleText("inverse", i2)}${o}`;
+      }
+      clear() {
+        this._clearUserInput();
+      }
+      constructor({ mask: t2, ...s }) {
+        super(s), this._mask = t2 ?? "\u2022", this.on("userInput", (r2) => {
+          this._setValue(r2);
+        }), this.on("finalize", () => {
+          this.value === void 0 && (this.value = "");
+        });
+      }
+    };
+    n$1 = class n extends y {
+      options;
+      cursor = 0;
+      get _selectedValue() {
+        return this.options[this.cursor];
+      }
+      changeValue() {
+        const e = this._selectedValue;
+        this.value = e === void 0 ? void 0 : e.value;
+      }
+      constructor(e) {
+        super(e, false), this.options = e.options;
+        const o = this.options.findIndex(({ value: s }) => s === e.initialValue), t2 = o === -1 ? 0 : o;
+        this.cursor = this.options[t2]?.disabled ? findCursor(t2, 1, this.options) : t2, this.changeValue(), this.on("cursor", (s) => {
+          switch (s) {
+            case "left":
+            case "up":
+              this.cursor = findCursor(this.cursor, -1, this.options);
+              break;
+            case "down":
+            case "right":
+              this.cursor = findCursor(this.cursor, 1, this.options);
+              break;
+          }
+          this.changeValue();
+        });
+      }
+    };
+    n2 = class extends y {
+      get userInputWithCursor() {
+        if (this.state === "submit")
+          return this.userInput;
+        const t2 = this.userInput;
+        if (this.cursor >= t2.length)
+          return `${this.userInput}\u2588`;
+        const r2 = t2.slice(0, this.cursor), s = t2.slice(this.cursor, this.cursor + 1), e = t2.slice(this.cursor + 1);
+        return `${r2}${styleText("inverse", s)}${e}`;
+      }
+      get cursor() {
+        return this._cursor;
+      }
+      constructor(t2) {
+        super({
+          ...t2,
+          initialUserInput: t2.initialUserInput ?? t2.initialValue
+        }), this.on("userInput", (r2) => {
+          this._setValue(r2);
+        }), this.on("finalize", () => {
+          this.value || (this.value = t2.defaultValue), this.value === void 0 && (this.value = "");
+        });
+      }
+    };
+  }
+});
+
+// node_modules/@clack/prompts/dist/index.mjs
+import { styleText as styleText2, stripVTControlCharacters } from "node:util";
+import process$1 from "node:process";
+function isUnicodeSupported() {
+  if (process$1.platform !== "win32") {
+    return process$1.env.TERM !== "linux";
+  }
+  return Boolean(process$1.env.CI) || Boolean(process$1.env.WT_SESSION) || Boolean(process$1.env.TERMINUS_SUBLIME) || process$1.env.ConEmuTask === "{cmd::Cmder}" || process$1.env.TERM_PROGRAM === "Terminus-Sublime" || process$1.env.TERM_PROGRAM === "vscode" || process$1.env.TERM === "xterm-256color" || process$1.env.TERM === "alacritty" || process$1.env.TERMINAL_EMULATOR === "JetBrains-JediTerm";
+}
+function formatInstructionFooter(o, e) {
+  const r2 = [`${e ? `${styleText2("cyan", S_BAR)}  ` : ""}${o.join(" \u2022 ")}`];
+  return e && r2.push(styleText2("cyan", S_BAR_END)), r2;
+}
+var import_sisteransi2, unicode, isCI, unicodeOr, S_STEP_ACTIVE, S_STEP_CANCEL, S_STEP_ERROR, S_STEP_SUBMIT, S_BAR_START, S_BAR, S_BAR_END, S_BAR_START_RIGHT, S_BAR_END_RIGHT, S_RADIO_ACTIVE, S_RADIO_INACTIVE, S_CHECKBOX_ACTIVE, S_CHECKBOX_SELECTED, S_CHECKBOX_INACTIVE, S_PASSWORD_MASK, S_BAR_H, S_CORNER_TOP_RIGHT, S_CONNECT_LEFT, S_CORNER_BOTTOM_RIGHT, S_CORNER_BOTTOM_LEFT, S_CORNER_TOP_LEFT, S_INFO, S_SUCCESS, S_WARN, S_ERROR, symbol, symbolBar, I, limitOptions, confirm, MULTISELECT_INSTRUCTIONS, groupMultiselect, log, cancel, intro, outro, W$1, C, note, password, W, spinner, u4, SELECT_INSTRUCTIONS, c, select, i, text;
+var init_dist4 = __esm({
+  "node_modules/@clack/prompts/dist/index.mjs"() {
+    init_dist3();
+    init_dist3();
+    init_main();
+    init_dist2();
+    import_sisteransi2 = __toESM(require_src(), 1);
+    unicode = isUnicodeSupported();
+    isCI = () => process.env.CI === "true";
+    unicodeOr = (o, e) => unicode ? o : e;
+    S_STEP_ACTIVE = unicodeOr("\u25C6", "*");
+    S_STEP_CANCEL = unicodeOr("\u25A0", "x");
+    S_STEP_ERROR = unicodeOr("\u25B2", "x");
+    S_STEP_SUBMIT = unicodeOr("\u25C7", "o");
+    S_BAR_START = unicodeOr("\u250C", "T");
+    S_BAR = unicodeOr("\u2502", "|");
+    S_BAR_END = unicodeOr("\u2514", "\u2014");
+    S_BAR_START_RIGHT = unicodeOr("\u2510", "T");
+    S_BAR_END_RIGHT = unicodeOr("\u2518", "\u2014");
+    S_RADIO_ACTIVE = unicodeOr("\u25CF", ">");
+    S_RADIO_INACTIVE = unicodeOr("\u25CB", " ");
+    S_CHECKBOX_ACTIVE = unicodeOr("\u25FB", "[\u2022]");
+    S_CHECKBOX_SELECTED = unicodeOr("\u25FC", "[+]");
+    S_CHECKBOX_INACTIVE = unicodeOr("\u25FB", "[ ]");
+    S_PASSWORD_MASK = unicodeOr("\u25AA", "\u2022");
+    S_BAR_H = unicodeOr("\u2500", "-");
+    S_CORNER_TOP_RIGHT = unicodeOr("\u256E", "+");
+    S_CONNECT_LEFT = unicodeOr("\u251C", "+");
+    S_CORNER_BOTTOM_RIGHT = unicodeOr("\u256F", "+");
+    S_CORNER_BOTTOM_LEFT = unicodeOr("\u2570", "+");
+    S_CORNER_TOP_LEFT = unicodeOr("\u256D", "+");
+    S_INFO = unicodeOr("\u25CF", "\u2022");
+    S_SUCCESS = unicodeOr("\u25C6", "*");
+    S_WARN = unicodeOr("\u25B2", "!");
+    S_ERROR = unicodeOr("\u25A0", "x");
+    symbol = (o) => {
+      switch (o) {
+        case "initial":
+        case "active":
+          return styleText2("cyan", S_STEP_ACTIVE);
+        case "cancel":
+          return styleText2("red", S_STEP_CANCEL);
+        case "error":
+          return styleText2("yellow", S_STEP_ERROR);
+        case "submit":
+          return styleText2("green", S_STEP_SUBMIT);
+        case "validating":
+          return styleText2("dim", S_STEP_ACTIVE);
+      }
+    };
+    symbolBar = (o) => {
+      switch (o) {
+        case "initial":
+        case "active":
+          return styleText2("cyan", S_BAR);
+        case "cancel":
+          return styleText2("red", S_BAR);
+        case "error":
+          return styleText2("yellow", S_BAR);
+        case "submit":
+          return styleText2("green", S_BAR);
+      }
+    };
+    I = (l2, e, w, p, b, C2 = false) => {
+      let r2 = e, O = 0;
+      if (C2)
+        for (let i2 = p - 1; i2 >= w; i2--) {
+          const m = l2[i2];
+          if (m && (r2 -= m.length), O++, r2 <= b) break;
+        }
+      else
+        for (let i2 = w; i2 < p; i2++) {
+          const m = l2[i2];
+          if (m && (r2 -= m.length), O++, r2 <= b) break;
+        }
+      return { lineCount: r2, removals: O };
+    };
+    limitOptions = ({
+      cursor: l2,
+      options: e,
+      style: w,
+      output: p = process.stdout,
+      maxItems: b = Number.POSITIVE_INFINITY,
+      columnPadding: C2 = 0,
+      rowPadding: r2 = 4
+    }) => {
+      const i2 = getColumns(p) - C2, m = getRows(p), M = styleText2("dim", "..."), v = Math.max(m - r2, 0), a2 = Math.max(Math.min(b, v), 5);
+      let f = 0;
+      l2 >= a2 - 3 && (f = Math.max(
+        Math.min(l2 - a2 + 3, e.length - a2),
+        0
+      ));
+      let d = a2 < e.length && f > 0, c2 = a2 < e.length && f + a2 < e.length;
+      const W2 = Math.min(
+        f + a2,
+        e.length
+      ), s = [];
+      let g = 0;
+      d && g++, c2 && g++;
+      const T = f + (d ? 1 : 0), y2 = W2 - (c2 ? 1 : 0);
+      for (let t2 = T; t2 < y2; t2++) {
+        const n3 = e[t2], o = n3 ? w(n3, t2 === l2) : "", h2 = wrapAnsi(o, i2, {
+          hard: true,
+          trim: false
+        }).split(`
+`);
+        s.push(h2), g += h2.length;
+      }
+      if (g > v) {
+        let t2 = 0, n3 = 0, o = g;
+        const h2 = l2 - T;
+        let u5 = v;
+        const L = () => I(s, o, 0, h2, u5), E = () => I(
+          s,
+          o,
+          h2 + 1,
+          s.length,
+          u5,
+          true
+        );
+        d ? ({ lineCount: o, removals: t2 } = L(), o > u5 && (c2 || (u5 -= 1), { lineCount: o, removals: n3 } = E())) : (c2 || (u5 -= 1), { lineCount: o, removals: n3 } = E(), o > u5 && (u5 -= 1, { lineCount: o, removals: t2 } = L())), t2 > 0 && (d = true, s.splice(0, t2)), n3 > 0 && (c2 = true, s.splice(s.length - n3, n3));
+      }
+      const x = [];
+      d && x.push(M);
+      for (const t2 of s)
+        for (const n3 of t2)
+          x.push(n3);
+      return c2 && x.push(M), x;
+    };
+    confirm = (e) => {
+      const a2 = e.active ?? "Yes", o = e.inactive ?? "No";
+      return new r({
+        active: a2,
+        inactive: o,
+        signal: e.signal,
+        input: e.input,
+        output: e.output,
+        initialValue: e.initialValue ?? true,
+        render() {
+          const i2 = e.withGuide ?? settings.withGuide, u5 = `${symbol(this.state)}  `, l2 = i2 ? `${styleText2("gray", S_BAR)}  ` : "", f = wrapTextWithPrefix(
+            e.output,
+            e.message,
+            l2,
+            u5
+          ), s = `${i2 ? `${styleText2("gray", S_BAR)}
+` : ""}${f}
+`, c2 = this.value ? a2 : o;
+          switch (this.state) {
+            case "submit": {
+              const r2 = i2 ? `${styleText2("gray", S_BAR)}  ` : "";
+              return `${s}${r2}${styleText2("dim", c2)}`;
+            }
+            case "cancel": {
+              const r2 = i2 ? `${styleText2("gray", S_BAR)}  ` : "";
+              return `${s}${r2}${styleText2(["strikethrough", "dim"], c2)}${i2 ? `
+${styleText2("gray", S_BAR)}` : ""}`;
+            }
+            default: {
+              const r2 = i2 ? `${styleText2("cyan", S_BAR)}  ` : "", g = i2 ? styleText2("cyan", S_BAR_END) : "";
+              return `${s}${r2}${this.value ? `${styleText2("green", S_RADIO_ACTIVE)} ${a2}` : `${styleText2("dim", S_RADIO_INACTIVE)} ${styleText2("dim", a2)}`}${e.vertical ? i2 ? `
+${styleText2("cyan", S_BAR)}  ` : `
+` : ` ${styleText2("dim", "/")} `}${this.value ? `${styleText2("dim", S_RADIO_INACTIVE)} ${styleText2("dim", o)}` : `${styleText2("green", S_RADIO_ACTIVE)} ${o}`}
+${g}
+`;
+            }
+          }
+        }
+      }).prompt();
+    };
+    MULTISELECT_INSTRUCTIONS = [
+      `${styleText2("dim", "\u2191/\u2193")} to navigate`,
+      `${styleText2("dim", "Space:")} select`,
+      `${styleText2("dim", "Enter:")} confirm`
+    ];
+    groupMultiselect = (o) => {
+      const { selectableGroups: f = true, groupSpacing: x = 0 } = o, d = (n3, l2, p = []) => {
+        const a2 = n3.label ?? String(n3.value), t2 = typeof n3.group == "string", s = t2 && (p[p.indexOf(n3) + 1] ?? { group: true }), u5 = t2 && s && s.group === true;
+        let r2 = "", c2 = "";
+        t2 && (f ? (r2 = u5 ? `${S_BAR_END} ` : `${S_BAR} `, c2 = u5 ? "  " : `${S_BAR} `) : r2 = "  ");
+        let i2 = "";
+        if (x > 0 && !t2 && (i2 = `
+`.repeat(x)), l2 === "active")
+          return wrapTextWithPrefix(
+            o.output,
+            `${a2}${n3.hint ? ` ${styleText2("dim", `(${n3.hint})`)}` : ""}`,
+            `${i2}${styleText2("dim", r2)} `,
+            `${i2}${styleText2("dim", r2)}${styleText2("cyan", S_CHECKBOX_ACTIVE)} `,
+            `${i2}${styleText2("dim", c2)} `
+          );
+        if (l2 === "group-active")
+          return wrapTextWithPrefix(
+            o.output,
+            a2,
+            `${i2}${r2} `,
+            `${i2}${r2}${styleText2("cyan", S_CHECKBOX_ACTIVE)} `,
+            `${i2}${c2} `,
+            (m) => styleText2("dim", m)
+          );
+        if (l2 === "group-active-selected")
+          return wrapTextWithPrefix(
+            o.output,
+            a2,
+            `${i2}${r2} `,
+            `${i2}${r2}${styleText2("green", S_CHECKBOX_SELECTED)} `,
+            `${i2}${c2} `,
+            (m) => styleText2("dim", m)
+          );
+        if (l2 === "selected") {
+          const m = t2 || f ? styleText2("green", S_CHECKBOX_SELECTED) : "";
+          return wrapTextWithPrefix(
+            o.output,
+            `${a2}${n3.hint ? ` (${n3.hint})` : ""}`,
+            `${i2}${styleText2("dim", r2)} `,
+            `${i2}${styleText2("dim", r2)}${m} `,
+            `${i2}${styleText2("dim", c2)} `,
+            (I2) => styleText2("dim", I2)
+          );
+        }
+        if (l2 === "cancelled")
+          return `${styleText2(["strikethrough", "dim"], a2)}`;
+        if (l2 === "active-selected")
+          return wrapTextWithPrefix(
+            o.output,
+            `${a2}${n3.hint ? ` ${styleText2("dim", `(${n3.hint})`)}` : ""}`,
+            `${i2}${styleText2("dim", r2)} `,
+            `${i2}${styleText2("dim", r2)}${styleText2("green", S_CHECKBOX_SELECTED)} `,
+            `${i2}${styleText2("dim", c2)} `
+          );
+        if (l2 === "submitted")
+          return `${styleText2("dim", a2)}`;
+        const h2 = t2 || f ? styleText2("dim", S_CHECKBOX_INACTIVE) : "";
+        return wrapTextWithPrefix(
+          o.output,
+          a2,
+          `${i2}${styleText2("dim", r2)} `,
+          `${i2}${styleText2("dim", r2)}${h2} `,
+          `${i2}${styleText2("dim", c2)} `,
+          (m) => styleText2("dim", m)
+        );
+      }, y2 = o.required ?? true, S2 = o.showInstructions ?? true;
+      return new u$2({
+        options: o.options,
+        signal: o.signal,
+        input: o.input,
+        output: o.output,
+        initialValues: o.initialValues,
+        required: y2,
+        cursorAt: o.cursorAt,
+        selectableGroups: f,
+        validate(n3) {
+          if (y2 && (n3 === void 0 || n3.length === 0))
+            return `Please select at least one option.
+${styleText2(
+              "reset",
+              styleText2(
+                "dim",
+                `Press ${styleText2(["gray", "bgWhite", "inverse"], " space ")} to select, ${styleText2(
+                  "gray",
+                  styleText2(["bgWhite", "inverse"], " enter ")
+                )} to submit`
+              )
+            )}`;
+        },
+        render() {
+          const n3 = o.withGuide ?? settings.withGuide, l2 = `${n3 ? `${styleText2("gray", S_BAR)}
+` : ""}${symbol(this.state)}  ${o.message}
+`, p = this.value ?? [], a2 = (t2, s) => {
+            const u5 = this.options, r2 = p.includes(t2.value) || t2.group === true && this.isGroupSelected(`${t2.value}`);
+            return !s && typeof t2.group == "string" && this.options[this.cursor]?.value === t2.group ? d(t2, r2 ? "group-active-selected" : "group-active", u5) : s && r2 ? d(t2, "active-selected", u5) : r2 ? d(t2, "selected", u5) : d(t2, s ? "active" : "inactive", u5);
+          };
+          switch (this.state) {
+            case "submit": {
+              const t2 = this.options.filter(({ value: u5 }) => p.includes(u5)).map((u5) => d(u5, "submitted")), s = t2.length === 0 ? "" : `  ${t2.join(styleText2("dim", ", "))}`;
+              return `${l2}${n3 ? styleText2("gray", S_BAR) : ""}${s}`;
+            }
+            case "cancel": {
+              const t2 = this.options.filter(({ value: s }) => p.includes(s)).map((s) => d(s, "cancelled")).join(styleText2("dim", ", "));
+              return `${l2}${n3 ? `${styleText2("gray", S_BAR)}  ` : ""}${t2.trim() ? `${t2}${n3 ? `
+${styleText2("gray", S_BAR)}` : ""}` : ""}`;
+            }
+            case "error": {
+              const t2 = n3 ? `${styleText2("yellow", S_BAR)}  ` : "", s = this.error.split(`
+`).map(
+                (i2, h2) => h2 === 0 ? `${n3 ? `${styleText2("yellow", S_BAR_END)}  ` : ""}${styleText2("yellow", i2)}` : `   ${i2}`
+              ).join(`
+`), u5 = l2.split(`
+`).length, r2 = s.split(`
+`).length + 1, c2 = limitOptions({
+                output: o.output,
+                options: this.options,
+                cursor: this.cursor,
+                maxItems: o.maxItems,
+                columnPadding: t2.length,
+                rowPadding: u5 + r2,
+                style: a2
+              }).join(`
+${t2}`);
+              return `${l2}${t2}${c2}
+${s}
+`;
+            }
+            default: {
+              const t2 = n3 ? `${styleText2("cyan", S_BAR)}  ` : "", s = l2.split(`
+`).length, u5 = S2 ? formatInstructionFooter(MULTISELECT_INSTRUCTIONS, n3) : n3 ? [styleText2("cyan", S_BAR_END)] : [], r2 = u5.join(`
+`), c2 = u5.length + 1, i2 = limitOptions({
+                output: o.output,
+                options: this.options,
+                cursor: this.cursor,
+                maxItems: o.maxItems,
+                columnPadding: t2.length,
+                rowPadding: s + c2,
+                style: a2
+              }).join(`
+${t2}`);
+              return `${l2}${t2}${i2}
+${r2}
+`;
+            }
+          }
+        }
+      }).prompt();
+    };
+    log = {
+      message: (s = [], {
+        symbol: e = styleText2("gray", S_BAR),
+        secondarySymbol: r2 = styleText2("gray", S_BAR),
+        output: m = process.stdout,
+        spacing: l2 = 1,
+        withGuide: c2
+      } = {}) => {
+        const t2 = [], o = c2 ?? settings.withGuide, f = o ? r2 : "", O = o ? `${e}  ` : "", u5 = o ? `${r2}  ` : "";
+        for (let i2 = 0; i2 < l2; i2++)
+          t2.push(f);
+        const g = Array.isArray(s) ? s : s.split(`
+`);
+        if (g.length > 0) {
+          const [i2, ...y2] = g;
+          i2.length > 0 ? t2.push(`${O}${i2}`) : t2.push(o ? e : "");
+          for (const p of y2)
+            p.length > 0 ? t2.push(`${u5}${p}`) : t2.push(o ? r2 : "");
+        }
+        m.write(`${t2.join(`
+`)}
+`);
+      },
+      info: (s, e) => {
+        log.message(s, { ...e, symbol: styleText2("blue", S_INFO) });
+      },
+      success: (s, e) => {
+        log.message(s, { ...e, symbol: styleText2("green", S_SUCCESS) });
+      },
+      step: (s, e) => {
+        log.message(s, { ...e, symbol: styleText2("green", S_STEP_SUBMIT) });
+      },
+      warn: (s, e) => {
+        log.message(s, { ...e, symbol: styleText2("yellow", S_WARN) });
+      },
+      /** alias for `log.warn()`. */
+      warning: (s, e) => {
+        log.warn(s, e);
+      },
+      error: (s, e) => {
+        log.message(s, { ...e, symbol: styleText2("red", S_ERROR) });
+      }
+    };
+    cancel = (o = "", t2) => {
+      const i2 = t2?.output ?? process.stdout, e = t2?.withGuide ?? settings.withGuide ? `${styleText2("gray", S_BAR_END)}  ` : "";
+      i2.write(`${e}${styleText2("red", o)}
+
+`);
+    };
+    intro = (o = "", t2) => {
+      const i2 = t2?.output ?? process.stdout, e = t2?.withGuide ?? settings.withGuide ? `${styleText2("gray", S_BAR_START)}  ` : "";
+      i2.write(`${e}${o}
+`);
+    };
+    outro = (o = "", t2) => {
+      const i2 = t2?.output ?? process.stdout, e = t2?.withGuide ?? settings.withGuide ? `${styleText2("gray", S_BAR)}
+${styleText2("gray", S_BAR_END)}  ` : "";
+      i2.write(`${e}${o}
+
+`);
+    };
+    W$1 = (o) => o;
+    C = (o, e, s) => {
+      const a2 = {
+        hard: true,
+        trim: false
+      }, i2 = wrapAnsi(o, e, a2).split(`
+`), c2 = i2.reduce((n3, t2) => Math.max(dist_default2(t2), n3), 0), u5 = i2.map(s).reduce((n3, t2) => Math.max(dist_default2(t2), n3), 0), g = e - (u5 - c2);
+      return wrapAnsi(o, g, a2);
+    };
+    note = (o = "", e = "", s) => {
+      const a2 = s?.output ?? process$1.stdout, i2 = s?.withGuide ?? settings.withGuide, c2 = s?.format ?? W$1, g = ["", ...C(o, getColumns(a2) - 6, c2).split(`
+`).map(c2), ""], n3 = dist_default2(e), t2 = Math.max(
+        g.reduce((m, F) => {
+          const O = dist_default2(F);
+          return O > m ? O : m;
+        }, 0),
+        n3
+      ) + 2, h2 = g.map(
+        (m) => `${styleText2("gray", S_BAR)}  ${m}${" ".repeat(t2 - dist_default2(m))}${styleText2("gray", S_BAR)}`
+      ).join(`
+`), T = i2 ? `${styleText2("gray", S_BAR)}
+` : "", l$1 = i2 ? S_CONNECT_LEFT : S_CORNER_BOTTOM_LEFT;
+      a2.write(
+        `${T}${styleText2("green", S_STEP_SUBMIT)}  ${styleText2("reset", e)} ${styleText2(
+          "gray",
+          S_BAR_H.repeat(Math.max(t2 - n3 - 1, 1)) + S_CORNER_TOP_RIGHT
+        )}
+${h2}
+${styleText2("gray", l$1 + S_BAR_H.repeat(t2 + 2) + S_CORNER_BOTTOM_RIGHT)}
+`
+      );
+    };
+    password = (e) => new u$1({
+      validate: e.validate,
+      mask: e.mask ?? S_PASSWORD_MASK,
+      signal: e.signal,
+      input: e.input,
+      output: e.output,
+      render() {
+        const r2 = e.withGuide ?? settings.withGuide, o = `${r2 ? `${styleText2("gray", S_BAR)}
+` : ""}${symbol(this.state)}  ${e.message}
+`, m = this.userInputWithCursor, i2 = this.masked;
+        switch (this.state) {
+          case "error": {
+            const s = r2 ? `${styleText2("yellow", S_BAR)}  ` : "", n3 = r2 ? `${styleText2("yellow", S_BAR_END)}  ` : "", d = i2 ?? "";
+            return e.clearOnError && this.clear(), `${o.trim()}
+${s}${d}
+${n3}${styleText2("yellow", this.error)}
+`;
+          }
+          case "submit": {
+            const s = r2 ? `${styleText2("gray", S_BAR)}  ` : "", n3 = i2 ? styleText2("dim", i2) : "";
+            return `${o}${s}${n3}`;
+          }
+          case "cancel": {
+            const s = r2 ? `${styleText2("gray", S_BAR)}  ` : "", n3 = i2 ? styleText2(["strikethrough", "dim"], i2) : "";
+            return `${o}${s}${n3}${i2 && r2 ? `
+${styleText2("gray", S_BAR)}` : ""}`;
+          }
+          default: {
+            const s = r2 ? `${styleText2("cyan", S_BAR)}  ` : "", n3 = r2 ? styleText2("cyan", S_BAR_END) : "";
+            return `${o}${s}${m}
+${n3}
+`;
+          }
+        }
+      }
+    }).prompt();
+    W = (l2) => styleText2("magenta", l2);
+    spinner = ({
+      indicator: l2 = "dots",
+      onCancel: h2,
+      output: n3 = process.stdout,
+      cancelMessage: G,
+      errorMessage: O,
+      frames: E = unicode ? ["\u25D2", "\u25D0", "\u25D3", "\u25D1"] : ["\u2022", "o", "O", "0"],
+      delay: F = unicode ? 80 : 120,
+      signal: m,
+      ...I2
+    } = {}) => {
+      const u5 = isCI();
+      let M, T, d = false, S2 = false, s = "", p, w = performance.now();
+      const x = getColumns(n3), k = I2?.styleFrame ?? W, g = (e) => {
+        const r2 = e > 1 ? O ?? settings.messages.error : G ?? settings.messages.cancel;
+        S2 = e === 1, d && (a2(r2, e), S2 && typeof h2 == "function" && h2());
+      }, f = () => g(2), i2 = () => g(1), A = () => {
+        process.on("uncaughtExceptionMonitor", f), process.on("unhandledRejection", f), process.on("SIGINT", i2), process.on("SIGTERM", i2), process.on("exit", g), m && m.addEventListener("abort", i2);
+      }, H = () => {
+        process.removeListener("uncaughtExceptionMonitor", f), process.removeListener("unhandledRejection", f), process.removeListener("SIGINT", i2), process.removeListener("SIGTERM", i2), process.removeListener("exit", g), m && m.removeEventListener("abort", i2);
+      }, y2 = () => {
+        if (p === void 0) return;
+        u5 && n3.write(`
+`);
+        const r2 = wrapAnsi(p, x, {
+          hard: true,
+          trim: false
+        }).split(`
+`);
+        r2.length > 1 && n3.write(import_sisteransi2.cursor.up(r2.length - 1)), n3.write(import_sisteransi2.cursor.to(0)), n3.write(import_sisteransi2.erase.down());
+      }, C2 = (e) => e.replace(/\.+$/, ""), _ = (e) => {
+        const r2 = (performance.now() - e) / 1e3, t2 = Math.floor(r2 / 60), o = Math.floor(r2 % 60);
+        return t2 > 0 ? `[${t2}m ${o}s]` : `[${o}s]`;
+      }, N = I2.withGuide ?? settings.withGuide, P = (e = "") => {
+        d = true, M = block({ output: n3 }), s = C2(e), w = performance.now(), N && n3.write(`${styleText2("gray", S_BAR)}
+`);
+        let r2 = 0, t2 = 0;
+        A(), T = setInterval(() => {
+          if (u5 && s === p)
+            return;
+          y2(), p = s;
+          const o = k(E[r2]);
+          let v;
+          if (u5)
+            v = `${o}  ${s}...`;
+          else if (l2 === "timer")
+            v = `${o}  ${s} ${_(w)}`;
+          else {
+            const B = ".".repeat(Math.floor(t2)).slice(0, 3);
+            v = `${o}  ${s}${B}`;
+          }
+          const j = wrapAnsi(v, x, {
+            hard: true,
+            trim: false
+          });
+          n3.write(j), r2 = r2 + 1 < E.length ? r2 + 1 : 0, t2 = t2 < 4 ? t2 + 0.125 : 0;
+        }, F);
+      }, a2 = (e = "", r2 = 0, t2 = false) => {
+        if (!d) return;
+        d = false, clearInterval(T), y2();
+        const o = r2 === 0 ? styleText2("green", S_STEP_SUBMIT) : r2 === 1 ? styleText2("red", S_STEP_CANCEL) : styleText2("red", S_STEP_ERROR);
+        s = e ?? s, t2 || (l2 === "timer" ? n3.write(`${o}  ${s} ${_(w)}
+`) : n3.write(`${o}  ${s}
+`)), H(), M();
+      };
+      return {
+        start: P,
+        stop: (e = "") => a2(e, 0),
+        message: (e = "") => {
+          s = C2(e ?? s);
+        },
+        cancel: (e = "") => a2(e, 1),
+        error: (e = "") => a2(e, 2),
+        clear: () => a2("", 0, true),
+        get isCancelled() {
+          return S2;
+        }
+      };
+    };
+    u4 = {
+      light: unicodeOr("\u2500", "-"),
+      heavy: unicodeOr("\u2501", "="),
+      block: unicodeOr("\u2588", "#")
+    };
+    SELECT_INSTRUCTIONS = [
+      `${styleText2("dim", "\u2191/\u2193")} to navigate`,
+      `${styleText2("dim", "Enter:")} confirm`
+    ];
+    c = (t2, o) => t2.includes(`
+`) ? t2.split(`
+`).map((d) => o(d)).join(`
+`) : o(t2);
+    select = (t2) => {
+      const o = (n3, m) => {
+        if (n3 === void 0)
+          return "";
+        const s = n3.label ?? String(n3.value);
+        switch (m) {
+          case "disabled":
+            return `${styleText2("gray", S_RADIO_INACTIVE)} ${c(s, (i2) => styleText2("gray", i2))}${n3.hint ? ` ${styleText2("dim", `(${n3.hint ?? "disabled"})`)}` : ""}`;
+          case "selected":
+            return `${c(s, (i2) => styleText2("dim", i2))}`;
+          case "active":
+            return `${styleText2("green", S_RADIO_ACTIVE)} ${s}${n3.hint ? ` ${styleText2("dim", `(${n3.hint})`)}` : ""}`;
+          case "cancelled":
+            return `${c(s, (i2) => styleText2(["strikethrough", "dim"], i2))}`;
+          default:
+            return `${styleText2("dim", S_RADIO_INACTIVE)} ${c(s, (i2) => styleText2("dim", i2))}`;
+        }
+      }, d = t2.showInstructions ?? true;
+      return new n$1({
+        options: t2.options,
+        signal: t2.signal,
+        input: t2.input,
+        output: t2.output,
+        initialValue: t2.initialValue,
+        render() {
+          const n3 = t2.withGuide ?? settings.withGuide, m = `${symbol(this.state)}  `, s = `${symbolBar(this.state)}  `, i2 = wrapTextWithPrefix(
+            t2.output,
+            t2.message,
+            s,
+            m
+          ), u5 = `${n3 ? `${styleText2("gray", S_BAR)}
+` : ""}${i2}
+`;
+          switch (this.state) {
+            case "submit": {
+              const r2 = n3 ? `${styleText2("gray", S_BAR)}  ` : "", a2 = wrapTextWithPrefix(
+                t2.output,
+                o(this.options[this.cursor], "selected"),
+                r2
+              );
+              return `${u5}${a2}`;
+            }
+            case "cancel": {
+              const r2 = n3 ? `${styleText2("gray", S_BAR)}  ` : "", a2 = wrapTextWithPrefix(
+                t2.output,
+                o(this.options[this.cursor], "cancelled"),
+                r2
+              );
+              return `${u5}${a2}${n3 ? `
+${styleText2("gray", S_BAR)}` : ""}`;
+            }
+            default: {
+              const r2 = n3 ? `${styleText2("cyan", S_BAR)}  ` : "", a2 = u5.split(`
+`).length, p = d ? formatInstructionFooter(SELECT_INSTRUCTIONS, n3) : n3 ? [styleText2("cyan", S_BAR_END)] : [], f = p.join(`
+`), b = p.length + 1;
+              return `${u5}${r2}${limitOptions({
+                output: t2.output,
+                cursor: this.cursor,
+                options: this.options,
+                maxItems: t2.maxItems,
+                columnPadding: r2.length,
+                rowPadding: a2 + b,
+                style: (g, x) => o(g, g.disabled ? "disabled" : x ? "active" : "inactive")
+              }).join(`
+${r2}`)}
+${f}
+`;
+            }
+          }
+        }
+      }).prompt();
+    };
+    i = `${styleText2("gray", S_BAR)}  `;
+    text = (t2) => new n2({
+      validate: t2.validate,
+      placeholder: t2.placeholder,
+      defaultValue: t2.defaultValue,
+      initialValue: t2.initialValue,
+      output: t2.output,
+      signal: t2.signal,
+      input: t2.input,
+      render() {
+        const r2 = t2?.withGuide ?? settings.withGuide, l2 = `${`${r2 ? `${styleText2("gray", S_BAR)}
+` : ""}${symbol(this.state)}  `}${t2.message}
+`, d = t2.placeholder && t2.placeholder.length > 0 ? (
+          // biome-ignore lint/style/noNonNullAssertion: guarded by placeholder.length > 0
+          styleText2("inverse", t2.placeholder[0]) + styleText2("dim", t2.placeholder.slice(1))
+        ) : styleText2(["inverse", "hidden"], "_"), o = this.userInput ? this.userInputWithCursor : d, s = this.value ?? "";
+        switch (this.state) {
+          case "validating": {
+            const n3 = r2 ? `${styleText2("cyan", S_BAR)}  ` : "", i2 = r2 ? styleText2("cyan", S_BAR_END) : "", c2 = styleText2("dim", o), $ = styleText2("dim", "Validating...");
+            return `${l2}${n3}${c2}
+${i2}  ${$}
+`;
+          }
+          case "error": {
+            const n3 = this.error ? `  ${styleText2("yellow", this.error)}` : "", i2 = r2 ? `${styleText2("yellow", S_BAR)}  ` : "", c2 = r2 ? styleText2("yellow", S_BAR_END) : "";
+            return `${l2.trim()}
+${i2}${o}
+${c2}${n3}
+`;
+          }
+          case "submit": {
+            const n3 = s ? `${r2 ? "  " : ""}${styleText2("dim", s)}` : "", i2 = r2 ? styleText2("gray", S_BAR) : "";
+            return `${l2}${i2}${n3}`;
+          }
+          case "cancel": {
+            const n3 = s ? `  ${styleText2(["strikethrough", "dim"], s)}` : "", i2 = r2 ? styleText2("gray", S_BAR) : "";
+            return `${l2}${i2}${n3}${s.trim() ? `
+${i2}` : ""}`;
+          }
+          default: {
+            const n3 = r2 ? `${styleText2("cyan", S_BAR)}  ` : "", i2 = r2 ? styleText2("cyan", S_BAR_END) : "";
+            return `${l2}${n3}${o}
+${i2}
+`;
+          }
+        }
+      }
+    }).prompt();
   }
 });
 
 // node_modules/picocolors/picocolors.js
 var require_picocolors = __commonJS({
   "node_modules/picocolors/picocolors.js"(exports, module) {
-    var p2 = process || {};
-    var argv = p2.argv || [];
-    var env2 = p2.env || {};
-    var isColorSupported = !(!!env2.NO_COLOR || argv.includes("--no-color")) && (!!env2.FORCE_COLOR || argv.includes("--color") || p2.platform === "win32" || (p2.stdout || {}).isTTY && env2.TERM !== "dumb" || !!env2.CI);
+    var p = process || {};
+    var argv = p.argv || [];
+    var env2 = p.env || {};
+    var isColorSupported = !(!!env2.NO_COLOR || argv.includes("--no-color")) && (!!env2.FORCE_COLOR || argv.includes("--color") || p.platform === "win32" || (p.stdout || {}).isTTY && env2.TERM !== "dumb" || !!env2.CI);
     var formatter = (open, close, replace = open) => (input) => {
       let string = "" + input, index = string.indexOf(close, open.length);
       return ~index ? open + replaceClose(string, close, replace, index) + close : open + string + close;
     };
     var replaceClose = (string, close, replace, index) => {
-      let result = "", cursor = 0;
+      let result = "", cursor3 = 0;
       do {
-        result += string.substring(cursor, index) + replace;
-        cursor = index + close.length;
-        index = string.indexOf(close, cursor);
+        result += string.substring(cursor3, index) + replace;
+        cursor3 = index + close.length;
+        index = string.indexOf(close, cursor3);
       } while (~index);
-      return result + string.substring(cursor);
+      return result + string.substring(cursor3);
     };
     var createColors = (enabled = isColorSupported) => {
       let f = enabled ? formatter : () => String;
@@ -3459,789 +4981,6 @@ var require_picocolors = __commonJS({
   }
 });
 
-// node_modules/@clack/core/dist/index.mjs
-import { stdin as j, stdout as M } from "node:process";
-import * as g from "node:readline";
-import O from "node:readline";
-import { Writable as X } from "node:stream";
-function DD({ onlyFirst: e2 = false } = {}) {
-  const t = ["[\\u001B\\u009B][[\\]()#;?]*(?:(?:(?:(?:;[-a-zA-Z\\d\\/#&.:=?%@~_]+)*|[a-zA-Z\\d]+(?:;[-a-zA-Z\\d\\/#&.:=?%@~_]*)*)?(?:\\u0007|\\u001B\\u005C|\\u009C))", "(?:(?:\\d{1,4}(?:;\\d{0,4})*)?[\\dA-PR-TZcf-nq-uy=><~]))"].join("|");
-  return new RegExp(t, e2 ? void 0 : "g");
-}
-function P(e2) {
-  if (typeof e2 != "string") throw new TypeError(`Expected a \`string\`, got \`${typeof e2}\``);
-  return e2.replace(uD, "");
-}
-function L(e2) {
-  return e2 && e2.__esModule && Object.prototype.hasOwnProperty.call(e2, "default") ? e2.default : e2;
-}
-function p(e2, u2 = {}) {
-  if (typeof e2 != "string" || e2.length === 0 || (u2 = { ambiguousIsNarrow: true, ...u2 }, e2 = P(e2), e2.length === 0)) return 0;
-  e2 = e2.replace(sD(), "  ");
-  const t = u2.ambiguousIsNarrow ? 1 : 2;
-  let F2 = 0;
-  for (const s of e2) {
-    const i = s.codePointAt(0);
-    if (i <= 31 || i >= 127 && i <= 159 || i >= 768 && i <= 879) continue;
-    switch (eD.eastAsianWidth(s)) {
-      case "F":
-      case "W":
-        F2 += 2;
-        break;
-      case "A":
-        F2 += t;
-        break;
-      default:
-        F2 += 1;
-    }
-  }
-  return F2;
-}
-function rD() {
-  const e2 = /* @__PURE__ */ new Map();
-  for (const [u2, t] of Object.entries(r)) {
-    for (const [F2, s] of Object.entries(t)) r[F2] = { open: `\x1B[${s[0]}m`, close: `\x1B[${s[1]}m` }, t[F2] = r[F2], e2.set(s[0], s[1]);
-    Object.defineProperty(r, u2, { value: t, enumerable: false });
-  }
-  return Object.defineProperty(r, "codes", { value: e2, enumerable: false }), r.color.close = "\x1B[39m", r.bgColor.close = "\x1B[49m", r.color.ansi = N(), r.color.ansi256 = I(), r.color.ansi16m = R(), r.bgColor.ansi = N(w), r.bgColor.ansi256 = I(w), r.bgColor.ansi16m = R(w), Object.defineProperties(r, { rgbToAnsi256: { value: (u2, t, F2) => u2 === t && t === F2 ? u2 < 8 ? 16 : u2 > 248 ? 231 : Math.round((u2 - 8) / 247 * 24) + 232 : 16 + 36 * Math.round(u2 / 255 * 5) + 6 * Math.round(t / 255 * 5) + Math.round(F2 / 255 * 5), enumerable: false }, hexToRgb: { value: (u2) => {
-    const t = /[a-f\d]{6}|[a-f\d]{3}/i.exec(u2.toString(16));
-    if (!t) return [0, 0, 0];
-    let [F2] = t;
-    F2.length === 3 && (F2 = [...F2].map((i) => i + i).join(""));
-    const s = Number.parseInt(F2, 16);
-    return [s >> 16 & 255, s >> 8 & 255, s & 255];
-  }, enumerable: false }, hexToAnsi256: { value: (u2) => r.rgbToAnsi256(...r.hexToRgb(u2)), enumerable: false }, ansi256ToAnsi: { value: (u2) => {
-    if (u2 < 8) return 30 + u2;
-    if (u2 < 16) return 90 + (u2 - 8);
-    let t, F2, s;
-    if (u2 >= 232) t = ((u2 - 232) * 10 + 8) / 255, F2 = t, s = t;
-    else {
-      u2 -= 16;
-      const C2 = u2 % 36;
-      t = Math.floor(u2 / 36) / 5, F2 = Math.floor(C2 / 6) / 5, s = C2 % 6 / 5;
-    }
-    const i = Math.max(t, F2, s) * 2;
-    if (i === 0) return 30;
-    let D2 = 30 + (Math.round(s) << 2 | Math.round(F2) << 1 | Math.round(t));
-    return i === 2 && (D2 += 60), D2;
-  }, enumerable: false }, rgbToAnsi: { value: (u2, t, F2) => r.ansi256ToAnsi(r.rgbToAnsi256(u2, t, F2)), enumerable: false }, hexToAnsi: { value: (u2) => r.ansi256ToAnsi(r.hexToAnsi256(u2)), enumerable: false } }), r;
-}
-function Y(e2, u2, t) {
-  return String(e2).normalize().replace(/\r\n/g, `
-`).split(`
-`).map((F2) => lD(F2, u2, t)).join(`
-`);
-}
-function $(e2, u2) {
-  if (typeof e2 == "string") return B.aliases.get(e2) === u2;
-  for (const t of e2) if (t !== void 0 && $(t, u2)) return true;
-  return false;
-}
-function BD(e2, u2) {
-  if (e2 === u2) return;
-  const t = e2.split(`
-`), F2 = u2.split(`
-`), s = [];
-  for (let i = 0; i < Math.max(t.length, F2.length); i++) t[i] !== F2[i] && s.push(i);
-  return s;
-}
-function pD(e2) {
-  return e2 === S;
-}
-function m(e2, u2) {
-  const t = e2;
-  t.isTTY && t.setRawMode(u2);
-}
-function fD({ input: e2 = j, output: u2 = M, overwrite: t = true, hideCursor: F2 = true } = {}) {
-  const s = g.createInterface({ input: e2, output: u2, prompt: "", tabSize: 1 });
-  g.emitKeypressEvents(e2, s), e2.isTTY && e2.setRawMode(true);
-  const i = (D2, { name: C2, sequence: n }) => {
-    const E = String(D2);
-    if ($([E, C2, n], "cancel")) {
-      F2 && u2.write(import_sisteransi.cursor.show), process.exit(0);
-      return;
-    }
-    if (!t) return;
-    const a = C2 === "return" ? 0 : -1, o2 = C2 === "return" ? -1 : 0;
-    g.moveCursor(u2, a, o2, () => {
-      g.clearLine(u2, 1, () => {
-        e2.once("keypress", i);
-      });
-    });
-  };
-  return F2 && u2.write(import_sisteransi.cursor.hide), e2.once("keypress", i), () => {
-    e2.off("keypress", i), F2 && u2.write(import_sisteransi.cursor.show), e2.isTTY && !AD && e2.setRawMode(false), s.terminal = false, s.close();
-  };
-}
-var import_sisteransi, import_picocolors, uD, W, tD, eD, FD, sD, w, N, I, R, r, iD, CD, ED, d, oD, y, V, nD, G, _, z, K, aD, k, hD, lD, xD, B, AD, S, gD, vD, h, x, dD, mD, bD, Z, q, T, wD, yD, A, _D, TD, jD, U, MD, OD, PD, J, LD, RD;
-var init_dist = __esm({
-  "node_modules/@clack/core/dist/index.mjs"() {
-    import_sisteransi = __toESM(require_src(), 1);
-    import_picocolors = __toESM(require_picocolors(), 1);
-    uD = DD();
-    W = { exports: {} };
-    (function(e2) {
-      var u2 = {};
-      e2.exports = u2, u2.eastAsianWidth = function(F2) {
-        var s = F2.charCodeAt(0), i = F2.length == 2 ? F2.charCodeAt(1) : 0, D2 = s;
-        return 55296 <= s && s <= 56319 && 56320 <= i && i <= 57343 && (s &= 1023, i &= 1023, D2 = s << 10 | i, D2 += 65536), D2 == 12288 || 65281 <= D2 && D2 <= 65376 || 65504 <= D2 && D2 <= 65510 ? "F" : D2 == 8361 || 65377 <= D2 && D2 <= 65470 || 65474 <= D2 && D2 <= 65479 || 65482 <= D2 && D2 <= 65487 || 65490 <= D2 && D2 <= 65495 || 65498 <= D2 && D2 <= 65500 || 65512 <= D2 && D2 <= 65518 ? "H" : 4352 <= D2 && D2 <= 4447 || 4515 <= D2 && D2 <= 4519 || 4602 <= D2 && D2 <= 4607 || 9001 <= D2 && D2 <= 9002 || 11904 <= D2 && D2 <= 11929 || 11931 <= D2 && D2 <= 12019 || 12032 <= D2 && D2 <= 12245 || 12272 <= D2 && D2 <= 12283 || 12289 <= D2 && D2 <= 12350 || 12353 <= D2 && D2 <= 12438 || 12441 <= D2 && D2 <= 12543 || 12549 <= D2 && D2 <= 12589 || 12593 <= D2 && D2 <= 12686 || 12688 <= D2 && D2 <= 12730 || 12736 <= D2 && D2 <= 12771 || 12784 <= D2 && D2 <= 12830 || 12832 <= D2 && D2 <= 12871 || 12880 <= D2 && D2 <= 13054 || 13056 <= D2 && D2 <= 19903 || 19968 <= D2 && D2 <= 42124 || 42128 <= D2 && D2 <= 42182 || 43360 <= D2 && D2 <= 43388 || 44032 <= D2 && D2 <= 55203 || 55216 <= D2 && D2 <= 55238 || 55243 <= D2 && D2 <= 55291 || 63744 <= D2 && D2 <= 64255 || 65040 <= D2 && D2 <= 65049 || 65072 <= D2 && D2 <= 65106 || 65108 <= D2 && D2 <= 65126 || 65128 <= D2 && D2 <= 65131 || 110592 <= D2 && D2 <= 110593 || 127488 <= D2 && D2 <= 127490 || 127504 <= D2 && D2 <= 127546 || 127552 <= D2 && D2 <= 127560 || 127568 <= D2 && D2 <= 127569 || 131072 <= D2 && D2 <= 194367 || 177984 <= D2 && D2 <= 196605 || 196608 <= D2 && D2 <= 262141 ? "W" : 32 <= D2 && D2 <= 126 || 162 <= D2 && D2 <= 163 || 165 <= D2 && D2 <= 166 || D2 == 172 || D2 == 175 || 10214 <= D2 && D2 <= 10221 || 10629 <= D2 && D2 <= 10630 ? "Na" : D2 == 161 || D2 == 164 || 167 <= D2 && D2 <= 168 || D2 == 170 || 173 <= D2 && D2 <= 174 || 176 <= D2 && D2 <= 180 || 182 <= D2 && D2 <= 186 || 188 <= D2 && D2 <= 191 || D2 == 198 || D2 == 208 || 215 <= D2 && D2 <= 216 || 222 <= D2 && D2 <= 225 || D2 == 230 || 232 <= D2 && D2 <= 234 || 236 <= D2 && D2 <= 237 || D2 == 240 || 242 <= D2 && D2 <= 243 || 247 <= D2 && D2 <= 250 || D2 == 252 || D2 == 254 || D2 == 257 || D2 == 273 || D2 == 275 || D2 == 283 || 294 <= D2 && D2 <= 295 || D2 == 299 || 305 <= D2 && D2 <= 307 || D2 == 312 || 319 <= D2 && D2 <= 322 || D2 == 324 || 328 <= D2 && D2 <= 331 || D2 == 333 || 338 <= D2 && D2 <= 339 || 358 <= D2 && D2 <= 359 || D2 == 363 || D2 == 462 || D2 == 464 || D2 == 466 || D2 == 468 || D2 == 470 || D2 == 472 || D2 == 474 || D2 == 476 || D2 == 593 || D2 == 609 || D2 == 708 || D2 == 711 || 713 <= D2 && D2 <= 715 || D2 == 717 || D2 == 720 || 728 <= D2 && D2 <= 731 || D2 == 733 || D2 == 735 || 768 <= D2 && D2 <= 879 || 913 <= D2 && D2 <= 929 || 931 <= D2 && D2 <= 937 || 945 <= D2 && D2 <= 961 || 963 <= D2 && D2 <= 969 || D2 == 1025 || 1040 <= D2 && D2 <= 1103 || D2 == 1105 || D2 == 8208 || 8211 <= D2 && D2 <= 8214 || 8216 <= D2 && D2 <= 8217 || 8220 <= D2 && D2 <= 8221 || 8224 <= D2 && D2 <= 8226 || 8228 <= D2 && D2 <= 8231 || D2 == 8240 || 8242 <= D2 && D2 <= 8243 || D2 == 8245 || D2 == 8251 || D2 == 8254 || D2 == 8308 || D2 == 8319 || 8321 <= D2 && D2 <= 8324 || D2 == 8364 || D2 == 8451 || D2 == 8453 || D2 == 8457 || D2 == 8467 || D2 == 8470 || 8481 <= D2 && D2 <= 8482 || D2 == 8486 || D2 == 8491 || 8531 <= D2 && D2 <= 8532 || 8539 <= D2 && D2 <= 8542 || 8544 <= D2 && D2 <= 8555 || 8560 <= D2 && D2 <= 8569 || D2 == 8585 || 8592 <= D2 && D2 <= 8601 || 8632 <= D2 && D2 <= 8633 || D2 == 8658 || D2 == 8660 || D2 == 8679 || D2 == 8704 || 8706 <= D2 && D2 <= 8707 || 8711 <= D2 && D2 <= 8712 || D2 == 8715 || D2 == 8719 || D2 == 8721 || D2 == 8725 || D2 == 8730 || 8733 <= D2 && D2 <= 8736 || D2 == 8739 || D2 == 8741 || 8743 <= D2 && D2 <= 8748 || D2 == 8750 || 8756 <= D2 && D2 <= 8759 || 8764 <= D2 && D2 <= 8765 || D2 == 8776 || D2 == 8780 || D2 == 8786 || 8800 <= D2 && D2 <= 8801 || 8804 <= D2 && D2 <= 8807 || 8810 <= D2 && D2 <= 8811 || 8814 <= D2 && D2 <= 8815 || 8834 <= D2 && D2 <= 8835 || 8838 <= D2 && D2 <= 8839 || D2 == 8853 || D2 == 8857 || D2 == 8869 || D2 == 8895 || D2 == 8978 || 9312 <= D2 && D2 <= 9449 || 9451 <= D2 && D2 <= 9547 || 9552 <= D2 && D2 <= 9587 || 9600 <= D2 && D2 <= 9615 || 9618 <= D2 && D2 <= 9621 || 9632 <= D2 && D2 <= 9633 || 9635 <= D2 && D2 <= 9641 || 9650 <= D2 && D2 <= 9651 || 9654 <= D2 && D2 <= 9655 || 9660 <= D2 && D2 <= 9661 || 9664 <= D2 && D2 <= 9665 || 9670 <= D2 && D2 <= 9672 || D2 == 9675 || 9678 <= D2 && D2 <= 9681 || 9698 <= D2 && D2 <= 9701 || D2 == 9711 || 9733 <= D2 && D2 <= 9734 || D2 == 9737 || 9742 <= D2 && D2 <= 9743 || 9748 <= D2 && D2 <= 9749 || D2 == 9756 || D2 == 9758 || D2 == 9792 || D2 == 9794 || 9824 <= D2 && D2 <= 9825 || 9827 <= D2 && D2 <= 9829 || 9831 <= D2 && D2 <= 9834 || 9836 <= D2 && D2 <= 9837 || D2 == 9839 || 9886 <= D2 && D2 <= 9887 || 9918 <= D2 && D2 <= 9919 || 9924 <= D2 && D2 <= 9933 || 9935 <= D2 && D2 <= 9953 || D2 == 9955 || 9960 <= D2 && D2 <= 9983 || D2 == 10045 || D2 == 10071 || 10102 <= D2 && D2 <= 10111 || 11093 <= D2 && D2 <= 11097 || 12872 <= D2 && D2 <= 12879 || 57344 <= D2 && D2 <= 63743 || 65024 <= D2 && D2 <= 65039 || D2 == 65533 || 127232 <= D2 && D2 <= 127242 || 127248 <= D2 && D2 <= 127277 || 127280 <= D2 && D2 <= 127337 || 127344 <= D2 && D2 <= 127386 || 917760 <= D2 && D2 <= 917999 || 983040 <= D2 && D2 <= 1048573 || 1048576 <= D2 && D2 <= 1114109 ? "A" : "N";
-      }, u2.characterLength = function(F2) {
-        var s = this.eastAsianWidth(F2);
-        return s == "F" || s == "W" || s == "A" ? 2 : 1;
-      };
-      function t(F2) {
-        return F2.match(/[\uD800-\uDBFF][\uDC00-\uDFFF]|[^\uD800-\uDFFF]/g) || [];
-      }
-      u2.length = function(F2) {
-        for (var s = t(F2), i = 0, D2 = 0; D2 < s.length; D2++) i = i + this.characterLength(s[D2]);
-        return i;
-      }, u2.slice = function(F2, s, i) {
-        textLen = u2.length(F2), s = s || 0, i = i || 1, s < 0 && (s = textLen + s), i < 0 && (i = textLen + i);
-        for (var D2 = "", C2 = 0, n = t(F2), E = 0; E < n.length; E++) {
-          var a = n[E], o2 = u2.length(a);
-          if (C2 >= s - (o2 == 2 ? 1 : 0)) if (C2 + o2 <= i) D2 += a;
-          else break;
-          C2 += o2;
-        }
-        return D2;
-      };
-    })(W);
-    tD = W.exports;
-    eD = L(tD);
-    FD = function() {
-      return /\uD83C\uDFF4\uDB40\uDC67\uDB40\uDC62(?:\uDB40\uDC77\uDB40\uDC6C\uDB40\uDC73|\uDB40\uDC73\uDB40\uDC63\uDB40\uDC74|\uDB40\uDC65\uDB40\uDC6E\uDB40\uDC67)\uDB40\uDC7F|(?:\uD83E\uDDD1\uD83C\uDFFF\u200D\u2764\uFE0F\u200D(?:\uD83D\uDC8B\u200D)?\uD83E\uDDD1|\uD83D\uDC69\uD83C\uDFFF\u200D\uD83E\uDD1D\u200D(?:\uD83D[\uDC68\uDC69]))(?:\uD83C[\uDFFB-\uDFFE])|(?:\uD83E\uDDD1\uD83C\uDFFE\u200D\u2764\uFE0F\u200D(?:\uD83D\uDC8B\u200D)?\uD83E\uDDD1|\uD83D\uDC69\uD83C\uDFFE\u200D\uD83E\uDD1D\u200D(?:\uD83D[\uDC68\uDC69]))(?:\uD83C[\uDFFB-\uDFFD\uDFFF])|(?:\uD83E\uDDD1\uD83C\uDFFD\u200D\u2764\uFE0F\u200D(?:\uD83D\uDC8B\u200D)?\uD83E\uDDD1|\uD83D\uDC69\uD83C\uDFFD\u200D\uD83E\uDD1D\u200D(?:\uD83D[\uDC68\uDC69]))(?:\uD83C[\uDFFB\uDFFC\uDFFE\uDFFF])|(?:\uD83E\uDDD1\uD83C\uDFFC\u200D\u2764\uFE0F\u200D(?:\uD83D\uDC8B\u200D)?\uD83E\uDDD1|\uD83D\uDC69\uD83C\uDFFC\u200D\uD83E\uDD1D\u200D(?:\uD83D[\uDC68\uDC69]))(?:\uD83C[\uDFFB\uDFFD-\uDFFF])|(?:\uD83E\uDDD1\uD83C\uDFFB\u200D\u2764\uFE0F\u200D(?:\uD83D\uDC8B\u200D)?\uD83E\uDDD1|\uD83D\uDC69\uD83C\uDFFB\u200D\uD83E\uDD1D\u200D(?:\uD83D[\uDC68\uDC69]))(?:\uD83C[\uDFFC-\uDFFF])|\uD83D\uDC68(?:\uD83C\uDFFB(?:\u200D(?:\u2764\uFE0F\u200D(?:\uD83D\uDC8B\u200D\uD83D\uDC68(?:\uD83C[\uDFFB-\uDFFF])|\uD83D\uDC68(?:\uD83C[\uDFFB-\uDFFF]))|\uD83E\uDD1D\u200D\uD83D\uDC68(?:\uD83C[\uDFFC-\uDFFF])|[\u2695\u2696\u2708]\uFE0F|\uD83C[\uDF3E\uDF73\uDF7C\uDF93\uDFA4\uDFA8\uDFEB\uDFED]|\uD83D[\uDCBB\uDCBC\uDD27\uDD2C\uDE80\uDE92]|\uD83E[\uDDAF-\uDDB3\uDDBC\uDDBD]))?|(?:\uD83C[\uDFFC-\uDFFF])\u200D\u2764\uFE0F\u200D(?:\uD83D\uDC8B\u200D\uD83D\uDC68(?:\uD83C[\uDFFB-\uDFFF])|\uD83D\uDC68(?:\uD83C[\uDFFB-\uDFFF]))|\u200D(?:\u2764\uFE0F\u200D(?:\uD83D\uDC8B\u200D)?\uD83D\uDC68|(?:\uD83D[\uDC68\uDC69])\u200D(?:\uD83D\uDC66\u200D\uD83D\uDC66|\uD83D\uDC67\u200D(?:\uD83D[\uDC66\uDC67]))|\uD83D\uDC66\u200D\uD83D\uDC66|\uD83D\uDC67\u200D(?:\uD83D[\uDC66\uDC67])|\uD83C[\uDF3E\uDF73\uDF7C\uDF93\uDFA4\uDFA8\uDFEB\uDFED]|\uD83D[\uDCBB\uDCBC\uDD27\uDD2C\uDE80\uDE92]|\uD83E[\uDDAF-\uDDB3\uDDBC\uDDBD])|\uD83C\uDFFF\u200D(?:\uD83E\uDD1D\u200D\uD83D\uDC68(?:\uD83C[\uDFFB-\uDFFE])|\uD83C[\uDF3E\uDF73\uDF7C\uDF93\uDFA4\uDFA8\uDFEB\uDFED]|\uD83D[\uDCBB\uDCBC\uDD27\uDD2C\uDE80\uDE92]|\uD83E[\uDDAF-\uDDB3\uDDBC\uDDBD])|\uD83C\uDFFE\u200D(?:\uD83E\uDD1D\u200D\uD83D\uDC68(?:\uD83C[\uDFFB-\uDFFD\uDFFF])|\uD83C[\uDF3E\uDF73\uDF7C\uDF93\uDFA4\uDFA8\uDFEB\uDFED]|\uD83D[\uDCBB\uDCBC\uDD27\uDD2C\uDE80\uDE92]|\uD83E[\uDDAF-\uDDB3\uDDBC\uDDBD])|\uD83C\uDFFD\u200D(?:\uD83E\uDD1D\u200D\uD83D\uDC68(?:\uD83C[\uDFFB\uDFFC\uDFFE\uDFFF])|\uD83C[\uDF3E\uDF73\uDF7C\uDF93\uDFA4\uDFA8\uDFEB\uDFED]|\uD83D[\uDCBB\uDCBC\uDD27\uDD2C\uDE80\uDE92]|\uD83E[\uDDAF-\uDDB3\uDDBC\uDDBD])|\uD83C\uDFFC\u200D(?:\uD83E\uDD1D\u200D\uD83D\uDC68(?:\uD83C[\uDFFB\uDFFD-\uDFFF])|\uD83C[\uDF3E\uDF73\uDF7C\uDF93\uDFA4\uDFA8\uDFEB\uDFED]|\uD83D[\uDCBB\uDCBC\uDD27\uDD2C\uDE80\uDE92]|\uD83E[\uDDAF-\uDDB3\uDDBC\uDDBD])|(?:\uD83C\uDFFF\u200D[\u2695\u2696\u2708]|\uD83C\uDFFE\u200D[\u2695\u2696\u2708]|\uD83C\uDFFD\u200D[\u2695\u2696\u2708]|\uD83C\uDFFC\u200D[\u2695\u2696\u2708]|\u200D[\u2695\u2696\u2708])\uFE0F|\u200D(?:(?:\uD83D[\uDC68\uDC69])\u200D(?:\uD83D[\uDC66\uDC67])|\uD83D[\uDC66\uDC67])|\uD83C\uDFFF|\uD83C\uDFFE|\uD83C\uDFFD|\uD83C\uDFFC)?|(?:\uD83D\uDC69(?:\uD83C\uDFFB\u200D\u2764\uFE0F\u200D(?:\uD83D\uDC8B\u200D(?:\uD83D[\uDC68\uDC69])|\uD83D[\uDC68\uDC69])|(?:\uD83C[\uDFFC-\uDFFF])\u200D\u2764\uFE0F\u200D(?:\uD83D\uDC8B\u200D(?:\uD83D[\uDC68\uDC69])|\uD83D[\uDC68\uDC69]))|\uD83E\uDDD1(?:\uD83C[\uDFFB-\uDFFF])\u200D\uD83E\uDD1D\u200D\uD83E\uDDD1)(?:\uD83C[\uDFFB-\uDFFF])|\uD83D\uDC69\u200D\uD83D\uDC69\u200D(?:\uD83D\uDC66\u200D\uD83D\uDC66|\uD83D\uDC67\u200D(?:\uD83D[\uDC66\uDC67]))|\uD83D\uDC69(?:\u200D(?:\u2764\uFE0F\u200D(?:\uD83D\uDC8B\u200D(?:\uD83D[\uDC68\uDC69])|\uD83D[\uDC68\uDC69])|\uD83C[\uDF3E\uDF73\uDF7C\uDF93\uDFA4\uDFA8\uDFEB\uDFED]|\uD83D[\uDCBB\uDCBC\uDD27\uDD2C\uDE80\uDE92]|\uD83E[\uDDAF-\uDDB3\uDDBC\uDDBD])|\uD83C\uDFFF\u200D(?:\uD83C[\uDF3E\uDF73\uDF7C\uDF93\uDFA4\uDFA8\uDFEB\uDFED]|\uD83D[\uDCBB\uDCBC\uDD27\uDD2C\uDE80\uDE92]|\uD83E[\uDDAF-\uDDB3\uDDBC\uDDBD])|\uD83C\uDFFE\u200D(?:\uD83C[\uDF3E\uDF73\uDF7C\uDF93\uDFA4\uDFA8\uDFEB\uDFED]|\uD83D[\uDCBB\uDCBC\uDD27\uDD2C\uDE80\uDE92]|\uD83E[\uDDAF-\uDDB3\uDDBC\uDDBD])|\uD83C\uDFFD\u200D(?:\uD83C[\uDF3E\uDF73\uDF7C\uDF93\uDFA4\uDFA8\uDFEB\uDFED]|\uD83D[\uDCBB\uDCBC\uDD27\uDD2C\uDE80\uDE92]|\uD83E[\uDDAF-\uDDB3\uDDBC\uDDBD])|\uD83C\uDFFC\u200D(?:\uD83C[\uDF3E\uDF73\uDF7C\uDF93\uDFA4\uDFA8\uDFEB\uDFED]|\uD83D[\uDCBB\uDCBC\uDD27\uDD2C\uDE80\uDE92]|\uD83E[\uDDAF-\uDDB3\uDDBC\uDDBD])|\uD83C\uDFFB\u200D(?:\uD83C[\uDF3E\uDF73\uDF7C\uDF93\uDFA4\uDFA8\uDFEB\uDFED]|\uD83D[\uDCBB\uDCBC\uDD27\uDD2C\uDE80\uDE92]|\uD83E[\uDDAF-\uDDB3\uDDBC\uDDBD]))|\uD83E\uDDD1(?:\u200D(?:\uD83E\uDD1D\u200D\uD83E\uDDD1|\uD83C[\uDF3E\uDF73\uDF7C\uDF84\uDF93\uDFA4\uDFA8\uDFEB\uDFED]|\uD83D[\uDCBB\uDCBC\uDD27\uDD2C\uDE80\uDE92]|\uD83E[\uDDAF-\uDDB3\uDDBC\uDDBD])|\uD83C\uDFFF\u200D(?:\uD83C[\uDF3E\uDF73\uDF7C\uDF84\uDF93\uDFA4\uDFA8\uDFEB\uDFED]|\uD83D[\uDCBB\uDCBC\uDD27\uDD2C\uDE80\uDE92]|\uD83E[\uDDAF-\uDDB3\uDDBC\uDDBD])|\uD83C\uDFFE\u200D(?:\uD83C[\uDF3E\uDF73\uDF7C\uDF84\uDF93\uDFA4\uDFA8\uDFEB\uDFED]|\uD83D[\uDCBB\uDCBC\uDD27\uDD2C\uDE80\uDE92]|\uD83E[\uDDAF-\uDDB3\uDDBC\uDDBD])|\uD83C\uDFFD\u200D(?:\uD83C[\uDF3E\uDF73\uDF7C\uDF84\uDF93\uDFA4\uDFA8\uDFEB\uDFED]|\uD83D[\uDCBB\uDCBC\uDD27\uDD2C\uDE80\uDE92]|\uD83E[\uDDAF-\uDDB3\uDDBC\uDDBD])|\uD83C\uDFFC\u200D(?:\uD83C[\uDF3E\uDF73\uDF7C\uDF84\uDF93\uDFA4\uDFA8\uDFEB\uDFED]|\uD83D[\uDCBB\uDCBC\uDD27\uDD2C\uDE80\uDE92]|\uD83E[\uDDAF-\uDDB3\uDDBC\uDDBD])|\uD83C\uDFFB\u200D(?:\uD83C[\uDF3E\uDF73\uDF7C\uDF84\uDF93\uDFA4\uDFA8\uDFEB\uDFED]|\uD83D[\uDCBB\uDCBC\uDD27\uDD2C\uDE80\uDE92]|\uD83E[\uDDAF-\uDDB3\uDDBC\uDDBD]))|\uD83D\uDC69\u200D\uD83D\uDC66\u200D\uD83D\uDC66|\uD83D\uDC69\u200D\uD83D\uDC69\u200D(?:\uD83D[\uDC66\uDC67])|\uD83D\uDC69\u200D\uD83D\uDC67\u200D(?:\uD83D[\uDC66\uDC67])|(?:\uD83D\uDC41\uFE0F\u200D\uD83D\uDDE8|\uD83E\uDDD1(?:\uD83C\uDFFF\u200D[\u2695\u2696\u2708]|\uD83C\uDFFE\u200D[\u2695\u2696\u2708]|\uD83C\uDFFD\u200D[\u2695\u2696\u2708]|\uD83C\uDFFC\u200D[\u2695\u2696\u2708]|\uD83C\uDFFB\u200D[\u2695\u2696\u2708]|\u200D[\u2695\u2696\u2708])|\uD83D\uDC69(?:\uD83C\uDFFF\u200D[\u2695\u2696\u2708]|\uD83C\uDFFE\u200D[\u2695\u2696\u2708]|\uD83C\uDFFD\u200D[\u2695\u2696\u2708]|\uD83C\uDFFC\u200D[\u2695\u2696\u2708]|\uD83C\uDFFB\u200D[\u2695\u2696\u2708]|\u200D[\u2695\u2696\u2708])|\uD83D\uDE36\u200D\uD83C\uDF2B|\uD83C\uDFF3\uFE0F\u200D\u26A7|\uD83D\uDC3B\u200D\u2744|(?:(?:\uD83C[\uDFC3\uDFC4\uDFCA]|\uD83D[\uDC6E\uDC70\uDC71\uDC73\uDC77\uDC81\uDC82\uDC86\uDC87\uDE45-\uDE47\uDE4B\uDE4D\uDE4E\uDEA3\uDEB4-\uDEB6]|\uD83E[\uDD26\uDD35\uDD37-\uDD39\uDD3D\uDD3E\uDDB8\uDDB9\uDDCD-\uDDCF\uDDD4\uDDD6-\uDDDD])(?:\uD83C[\uDFFB-\uDFFF])|\uD83D\uDC6F|\uD83E[\uDD3C\uDDDE\uDDDF])\u200D[\u2640\u2642]|(?:\u26F9|\uD83C[\uDFCB\uDFCC]|\uD83D\uDD75)(?:\uFE0F|\uD83C[\uDFFB-\uDFFF])\u200D[\u2640\u2642]|\uD83C\uDFF4\u200D\u2620|(?:\uD83C[\uDFC3\uDFC4\uDFCA]|\uD83D[\uDC6E\uDC70\uDC71\uDC73\uDC77\uDC81\uDC82\uDC86\uDC87\uDE45-\uDE47\uDE4B\uDE4D\uDE4E\uDEA3\uDEB4-\uDEB6]|\uD83E[\uDD26\uDD35\uDD37-\uDD39\uDD3D\uDD3E\uDDB8\uDDB9\uDDCD-\uDDCF\uDDD4\uDDD6-\uDDDD])\u200D[\u2640\u2642]|[\xA9\xAE\u203C\u2049\u2122\u2139\u2194-\u2199\u21A9\u21AA\u2328\u23CF\u23ED-\u23EF\u23F1\u23F2\u23F8-\u23FA\u24C2\u25AA\u25AB\u25B6\u25C0\u25FB\u25FC\u2600-\u2604\u260E\u2611\u2618\u2620\u2622\u2623\u2626\u262A\u262E\u262F\u2638-\u263A\u2640\u2642\u265F\u2660\u2663\u2665\u2666\u2668\u267B\u267E\u2692\u2694-\u2697\u2699\u269B\u269C\u26A0\u26A7\u26B0\u26B1\u26C8\u26CF\u26D1\u26D3\u26E9\u26F0\u26F1\u26F4\u26F7\u26F8\u2702\u2708\u2709\u270F\u2712\u2714\u2716\u271D\u2721\u2733\u2734\u2744\u2747\u2763\u27A1\u2934\u2935\u2B05-\u2B07\u3030\u303D\u3297\u3299]|\uD83C[\uDD70\uDD71\uDD7E\uDD7F\uDE02\uDE37\uDF21\uDF24-\uDF2C\uDF36\uDF7D\uDF96\uDF97\uDF99-\uDF9B\uDF9E\uDF9F\uDFCD\uDFCE\uDFD4-\uDFDF\uDFF5\uDFF7]|\uD83D[\uDC3F\uDCFD\uDD49\uDD4A\uDD6F\uDD70\uDD73\uDD76-\uDD79\uDD87\uDD8A-\uDD8D\uDDA5\uDDA8\uDDB1\uDDB2\uDDBC\uDDC2-\uDDC4\uDDD1-\uDDD3\uDDDC-\uDDDE\uDDE1\uDDE3\uDDE8\uDDEF\uDDF3\uDDFA\uDECB\uDECD-\uDECF\uDEE0-\uDEE5\uDEE9\uDEF0\uDEF3])\uFE0F|\uD83C\uDFF3\uFE0F\u200D\uD83C\uDF08|\uD83D\uDC69\u200D\uD83D\uDC67|\uD83D\uDC69\u200D\uD83D\uDC66|\uD83D\uDE35\u200D\uD83D\uDCAB|\uD83D\uDE2E\u200D\uD83D\uDCA8|\uD83D\uDC15\u200D\uD83E\uDDBA|\uD83E\uDDD1(?:\uD83C\uDFFF|\uD83C\uDFFE|\uD83C\uDFFD|\uD83C\uDFFC|\uD83C\uDFFB)?|\uD83D\uDC69(?:\uD83C\uDFFF|\uD83C\uDFFE|\uD83C\uDFFD|\uD83C\uDFFC|\uD83C\uDFFB)?|\uD83C\uDDFD\uD83C\uDDF0|\uD83C\uDDF6\uD83C\uDDE6|\uD83C\uDDF4\uD83C\uDDF2|\uD83D\uDC08\u200D\u2B1B|\u2764\uFE0F\u200D(?:\uD83D\uDD25|\uD83E\uDE79)|\uD83D\uDC41\uFE0F|\uD83C\uDFF3\uFE0F|\uD83C\uDDFF(?:\uD83C[\uDDE6\uDDF2\uDDFC])|\uD83C\uDDFE(?:\uD83C[\uDDEA\uDDF9])|\uD83C\uDDFC(?:\uD83C[\uDDEB\uDDF8])|\uD83C\uDDFB(?:\uD83C[\uDDE6\uDDE8\uDDEA\uDDEC\uDDEE\uDDF3\uDDFA])|\uD83C\uDDFA(?:\uD83C[\uDDE6\uDDEC\uDDF2\uDDF3\uDDF8\uDDFE\uDDFF])|\uD83C\uDDF9(?:\uD83C[\uDDE6\uDDE8\uDDE9\uDDEB-\uDDED\uDDEF-\uDDF4\uDDF7\uDDF9\uDDFB\uDDFC\uDDFF])|\uD83C\uDDF8(?:\uD83C[\uDDE6-\uDDEA\uDDEC-\uDDF4\uDDF7-\uDDF9\uDDFB\uDDFD-\uDDFF])|\uD83C\uDDF7(?:\uD83C[\uDDEA\uDDF4\uDDF8\uDDFA\uDDFC])|\uD83C\uDDF5(?:\uD83C[\uDDE6\uDDEA-\uDDED\uDDF0-\uDDF3\uDDF7-\uDDF9\uDDFC\uDDFE])|\uD83C\uDDF3(?:\uD83C[\uDDE6\uDDE8\uDDEA-\uDDEC\uDDEE\uDDF1\uDDF4\uDDF5\uDDF7\uDDFA\uDDFF])|\uD83C\uDDF2(?:\uD83C[\uDDE6\uDDE8-\uDDED\uDDF0-\uDDFF])|\uD83C\uDDF1(?:\uD83C[\uDDE6-\uDDE8\uDDEE\uDDF0\uDDF7-\uDDFB\uDDFE])|\uD83C\uDDF0(?:\uD83C[\uDDEA\uDDEC-\uDDEE\uDDF2\uDDF3\uDDF5\uDDF7\uDDFC\uDDFE\uDDFF])|\uD83C\uDDEF(?:\uD83C[\uDDEA\uDDF2\uDDF4\uDDF5])|\uD83C\uDDEE(?:\uD83C[\uDDE8-\uDDEA\uDDF1-\uDDF4\uDDF6-\uDDF9])|\uD83C\uDDED(?:\uD83C[\uDDF0\uDDF2\uDDF3\uDDF7\uDDF9\uDDFA])|\uD83C\uDDEC(?:\uD83C[\uDDE6\uDDE7\uDDE9-\uDDEE\uDDF1-\uDDF3\uDDF5-\uDDFA\uDDFC\uDDFE])|\uD83C\uDDEB(?:\uD83C[\uDDEE-\uDDF0\uDDF2\uDDF4\uDDF7])|\uD83C\uDDEA(?:\uD83C[\uDDE6\uDDE8\uDDEA\uDDEC\uDDED\uDDF7-\uDDFA])|\uD83C\uDDE9(?:\uD83C[\uDDEA\uDDEC\uDDEF\uDDF0\uDDF2\uDDF4\uDDFF])|\uD83C\uDDE8(?:\uD83C[\uDDE6\uDDE8\uDDE9\uDDEB-\uDDEE\uDDF0-\uDDF5\uDDF7\uDDFA-\uDDFF])|\uD83C\uDDE7(?:\uD83C[\uDDE6\uDDE7\uDDE9-\uDDEF\uDDF1-\uDDF4\uDDF6-\uDDF9\uDDFB\uDDFC\uDDFE\uDDFF])|\uD83C\uDDE6(?:\uD83C[\uDDE8-\uDDEC\uDDEE\uDDF1\uDDF2\uDDF4\uDDF6-\uDDFA\uDDFC\uDDFD\uDDFF])|[#\*0-9]\uFE0F\u20E3|\u2764\uFE0F|(?:\uD83C[\uDFC3\uDFC4\uDFCA]|\uD83D[\uDC6E\uDC70\uDC71\uDC73\uDC77\uDC81\uDC82\uDC86\uDC87\uDE45-\uDE47\uDE4B\uDE4D\uDE4E\uDEA3\uDEB4-\uDEB6]|\uD83E[\uDD26\uDD35\uDD37-\uDD39\uDD3D\uDD3E\uDDB8\uDDB9\uDDCD-\uDDCF\uDDD4\uDDD6-\uDDDD])(?:\uD83C[\uDFFB-\uDFFF])|(?:\u26F9|\uD83C[\uDFCB\uDFCC]|\uD83D\uDD75)(?:\uFE0F|\uD83C[\uDFFB-\uDFFF])|\uD83C\uDFF4|(?:[\u270A\u270B]|\uD83C[\uDF85\uDFC2\uDFC7]|\uD83D[\uDC42\uDC43\uDC46-\uDC50\uDC66\uDC67\uDC6B-\uDC6D\uDC72\uDC74-\uDC76\uDC78\uDC7C\uDC83\uDC85\uDC8F\uDC91\uDCAA\uDD7A\uDD95\uDD96\uDE4C\uDE4F\uDEC0\uDECC]|\uD83E[\uDD0C\uDD0F\uDD18-\uDD1C\uDD1E\uDD1F\uDD30-\uDD34\uDD36\uDD77\uDDB5\uDDB6\uDDBB\uDDD2\uDDD3\uDDD5])(?:\uD83C[\uDFFB-\uDFFF])|(?:[\u261D\u270C\u270D]|\uD83D[\uDD74\uDD90])(?:\uFE0F|\uD83C[\uDFFB-\uDFFF])|[\u270A\u270B]|\uD83C[\uDF85\uDFC2\uDFC7]|\uD83D[\uDC08\uDC15\uDC3B\uDC42\uDC43\uDC46-\uDC50\uDC66\uDC67\uDC6B-\uDC6D\uDC72\uDC74-\uDC76\uDC78\uDC7C\uDC83\uDC85\uDC8F\uDC91\uDCAA\uDD7A\uDD95\uDD96\uDE2E\uDE35\uDE36\uDE4C\uDE4F\uDEC0\uDECC]|\uD83E[\uDD0C\uDD0F\uDD18-\uDD1C\uDD1E\uDD1F\uDD30-\uDD34\uDD36\uDD77\uDDB5\uDDB6\uDDBB\uDDD2\uDDD3\uDDD5]|\uD83C[\uDFC3\uDFC4\uDFCA]|\uD83D[\uDC6E\uDC70\uDC71\uDC73\uDC77\uDC81\uDC82\uDC86\uDC87\uDE45-\uDE47\uDE4B\uDE4D\uDE4E\uDEA3\uDEB4-\uDEB6]|\uD83E[\uDD26\uDD35\uDD37-\uDD39\uDD3D\uDD3E\uDDB8\uDDB9\uDDCD-\uDDCF\uDDD4\uDDD6-\uDDDD]|\uD83D\uDC6F|\uD83E[\uDD3C\uDDDE\uDDDF]|[\u231A\u231B\u23E9-\u23EC\u23F0\u23F3\u25FD\u25FE\u2614\u2615\u2648-\u2653\u267F\u2693\u26A1\u26AA\u26AB\u26BD\u26BE\u26C4\u26C5\u26CE\u26D4\u26EA\u26F2\u26F3\u26F5\u26FA\u26FD\u2705\u2728\u274C\u274E\u2753-\u2755\u2757\u2795-\u2797\u27B0\u27BF\u2B1B\u2B1C\u2B50\u2B55]|\uD83C[\uDC04\uDCCF\uDD8E\uDD91-\uDD9A\uDE01\uDE1A\uDE2F\uDE32-\uDE36\uDE38-\uDE3A\uDE50\uDE51\uDF00-\uDF20\uDF2D-\uDF35\uDF37-\uDF7C\uDF7E-\uDF84\uDF86-\uDF93\uDFA0-\uDFC1\uDFC5\uDFC6\uDFC8\uDFC9\uDFCF-\uDFD3\uDFE0-\uDFF0\uDFF8-\uDFFF]|\uD83D[\uDC00-\uDC07\uDC09-\uDC14\uDC16-\uDC3A\uDC3C-\uDC3E\uDC40\uDC44\uDC45\uDC51-\uDC65\uDC6A\uDC79-\uDC7B\uDC7D-\uDC80\uDC84\uDC88-\uDC8E\uDC90\uDC92-\uDCA9\uDCAB-\uDCFC\uDCFF-\uDD3D\uDD4B-\uDD4E\uDD50-\uDD67\uDDA4\uDDFB-\uDE2D\uDE2F-\uDE34\uDE37-\uDE44\uDE48-\uDE4A\uDE80-\uDEA2\uDEA4-\uDEB3\uDEB7-\uDEBF\uDEC1-\uDEC5\uDED0-\uDED2\uDED5-\uDED7\uDEEB\uDEEC\uDEF4-\uDEFC\uDFE0-\uDFEB]|\uD83E[\uDD0D\uDD0E\uDD10-\uDD17\uDD1D\uDD20-\uDD25\uDD27-\uDD2F\uDD3A\uDD3F-\uDD45\uDD47-\uDD76\uDD78\uDD7A-\uDDB4\uDDB7\uDDBA\uDDBC-\uDDCB\uDDD0\uDDE0-\uDDFF\uDE70-\uDE74\uDE78-\uDE7A\uDE80-\uDE86\uDE90-\uDEA8\uDEB0-\uDEB6\uDEC0-\uDEC2\uDED0-\uDED6]|(?:[\u231A\u231B\u23E9-\u23EC\u23F0\u23F3\u25FD\u25FE\u2614\u2615\u2648-\u2653\u267F\u2693\u26A1\u26AA\u26AB\u26BD\u26BE\u26C4\u26C5\u26CE\u26D4\u26EA\u26F2\u26F3\u26F5\u26FA\u26FD\u2705\u270A\u270B\u2728\u274C\u274E\u2753-\u2755\u2757\u2795-\u2797\u27B0\u27BF\u2B1B\u2B1C\u2B50\u2B55]|\uD83C[\uDC04\uDCCF\uDD8E\uDD91-\uDD9A\uDDE6-\uDDFF\uDE01\uDE1A\uDE2F\uDE32-\uDE36\uDE38-\uDE3A\uDE50\uDE51\uDF00-\uDF20\uDF2D-\uDF35\uDF37-\uDF7C\uDF7E-\uDF93\uDFA0-\uDFCA\uDFCF-\uDFD3\uDFE0-\uDFF0\uDFF4\uDFF8-\uDFFF]|\uD83D[\uDC00-\uDC3E\uDC40\uDC42-\uDCFC\uDCFF-\uDD3D\uDD4B-\uDD4E\uDD50-\uDD67\uDD7A\uDD95\uDD96\uDDA4\uDDFB-\uDE4F\uDE80-\uDEC5\uDECC\uDED0-\uDED2\uDED5-\uDED7\uDEEB\uDEEC\uDEF4-\uDEFC\uDFE0-\uDFEB]|\uD83E[\uDD0C-\uDD3A\uDD3C-\uDD45\uDD47-\uDD78\uDD7A-\uDDCB\uDDCD-\uDDFF\uDE70-\uDE74\uDE78-\uDE7A\uDE80-\uDE86\uDE90-\uDEA8\uDEB0-\uDEB6\uDEC0-\uDEC2\uDED0-\uDED6])|(?:[#\*0-9\xA9\xAE\u203C\u2049\u2122\u2139\u2194-\u2199\u21A9\u21AA\u231A\u231B\u2328\u23CF\u23E9-\u23F3\u23F8-\u23FA\u24C2\u25AA\u25AB\u25B6\u25C0\u25FB-\u25FE\u2600-\u2604\u260E\u2611\u2614\u2615\u2618\u261D\u2620\u2622\u2623\u2626\u262A\u262E\u262F\u2638-\u263A\u2640\u2642\u2648-\u2653\u265F\u2660\u2663\u2665\u2666\u2668\u267B\u267E\u267F\u2692-\u2697\u2699\u269B\u269C\u26A0\u26A1\u26A7\u26AA\u26AB\u26B0\u26B1\u26BD\u26BE\u26C4\u26C5\u26C8\u26CE\u26CF\u26D1\u26D3\u26D4\u26E9\u26EA\u26F0-\u26F5\u26F7-\u26FA\u26FD\u2702\u2705\u2708-\u270D\u270F\u2712\u2714\u2716\u271D\u2721\u2728\u2733\u2734\u2744\u2747\u274C\u274E\u2753-\u2755\u2757\u2763\u2764\u2795-\u2797\u27A1\u27B0\u27BF\u2934\u2935\u2B05-\u2B07\u2B1B\u2B1C\u2B50\u2B55\u3030\u303D\u3297\u3299]|\uD83C[\uDC04\uDCCF\uDD70\uDD71\uDD7E\uDD7F\uDD8E\uDD91-\uDD9A\uDDE6-\uDDFF\uDE01\uDE02\uDE1A\uDE2F\uDE32-\uDE3A\uDE50\uDE51\uDF00-\uDF21\uDF24-\uDF93\uDF96\uDF97\uDF99-\uDF9B\uDF9E-\uDFF0\uDFF3-\uDFF5\uDFF7-\uDFFF]|\uD83D[\uDC00-\uDCFD\uDCFF-\uDD3D\uDD49-\uDD4E\uDD50-\uDD67\uDD6F\uDD70\uDD73-\uDD7A\uDD87\uDD8A-\uDD8D\uDD90\uDD95\uDD96\uDDA4\uDDA5\uDDA8\uDDB1\uDDB2\uDDBC\uDDC2-\uDDC4\uDDD1-\uDDD3\uDDDC-\uDDDE\uDDE1\uDDE3\uDDE8\uDDEF\uDDF3\uDDFA-\uDE4F\uDE80-\uDEC5\uDECB-\uDED2\uDED5-\uDED7\uDEE0-\uDEE5\uDEE9\uDEEB\uDEEC\uDEF0\uDEF3-\uDEFC\uDFE0-\uDFEB]|\uD83E[\uDD0C-\uDD3A\uDD3C-\uDD45\uDD47-\uDD78\uDD7A-\uDDCB\uDDCD-\uDDFF\uDE70-\uDE74\uDE78-\uDE7A\uDE80-\uDE86\uDE90-\uDEA8\uDEB0-\uDEB6\uDEC0-\uDEC2\uDED0-\uDED6])\uFE0F|(?:[\u261D\u26F9\u270A-\u270D]|\uD83C[\uDF85\uDFC2-\uDFC4\uDFC7\uDFCA-\uDFCC]|\uD83D[\uDC42\uDC43\uDC46-\uDC50\uDC66-\uDC78\uDC7C\uDC81-\uDC83\uDC85-\uDC87\uDC8F\uDC91\uDCAA\uDD74\uDD75\uDD7A\uDD90\uDD95\uDD96\uDE45-\uDE47\uDE4B-\uDE4F\uDEA3\uDEB4-\uDEB6\uDEC0\uDECC]|\uD83E[\uDD0C\uDD0F\uDD18-\uDD1F\uDD26\uDD30-\uDD39\uDD3C-\uDD3E\uDD77\uDDB5\uDDB6\uDDB8\uDDB9\uDDBB\uDDCD-\uDDCF\uDDD1-\uDDDD])/g;
-    };
-    sD = L(FD);
-    w = 10;
-    N = (e2 = 0) => (u2) => `\x1B[${u2 + e2}m`;
-    I = (e2 = 0) => (u2) => `\x1B[${38 + e2};5;${u2}m`;
-    R = (e2 = 0) => (u2, t, F2) => `\x1B[${38 + e2};2;${u2};${t};${F2}m`;
-    r = { modifier: { reset: [0, 0], bold: [1, 22], dim: [2, 22], italic: [3, 23], underline: [4, 24], overline: [53, 55], inverse: [7, 27], hidden: [8, 28], strikethrough: [9, 29] }, color: { black: [30, 39], red: [31, 39], green: [32, 39], yellow: [33, 39], blue: [34, 39], magenta: [35, 39], cyan: [36, 39], white: [37, 39], blackBright: [90, 39], gray: [90, 39], grey: [90, 39], redBright: [91, 39], greenBright: [92, 39], yellowBright: [93, 39], blueBright: [94, 39], magentaBright: [95, 39], cyanBright: [96, 39], whiteBright: [97, 39] }, bgColor: { bgBlack: [40, 49], bgRed: [41, 49], bgGreen: [42, 49], bgYellow: [43, 49], bgBlue: [44, 49], bgMagenta: [45, 49], bgCyan: [46, 49], bgWhite: [47, 49], bgBlackBright: [100, 49], bgGray: [100, 49], bgGrey: [100, 49], bgRedBright: [101, 49], bgGreenBright: [102, 49], bgYellowBright: [103, 49], bgBlueBright: [104, 49], bgMagentaBright: [105, 49], bgCyanBright: [106, 49], bgWhiteBright: [107, 49] } };
-    Object.keys(r.modifier);
-    iD = Object.keys(r.color);
-    CD = Object.keys(r.bgColor);
-    [...iD, ...CD];
-    ED = rD();
-    d = /* @__PURE__ */ new Set(["\x1B", "\x9B"]);
-    oD = 39;
-    y = "\x07";
-    V = "[";
-    nD = "]";
-    G = "m";
-    _ = `${nD}8;;`;
-    z = (e2) => `${d.values().next().value}${V}${e2}${G}`;
-    K = (e2) => `${d.values().next().value}${_}${e2}${y}`;
-    aD = (e2) => e2.split(" ").map((u2) => p(u2));
-    k = (e2, u2, t) => {
-      const F2 = [...u2];
-      let s = false, i = false, D2 = p(P(e2[e2.length - 1]));
-      for (const [C2, n] of F2.entries()) {
-        const E = p(n);
-        if (D2 + E <= t ? e2[e2.length - 1] += n : (e2.push(n), D2 = 0), d.has(n) && (s = true, i = F2.slice(C2 + 1).join("").startsWith(_)), s) {
-          i ? n === y && (s = false, i = false) : n === G && (s = false);
-          continue;
-        }
-        D2 += E, D2 === t && C2 < F2.length - 1 && (e2.push(""), D2 = 0);
-      }
-      !D2 && e2[e2.length - 1].length > 0 && e2.length > 1 && (e2[e2.length - 2] += e2.pop());
-    };
-    hD = (e2) => {
-      const u2 = e2.split(" ");
-      let t = u2.length;
-      for (; t > 0 && !(p(u2[t - 1]) > 0); ) t--;
-      return t === u2.length ? e2 : u2.slice(0, t).join(" ") + u2.slice(t).join("");
-    };
-    lD = (e2, u2, t = {}) => {
-      if (t.trim !== false && e2.trim() === "") return "";
-      let F2 = "", s, i;
-      const D2 = aD(e2);
-      let C2 = [""];
-      for (const [E, a] of e2.split(" ").entries()) {
-        t.trim !== false && (C2[C2.length - 1] = C2[C2.length - 1].trimStart());
-        let o2 = p(C2[C2.length - 1]);
-        if (E !== 0 && (o2 >= u2 && (t.wordWrap === false || t.trim === false) && (C2.push(""), o2 = 0), (o2 > 0 || t.trim === false) && (C2[C2.length - 1] += " ", o2++)), t.hard && D2[E] > u2) {
-          const c = u2 - o2, f = 1 + Math.floor((D2[E] - c - 1) / u2);
-          Math.floor((D2[E] - 1) / u2) < f && C2.push(""), k(C2, a, u2);
-          continue;
-        }
-        if (o2 + D2[E] > u2 && o2 > 0 && D2[E] > 0) {
-          if (t.wordWrap === false && o2 < u2) {
-            k(C2, a, u2);
-            continue;
-          }
-          C2.push("");
-        }
-        if (o2 + D2[E] > u2 && t.wordWrap === false) {
-          k(C2, a, u2);
-          continue;
-        }
-        C2[C2.length - 1] += a;
-      }
-      t.trim !== false && (C2 = C2.map((E) => hD(E)));
-      const n = [...C2.join(`
-`)];
-      for (const [E, a] of n.entries()) {
-        if (F2 += a, d.has(a)) {
-          const { groups: c } = new RegExp(`(?:\\${V}(?<code>\\d+)m|\\${_}(?<uri>.*)${y})`).exec(n.slice(E).join("")) || { groups: {} };
-          if (c.code !== void 0) {
-            const f = Number.parseFloat(c.code);
-            s = f === oD ? void 0 : f;
-          } else c.uri !== void 0 && (i = c.uri.length === 0 ? void 0 : c.uri);
-        }
-        const o2 = ED.codes.get(Number(s));
-        n[E + 1] === `
-` ? (i && (F2 += K("")), s && o2 && (F2 += z(o2))) : a === `
-` && (s && o2 && (F2 += z(s)), i && (F2 += K(i)));
-      }
-      return F2;
-    };
-    xD = ["up", "down", "left", "right", "space", "enter", "cancel"];
-    B = { actions: new Set(xD), aliases: /* @__PURE__ */ new Map([["k", "up"], ["j", "down"], ["h", "left"], ["l", "right"], ["", "cancel"], ["escape", "cancel"]]) };
-    AD = globalThis.process.platform.startsWith("win");
-    S = Symbol("clack:cancel");
-    gD = Object.defineProperty;
-    vD = (e2, u2, t) => u2 in e2 ? gD(e2, u2, { enumerable: true, configurable: true, writable: true, value: t }) : e2[u2] = t;
-    h = (e2, u2, t) => (vD(e2, typeof u2 != "symbol" ? u2 + "" : u2, t), t);
-    x = class {
-      constructor(u2, t = true) {
-        h(this, "input"), h(this, "output"), h(this, "_abortSignal"), h(this, "rl"), h(this, "opts"), h(this, "_render"), h(this, "_track", false), h(this, "_prevFrame", ""), h(this, "_subscribers", /* @__PURE__ */ new Map()), h(this, "_cursor", 0), h(this, "state", "initial"), h(this, "error", ""), h(this, "value");
-        const { input: F2 = j, output: s = M, render: i, signal: D2, ...C2 } = u2;
-        this.opts = C2, this.onKeypress = this.onKeypress.bind(this), this.close = this.close.bind(this), this.render = this.render.bind(this), this._render = i.bind(this), this._track = t, this._abortSignal = D2, this.input = F2, this.output = s;
-      }
-      unsubscribe() {
-        this._subscribers.clear();
-      }
-      setSubscriber(u2, t) {
-        const F2 = this._subscribers.get(u2) ?? [];
-        F2.push(t), this._subscribers.set(u2, F2);
-      }
-      on(u2, t) {
-        this.setSubscriber(u2, { cb: t });
-      }
-      once(u2, t) {
-        this.setSubscriber(u2, { cb: t, once: true });
-      }
-      emit(u2, ...t) {
-        const F2 = this._subscribers.get(u2) ?? [], s = [];
-        for (const i of F2) i.cb(...t), i.once && s.push(() => F2.splice(F2.indexOf(i), 1));
-        for (const i of s) i();
-      }
-      prompt() {
-        return new Promise((u2, t) => {
-          if (this._abortSignal) {
-            if (this._abortSignal.aborted) return this.state = "cancel", this.close(), u2(S);
-            this._abortSignal.addEventListener("abort", () => {
-              this.state = "cancel", this.close();
-            }, { once: true });
-          }
-          const F2 = new X();
-          F2._write = (s, i, D2) => {
-            this._track && (this.value = this.rl?.line.replace(/\t/g, ""), this._cursor = this.rl?.cursor ?? 0, this.emit("value", this.value)), D2();
-          }, this.input.pipe(F2), this.rl = O.createInterface({ input: this.input, output: F2, tabSize: 2, prompt: "", escapeCodeTimeout: 50, terminal: true }), O.emitKeypressEvents(this.input, this.rl), this.rl.prompt(), this.opts.initialValue !== void 0 && this._track && this.rl.write(this.opts.initialValue), this.input.on("keypress", this.onKeypress), m(this.input, true), this.output.on("resize", this.render), this.render(), this.once("submit", () => {
-            this.output.write(import_sisteransi.cursor.show), this.output.off("resize", this.render), m(this.input, false), u2(this.value);
-          }), this.once("cancel", () => {
-            this.output.write(import_sisteransi.cursor.show), this.output.off("resize", this.render), m(this.input, false), u2(S);
-          });
-        });
-      }
-      onKeypress(u2, t) {
-        if (this.state === "error" && (this.state = "active"), t?.name && (!this._track && B.aliases.has(t.name) && this.emit("cursor", B.aliases.get(t.name)), B.actions.has(t.name) && this.emit("cursor", t.name)), u2 && (u2.toLowerCase() === "y" || u2.toLowerCase() === "n") && this.emit("confirm", u2.toLowerCase() === "y"), u2 === "	" && this.opts.placeholder && (this.value || (this.rl?.write(this.opts.placeholder), this.emit("value", this.opts.placeholder))), u2 && this.emit("key", u2.toLowerCase()), t?.name === "return") {
-          if (this.opts.validate) {
-            const F2 = this.opts.validate(this.value);
-            F2 && (this.error = F2 instanceof Error ? F2.message : F2, this.state = "error", this.rl?.write(this.value));
-          }
-          this.state !== "error" && (this.state = "submit");
-        }
-        $([u2, t?.name, t?.sequence], "cancel") && (this.state = "cancel"), (this.state === "submit" || this.state === "cancel") && this.emit("finalize"), this.render(), (this.state === "submit" || this.state === "cancel") && this.close();
-      }
-      close() {
-        this.input.unpipe(), this.input.removeListener("keypress", this.onKeypress), this.output.write(`
-`), m(this.input, false), this.rl?.close(), this.rl = void 0, this.emit(`${this.state}`, this.value), this.unsubscribe();
-      }
-      restoreCursor() {
-        const u2 = Y(this._prevFrame, process.stdout.columns, { hard: true }).split(`
-`).length - 1;
-        this.output.write(import_sisteransi.cursor.move(-999, u2 * -1));
-      }
-      render() {
-        const u2 = Y(this._render(this) ?? "", process.stdout.columns, { hard: true });
-        if (u2 !== this._prevFrame) {
-          if (this.state === "initial") this.output.write(import_sisteransi.cursor.hide);
-          else {
-            const t = BD(this._prevFrame, u2);
-            if (this.restoreCursor(), t && t?.length === 1) {
-              const F2 = t[0];
-              this.output.write(import_sisteransi.cursor.move(0, F2)), this.output.write(import_sisteransi.erase.lines(1));
-              const s = u2.split(`
-`);
-              this.output.write(s[F2]), this._prevFrame = u2, this.output.write(import_sisteransi.cursor.move(0, s.length - F2 - 1));
-              return;
-            }
-            if (t && t?.length > 1) {
-              const F2 = t[0];
-              this.output.write(import_sisteransi.cursor.move(0, F2)), this.output.write(import_sisteransi.erase.down());
-              const s = u2.split(`
-`).slice(F2);
-              this.output.write(s.join(`
-`)), this._prevFrame = u2;
-              return;
-            }
-            this.output.write(import_sisteransi.erase.down());
-          }
-          this.output.write(u2), this.state === "initial" && (this.state = "active"), this._prevFrame = u2;
-        }
-      }
-    };
-    dD = class extends x {
-      get cursor() {
-        return this.value ? 0 : 1;
-      }
-      get _value() {
-        return this.cursor === 0;
-      }
-      constructor(u2) {
-        super(u2, false), this.value = !!u2.initialValue, this.on("value", () => {
-          this.value = this._value;
-        }), this.on("confirm", (t) => {
-          this.output.write(import_sisteransi.cursor.move(0, -1)), this.value = t, this.state = "submit", this.close();
-        }), this.on("cursor", () => {
-          this.value = !this.value;
-        });
-      }
-    };
-    mD = Object.defineProperty;
-    bD = (e2, u2, t) => u2 in e2 ? mD(e2, u2, { enumerable: true, configurable: true, writable: true, value: t }) : e2[u2] = t;
-    Z = (e2, u2, t) => (bD(e2, typeof u2 != "symbol" ? u2 + "" : u2, t), t);
-    q = (e2, u2, t) => {
-      if (!u2.has(e2)) throw TypeError("Cannot " + t);
-    };
-    T = (e2, u2, t) => (q(e2, u2, "read from private field"), t ? t.call(e2) : u2.get(e2));
-    wD = (e2, u2, t) => {
-      if (u2.has(e2)) throw TypeError("Cannot add the same private member more than once");
-      u2 instanceof WeakSet ? u2.add(e2) : u2.set(e2, t);
-    };
-    yD = (e2, u2, t, F2) => (q(e2, u2, "write to private field"), F2 ? F2.call(e2, t) : u2.set(e2, t), t);
-    _D = class extends x {
-      constructor(u2) {
-        super(u2, false), Z(this, "options"), Z(this, "cursor", 0), wD(this, A, void 0);
-        const { options: t } = u2;
-        yD(this, A, u2.selectableGroups !== false), this.options = Object.entries(t).flatMap(([F2, s]) => [{ value: F2, group: true, label: F2 }, ...s.map((i) => ({ ...i, group: F2 }))]), this.value = [...u2.initialValues ?? []], this.cursor = Math.max(this.options.findIndex(({ value: F2 }) => F2 === u2.cursorAt), T(this, A) ? 0 : 1), this.on("cursor", (F2) => {
-          switch (F2) {
-            case "left":
-            case "up": {
-              this.cursor = this.cursor === 0 ? this.options.length - 1 : this.cursor - 1;
-              const s = this.options[this.cursor]?.group === true;
-              !T(this, A) && s && (this.cursor = this.cursor === 0 ? this.options.length - 1 : this.cursor - 1);
-              break;
-            }
-            case "down":
-            case "right": {
-              this.cursor = this.cursor === this.options.length - 1 ? 0 : this.cursor + 1;
-              const s = this.options[this.cursor]?.group === true;
-              !T(this, A) && s && (this.cursor = this.cursor === this.options.length - 1 ? 0 : this.cursor + 1);
-              break;
-            }
-            case "space":
-              this.toggleValue();
-              break;
-          }
-        });
-      }
-      getGroupItems(u2) {
-        return this.options.filter((t) => t.group === u2);
-      }
-      isGroupSelected(u2) {
-        return this.getGroupItems(u2).every((t) => this.value.includes(t.value));
-      }
-      toggleValue() {
-        const u2 = this.options[this.cursor];
-        if (u2.group === true) {
-          const t = u2.value, F2 = this.getGroupItems(t);
-          this.isGroupSelected(t) ? this.value = this.value.filter((s) => F2.findIndex((i) => i.value === s) === -1) : this.value = [...this.value, ...F2.map((s) => s.value)], this.value = Array.from(new Set(this.value));
-        } else {
-          const t = this.value.includes(u2.value);
-          this.value = t ? this.value.filter((F2) => F2 !== u2.value) : [...this.value, u2.value];
-        }
-      }
-    };
-    A = /* @__PURE__ */ new WeakMap();
-    TD = Object.defineProperty;
-    jD = (e2, u2, t) => u2 in e2 ? TD(e2, u2, { enumerable: true, configurable: true, writable: true, value: t }) : e2[u2] = t;
-    U = (e2, u2, t) => (jD(e2, typeof u2 != "symbol" ? u2 + "" : u2, t), t);
-    MD = class extends x {
-      constructor({ mask: u2, ...t }) {
-        super(t), U(this, "valueWithCursor", ""), U(this, "_mask", "\u2022"), this._mask = u2 ?? "\u2022", this.on("finalize", () => {
-          this.valueWithCursor = this.masked;
-        }), this.on("value", () => {
-          if (this.cursor >= this.value.length) this.valueWithCursor = `${this.masked}${import_picocolors.default.inverse(import_picocolors.default.hidden("_"))}`;
-          else {
-            const F2 = this.masked.slice(0, this.cursor), s = this.masked.slice(this.cursor);
-            this.valueWithCursor = `${F2}${import_picocolors.default.inverse(s[0])}${s.slice(1)}`;
-          }
-        });
-      }
-      get cursor() {
-        return this._cursor;
-      }
-      get masked() {
-        return this.value.replaceAll(/./g, this._mask);
-      }
-    };
-    OD = Object.defineProperty;
-    PD = (e2, u2, t) => u2 in e2 ? OD(e2, u2, { enumerable: true, configurable: true, writable: true, value: t }) : e2[u2] = t;
-    J = (e2, u2, t) => (PD(e2, typeof u2 != "symbol" ? u2 + "" : u2, t), t);
-    LD = class extends x {
-      constructor(u2) {
-        super(u2, false), J(this, "options"), J(this, "cursor", 0), this.options = u2.options, this.cursor = this.options.findIndex(({ value: t }) => t === u2.initialValue), this.cursor === -1 && (this.cursor = 0), this.changeValue(), this.on("cursor", (t) => {
-          switch (t) {
-            case "left":
-            case "up":
-              this.cursor = this.cursor === 0 ? this.options.length - 1 : this.cursor - 1;
-              break;
-            case "down":
-            case "right":
-              this.cursor = this.cursor === this.options.length - 1 ? 0 : this.cursor + 1;
-              break;
-          }
-          this.changeValue();
-        });
-      }
-      get _value() {
-        return this.options[this.cursor];
-      }
-      changeValue() {
-        this.value = this._value.value;
-      }
-    };
-    RD = class extends x {
-      get valueWithCursor() {
-        if (this.state === "submit") return this.value;
-        if (this.cursor >= this.value.length) return `${this.value}\u2588`;
-        const u2 = this.value.slice(0, this.cursor), [t, ...F2] = this.value.slice(this.cursor);
-        return `${u2}${import_picocolors.default.inverse(t)}${F2.join("")}`;
-      }
-      get cursor() {
-        return this._cursor;
-      }
-      constructor(u2) {
-        super(u2), this.on("finalize", () => {
-          this.value || (this.value = u2.defaultValue);
-        });
-      }
-    };
-  }
-});
-
-// node_modules/@clack/prompts/dist/index.mjs
-import { stripVTControlCharacters as S2 } from "node:util";
-import y2 from "node:process";
-function ce() {
-  return y2.platform !== "win32" ? y2.env.TERM !== "linux" : !!y2.env.CI || !!y2.env.WT_SESSION || !!y2.env.TERMINUS_SUBLIME || y2.env.ConEmuTask === "{cmd::Cmder}" || y2.env.TERM_PROGRAM === "Terminus-Sublime" || y2.env.TERM_PROGRAM === "vscode" || y2.env.TERM === "xterm-256color" || y2.env.TERM === "alacritty" || y2.env.TERMINAL_EMULATOR === "JetBrains-JediTerm";
-}
-var import_picocolors2, import_sisteransi2, V2, u, le, L2, W2, C, ue, o, d2, k2, P2, A2, T2, F, $e, _2, me, de, pe, q2, D, U2, K2, b2, G2, he, ge, ye, ve, be, Me, xe, Ie, Se, M2, J2, Y2;
-var init_dist2 = __esm({
-  "node_modules/@clack/prompts/dist/index.mjs"() {
-    init_dist();
-    init_dist();
-    import_picocolors2 = __toESM(require_picocolors(), 1);
-    import_sisteransi2 = __toESM(require_src(), 1);
-    V2 = ce();
-    u = (t, n) => V2 ? t : n;
-    le = u("\u25C6", "*");
-    L2 = u("\u25A0", "x");
-    W2 = u("\u25B2", "x");
-    C = u("\u25C7", "o");
-    ue = u("\u250C", "T");
-    o = u("\u2502", "|");
-    d2 = u("\u2514", "\u2014");
-    k2 = u("\u25CF", ">");
-    P2 = u("\u25CB", " ");
-    A2 = u("\u25FB", "[\u2022]");
-    T2 = u("\u25FC", "[+]");
-    F = u("\u25FB", "[ ]");
-    $e = u("\u25AA", "\u2022");
-    _2 = u("\u2500", "-");
-    me = u("\u256E", "+");
-    de = u("\u251C", "+");
-    pe = u("\u256F", "+");
-    q2 = u("\u25CF", "\u2022");
-    D = u("\u25C6", "*");
-    U2 = u("\u25B2", "!");
-    K2 = u("\u25A0", "x");
-    b2 = (t) => {
-      switch (t) {
-        case "initial":
-        case "active":
-          return import_picocolors2.default.cyan(le);
-        case "cancel":
-          return import_picocolors2.default.red(L2);
-        case "error":
-          return import_picocolors2.default.yellow(W2);
-        case "submit":
-          return import_picocolors2.default.green(C);
-      }
-    };
-    G2 = (t) => {
-      const { cursor: n, options: r2, style: i } = t, s = t.maxItems ?? Number.POSITIVE_INFINITY, c = Math.max(process.stdout.rows - 4, 0), a = Math.min(c, Math.max(s, 5));
-      let l2 = 0;
-      n >= l2 + a - 3 ? l2 = Math.max(Math.min(n - a + 3, r2.length - a), 0) : n < l2 + 2 && (l2 = Math.max(n - 2, 0));
-      const $2 = a < r2.length && l2 > 0, g2 = a < r2.length && l2 + a < r2.length;
-      return r2.slice(l2, l2 + a).map((p2, v2, f) => {
-        const j2 = v2 === 0 && $2, E = v2 === f.length - 1 && g2;
-        return j2 || E ? import_picocolors2.default.dim("...") : i(p2, v2 + l2 === n);
-      });
-    };
-    he = (t) => new RD({ validate: t.validate, placeholder: t.placeholder, defaultValue: t.defaultValue, initialValue: t.initialValue, render() {
-      const n = `${import_picocolors2.default.gray(o)}
-${b2(this.state)}  ${t.message}
-`, r2 = t.placeholder ? import_picocolors2.default.inverse(t.placeholder[0]) + import_picocolors2.default.dim(t.placeholder.slice(1)) : import_picocolors2.default.inverse(import_picocolors2.default.hidden("_")), i = this.value ? this.valueWithCursor : r2;
-      switch (this.state) {
-        case "error":
-          return `${n.trim()}
-${import_picocolors2.default.yellow(o)}  ${i}
-${import_picocolors2.default.yellow(d2)}  ${import_picocolors2.default.yellow(this.error)}
-`;
-        case "submit":
-          return `${n}${import_picocolors2.default.gray(o)}  ${import_picocolors2.default.dim(this.value || t.placeholder)}`;
-        case "cancel":
-          return `${n}${import_picocolors2.default.gray(o)}  ${import_picocolors2.default.strikethrough(import_picocolors2.default.dim(this.value ?? ""))}${this.value?.trim() ? `
-${import_picocolors2.default.gray(o)}` : ""}`;
-        default:
-          return `${n}${import_picocolors2.default.cyan(o)}  ${i}
-${import_picocolors2.default.cyan(d2)}
-`;
-      }
-    } }).prompt();
-    ge = (t) => new MD({ validate: t.validate, mask: t.mask ?? $e, render() {
-      const n = `${import_picocolors2.default.gray(o)}
-${b2(this.state)}  ${t.message}
-`, r2 = this.valueWithCursor, i = this.masked;
-      switch (this.state) {
-        case "error":
-          return `${n.trim()}
-${import_picocolors2.default.yellow(o)}  ${i}
-${import_picocolors2.default.yellow(d2)}  ${import_picocolors2.default.yellow(this.error)}
-`;
-        case "submit":
-          return `${n}${import_picocolors2.default.gray(o)}  ${import_picocolors2.default.dim(i)}`;
-        case "cancel":
-          return `${n}${import_picocolors2.default.gray(o)}  ${import_picocolors2.default.strikethrough(import_picocolors2.default.dim(i ?? ""))}${i ? `
-${import_picocolors2.default.gray(o)}` : ""}`;
-        default:
-          return `${n}${import_picocolors2.default.cyan(o)}  ${r2}
-${import_picocolors2.default.cyan(d2)}
-`;
-      }
-    } }).prompt();
-    ye = (t) => {
-      const n = t.active ?? "Yes", r2 = t.inactive ?? "No";
-      return new dD({ active: n, inactive: r2, initialValue: t.initialValue ?? true, render() {
-        const i = `${import_picocolors2.default.gray(o)}
-${b2(this.state)}  ${t.message}
-`, s = this.value ? n : r2;
-        switch (this.state) {
-          case "submit":
-            return `${i}${import_picocolors2.default.gray(o)}  ${import_picocolors2.default.dim(s)}`;
-          case "cancel":
-            return `${i}${import_picocolors2.default.gray(o)}  ${import_picocolors2.default.strikethrough(import_picocolors2.default.dim(s))}
-${import_picocolors2.default.gray(o)}`;
-          default:
-            return `${i}${import_picocolors2.default.cyan(o)}  ${this.value ? `${import_picocolors2.default.green(k2)} ${n}` : `${import_picocolors2.default.dim(P2)} ${import_picocolors2.default.dim(n)}`} ${import_picocolors2.default.dim("/")} ${this.value ? `${import_picocolors2.default.dim(P2)} ${import_picocolors2.default.dim(r2)}` : `${import_picocolors2.default.green(k2)} ${r2}`}
-${import_picocolors2.default.cyan(d2)}
-`;
-        }
-      } }).prompt();
-    };
-    ve = (t) => {
-      const n = (r2, i) => {
-        const s = r2.label ?? String(r2.value);
-        switch (i) {
-          case "selected":
-            return `${import_picocolors2.default.dim(s)}`;
-          case "active":
-            return `${import_picocolors2.default.green(k2)} ${s} ${r2.hint ? import_picocolors2.default.dim(`(${r2.hint})`) : ""}`;
-          case "cancelled":
-            return `${import_picocolors2.default.strikethrough(import_picocolors2.default.dim(s))}`;
-          default:
-            return `${import_picocolors2.default.dim(P2)} ${import_picocolors2.default.dim(s)}`;
-        }
-      };
-      return new LD({ options: t.options, initialValue: t.initialValue, render() {
-        const r2 = `${import_picocolors2.default.gray(o)}
-${b2(this.state)}  ${t.message}
-`;
-        switch (this.state) {
-          case "submit":
-            return `${r2}${import_picocolors2.default.gray(o)}  ${n(this.options[this.cursor], "selected")}`;
-          case "cancel":
-            return `${r2}${import_picocolors2.default.gray(o)}  ${n(this.options[this.cursor], "cancelled")}
-${import_picocolors2.default.gray(o)}`;
-          default:
-            return `${r2}${import_picocolors2.default.cyan(o)}  ${G2({ cursor: this.cursor, options: this.options, maxItems: t.maxItems, style: (i, s) => n(i, s ? "active" : "inactive") }).join(`
-${import_picocolors2.default.cyan(o)}  `)}
-${import_picocolors2.default.cyan(d2)}
-`;
-        }
-      } }).prompt();
-    };
-    be = (t) => {
-      const { selectableGroups: n = true } = t, r2 = (i, s, c = []) => {
-        const a = i.label ?? String(i.value), l2 = typeof i.group == "string", $2 = l2 && (c[c.indexOf(i) + 1] ?? { group: true }), g2 = l2 && $2.group === true, p2 = l2 ? n ? `${g2 ? d2 : o} ` : "  " : "";
-        if (s === "active") return `${import_picocolors2.default.dim(p2)}${import_picocolors2.default.cyan(A2)} ${a} ${i.hint ? import_picocolors2.default.dim(`(${i.hint})`) : ""}`;
-        if (s === "group-active") return `${p2}${import_picocolors2.default.cyan(A2)} ${import_picocolors2.default.dim(a)}`;
-        if (s === "group-active-selected") return `${p2}${import_picocolors2.default.green(T2)} ${import_picocolors2.default.dim(a)}`;
-        if (s === "selected") {
-          const f = l2 || n ? import_picocolors2.default.green(T2) : "";
-          return `${import_picocolors2.default.dim(p2)}${f} ${import_picocolors2.default.dim(a)} ${i.hint ? import_picocolors2.default.dim(`(${i.hint})`) : ""}`;
-        }
-        if (s === "cancelled") return `${import_picocolors2.default.strikethrough(import_picocolors2.default.dim(a))}`;
-        if (s === "active-selected") return `${import_picocolors2.default.dim(p2)}${import_picocolors2.default.green(T2)} ${a} ${i.hint ? import_picocolors2.default.dim(`(${i.hint})`) : ""}`;
-        if (s === "submitted") return `${import_picocolors2.default.dim(a)}`;
-        const v2 = l2 || n ? import_picocolors2.default.dim(F) : "";
-        return `${import_picocolors2.default.dim(p2)}${v2} ${import_picocolors2.default.dim(a)}`;
-      };
-      return new _D({ options: t.options, initialValues: t.initialValues, required: t.required ?? true, cursorAt: t.cursorAt, selectableGroups: n, validate(i) {
-        if (this.required && i.length === 0) return `Please select at least one option.
-${import_picocolors2.default.reset(import_picocolors2.default.dim(`Press ${import_picocolors2.default.gray(import_picocolors2.default.bgWhite(import_picocolors2.default.inverse(" space ")))} to select, ${import_picocolors2.default.gray(import_picocolors2.default.bgWhite(import_picocolors2.default.inverse(" enter ")))} to submit`))}`;
-      }, render() {
-        const i = `${import_picocolors2.default.gray(o)}
-${b2(this.state)}  ${t.message}
-`;
-        switch (this.state) {
-          case "submit":
-            return `${i}${import_picocolors2.default.gray(o)}  ${this.options.filter(({ value: s }) => this.value.includes(s)).map((s) => r2(s, "submitted")).join(import_picocolors2.default.dim(", "))}`;
-          case "cancel": {
-            const s = this.options.filter(({ value: c }) => this.value.includes(c)).map((c) => r2(c, "cancelled")).join(import_picocolors2.default.dim(", "));
-            return `${i}${import_picocolors2.default.gray(o)}  ${s.trim() ? `${s}
-${import_picocolors2.default.gray(o)}` : ""}`;
-          }
-          case "error": {
-            const s = this.error.split(`
-`).map((c, a) => a === 0 ? `${import_picocolors2.default.yellow(d2)}  ${import_picocolors2.default.yellow(c)}` : `   ${c}`).join(`
-`);
-            return `${i}${import_picocolors2.default.yellow(o)}  ${this.options.map((c, a, l2) => {
-              const $2 = this.value.includes(c.value) || c.group === true && this.isGroupSelected(`${c.value}`), g2 = a === this.cursor;
-              return !g2 && typeof c.group == "string" && this.options[this.cursor].value === c.group ? r2(c, $2 ? "group-active-selected" : "group-active", l2) : g2 && $2 ? r2(c, "active-selected", l2) : $2 ? r2(c, "selected", l2) : r2(c, g2 ? "active" : "inactive", l2);
-            }).join(`
-${import_picocolors2.default.yellow(o)}  `)}
-${s}
-`;
-          }
-          default:
-            return `${i}${import_picocolors2.default.cyan(o)}  ${this.options.map((s, c, a) => {
-              const l2 = this.value.includes(s.value) || s.group === true && this.isGroupSelected(`${s.value}`), $2 = c === this.cursor;
-              return !$2 && typeof s.group == "string" && this.options[this.cursor].value === s.group ? r2(s, l2 ? "group-active-selected" : "group-active", a) : $2 && l2 ? r2(s, "active-selected", a) : l2 ? r2(s, "selected", a) : r2(s, $2 ? "active" : "inactive", a);
-            }).join(`
-${import_picocolors2.default.cyan(o)}  `)}
-${import_picocolors2.default.cyan(d2)}
-`;
-        }
-      } }).prompt();
-    };
-    Me = (t = "", n = "") => {
-      const r2 = `
-${t}
-`.split(`
-`), i = S2(n).length, s = Math.max(r2.reduce((a, l2) => {
-        const $2 = S2(l2);
-        return $2.length > a ? $2.length : a;
-      }, 0), i) + 2, c = r2.map((a) => `${import_picocolors2.default.gray(o)}  ${import_picocolors2.default.dim(a)}${" ".repeat(s - S2(a).length)}${import_picocolors2.default.gray(o)}`).join(`
-`);
-      process.stdout.write(`${import_picocolors2.default.gray(o)}
-${import_picocolors2.default.green(C)}  ${import_picocolors2.default.reset(n)} ${import_picocolors2.default.gray(_2.repeat(Math.max(s - i - 1, 1)) + me)}
-${c}
-${import_picocolors2.default.gray(de + _2.repeat(s + 2) + pe)}
-`);
-    };
-    xe = (t = "") => {
-      process.stdout.write(`${import_picocolors2.default.gray(d2)}  ${import_picocolors2.default.red(t)}
-
-`);
-    };
-    Ie = (t = "") => {
-      process.stdout.write(`${import_picocolors2.default.gray(ue)}  ${t}
-`);
-    };
-    Se = (t = "") => {
-      process.stdout.write(`${import_picocolors2.default.gray(o)}
-${import_picocolors2.default.gray(d2)}  ${t}
-
-`);
-    };
-    M2 = { message: (t = "", { symbol: n = import_picocolors2.default.gray(o) } = {}) => {
-      const r2 = [`${import_picocolors2.default.gray(o)}`];
-      if (t) {
-        const [i, ...s] = t.split(`
-`);
-        r2.push(`${n}  ${i}`, ...s.map((c) => `${import_picocolors2.default.gray(o)}  ${c}`));
-      }
-      process.stdout.write(`${r2.join(`
-`)}
-`);
-    }, info: (t) => {
-      M2.message(t, { symbol: import_picocolors2.default.blue(q2) });
-    }, success: (t) => {
-      M2.message(t, { symbol: import_picocolors2.default.green(D) });
-    }, step: (t) => {
-      M2.message(t, { symbol: import_picocolors2.default.green(C) });
-    }, warn: (t) => {
-      M2.message(t, { symbol: import_picocolors2.default.yellow(U2) });
-    }, warning: (t) => {
-      M2.warn(t);
-    }, error: (t) => {
-      M2.message(t, { symbol: import_picocolors2.default.red(K2) });
-    } };
-    J2 = `${import_picocolors2.default.gray(o)}  `;
-    Y2 = ({ indicator: t = "dots" } = {}) => {
-      const n = V2 ? ["\u25D2", "\u25D0", "\u25D3", "\u25D1"] : ["\u2022", "o", "O", "0"], r2 = V2 ? 80 : 120, i = process.env.CI === "true";
-      let s, c, a = false, l2 = "", $2, g2 = performance.now();
-      const p2 = (m2) => {
-        const h2 = m2 > 1 ? "Something went wrong" : "Canceled";
-        a && N2(h2, m2);
-      }, v2 = () => p2(2), f = () => p2(1), j2 = () => {
-        process.on("uncaughtExceptionMonitor", v2), process.on("unhandledRejection", v2), process.on("SIGINT", f), process.on("SIGTERM", f), process.on("exit", p2);
-      }, E = () => {
-        process.removeListener("uncaughtExceptionMonitor", v2), process.removeListener("unhandledRejection", v2), process.removeListener("SIGINT", f), process.removeListener("SIGTERM", f), process.removeListener("exit", p2);
-      }, B2 = () => {
-        if ($2 === void 0) return;
-        i && process.stdout.write(`
-`);
-        const m2 = $2.split(`
-`);
-        process.stdout.write(import_sisteransi2.cursor.move(-999, m2.length - 1)), process.stdout.write(import_sisteransi2.erase.down(m2.length));
-      }, R2 = (m2) => m2.replace(/\.+$/, ""), O2 = (m2) => {
-        const h2 = (performance.now() - m2) / 1e3, w2 = Math.floor(h2 / 60), I2 = Math.floor(h2 % 60);
-        return w2 > 0 ? `[${w2}m ${I2}s]` : `[${I2}s]`;
-      }, H = (m2 = "") => {
-        a = true, s = fD(), l2 = R2(m2), g2 = performance.now(), process.stdout.write(`${import_picocolors2.default.gray(o)}
-`);
-        let h2 = 0, w2 = 0;
-        j2(), c = setInterval(() => {
-          if (i && l2 === $2) return;
-          B2(), $2 = l2;
-          const I2 = import_picocolors2.default.magenta(n[h2]);
-          if (i) process.stdout.write(`${I2}  ${l2}...`);
-          else if (t === "timer") process.stdout.write(`${I2}  ${l2} ${O2(g2)}`);
-          else {
-            const z2 = ".".repeat(Math.floor(w2)).slice(0, 3);
-            process.stdout.write(`${I2}  ${l2}${z2}`);
-          }
-          h2 = h2 + 1 < n.length ? h2 + 1 : 0, w2 = w2 < n.length ? w2 + 0.125 : 0;
-        }, r2);
-      }, N2 = (m2 = "", h2 = 0) => {
-        a = false, clearInterval(c), B2();
-        const w2 = h2 === 0 ? import_picocolors2.default.green(C) : h2 === 1 ? import_picocolors2.default.red(L2) : import_picocolors2.default.red(W2);
-        l2 = R2(m2 ?? l2), t === "timer" ? process.stdout.write(`${w2}  ${l2} ${O2(g2)}
-`) : process.stdout.write(`${w2}  ${l2}
-`), E(), s();
-      };
-      return { start: H, stop: N2, message: (m2 = "") => {
-        l2 = R2(m2 ?? l2);
-      } };
-    };
-  }
-});
-
 // src/ui.ts
 import { createInterface as createInterface2 } from "node:readline";
 function nextAnswer() {
@@ -4252,69 +4991,87 @@ function info(msg = "") {
     if (msg) collecting.push(msg);
     return;
   }
-  if (!quiet) M2.message(msg);
+  if (!quiet) log.message(msg);
 }
 function ok(msg) {
   if (collecting) {
     collecting.push(msg);
     return;
   }
-  if (!quiet) M2.success(msg);
+  if (!quiet) log.success(msg);
 }
 function step(msg) {
   if (collecting) {
     collecting.push(msg);
     return;
   }
-  if (!quiet) M2.step(msg);
+  if (!quiet) log.step(msg);
 }
 function skip(msg) {
   if (collecting) return;
-  if (!quiet) M2.message(import_picocolors3.default.dim("\u25CB " + msg));
+  if (!quiet) log.message(import_picocolors.default.dim("\u25CB " + msg));
 }
 async function group(title, fn, opts = {}) {
   const prev = collecting;
   const mine = [];
   collecting = mine;
+  const useSpin = !quiet && process.stdout.isTTY && !activeSpinner;
+  const sp = useSpin ? spinner() : null;
+  if (sp) {
+    sp.start(title);
+    activeSpinner = sp;
+  }
   let result;
   try {
     result = await fn();
+  } catch (e) {
+    if (sp) {
+      sp.error(title);
+      activeSpinner = null;
+    }
+    collecting = prev;
+    throw e;
   } finally {
     collecting = prev;
   }
+  if (sp) {
+    sp.clear();
+    activeSpinner = null;
+  }
   if (quiet) return result;
-  const items = mine.map((m2) => strip(m2).trim()).filter(Boolean);
-  const max = opts.max ?? 8;
-  const summary = items.length ? items.slice(0, max).join(import_picocolors3.default.dim(" \xB7 ")) + (items.length > max ? import_picocolors3.default.dim(` \xB7 +${items.length - max} more`) : "") : opts.done ?? "up to date";
-  M2.success(import_picocolors3.default.bold(title) + "\n" + import_picocolors3.default.dim(summary));
+  const items = mine.map((m) => m.trim()).filter(Boolean);
+  const max = opts.max ?? 12;
+  const lines = items.length ? items.slice(0, max).map((i2) => `${import_picocolors.default.green("\u2713")} ${clip(i2)}`) : [import_picocolors.default.dim(opts.done ?? "up to date")];
+  if (items.length > max) lines.push(import_picocolors.default.dim(`\u2026 ${items.length - max} more`));
+  log.success(import_picocolors.default.bold(title) + "\n" + lines.join("\n"));
   return result;
 }
 function warn(msg) {
-  M2.warn(msg);
+  log.warn(msg);
 }
 function fail(msg) {
-  M2.error(msg);
+  log.error(msg);
 }
 function error(what, why = "", fix2 = "") {
-  const lines = [import_picocolors3.default.bold(what)];
+  const lines = [import_picocolors.default.bold(what)];
   if (why) lines.push(why);
-  if (fix2) lines.push(import_picocolors3.default.cyan("\u2192 ") + fix2);
-  M2.error(lines.join("\n"));
+  if (fix2) lines.push(import_picocolors.default.cyan("\u2192 ") + fix2);
+  log.error(lines.join("\n"));
 }
 function section(title) {
-  if (!quiet) M2.step(import_picocolors3.default.bold(title));
+  if (!quiet) log.step(import_picocolors.default.bold(title));
 }
-function intro(title) {
-  if (!quiet) Ie(import_picocolors3.default.bold(title));
+function intro2(title) {
+  if (!quiet) intro(import_picocolors.default.bold(title));
 }
-function outro(msg) {
-  if (!quiet) Se(msg);
+function outro2(msg) {
+  if (!quiet) outro(msg);
 }
-function note(lines, title) {
-  if (!quiet) Me(lines.join("\n"), title);
+function note2(lines, title) {
+  if (!quiet) note(lines.join("\n"), title);
 }
-function kv(key, value, width = 14) {
-  info(`${import_picocolors3.default.dim(key.padEnd(width))} ${value}`);
+function kv(key, value, width2 = 14) {
+  info(`${import_picocolors.default.dim(key.padEnd(width2))} ${value}`);
 }
 function table(rows, header) {
   if (collecting) {
@@ -4325,143 +5082,155 @@ function table(rows, header) {
   const all = header ? [header, ...rows] : rows;
   const ncol = Math.max(...all.map((r2) => r2.length));
   const vis = (s) => s.replace(/\x1b\[[0-9;]*m/g, "").length;
-  const w2 = Array.from({ length: ncol }, (_3, i) => Math.max(...all.map((r2) => vis(r2[i] ?? ""))));
-  const fmt = (r2) => r2.map((cell, i) => cell + " ".repeat(w2[i] - vis(cell))).join("  ").trimEnd();
-  const lines = [...header ? [import_picocolors3.default.dim(fmt(header))] : [], ...rows.map(fmt)];
-  M2.message(lines.join("\n"));
+  const w = Array.from({ length: ncol }, (_, i2) => Math.max(...all.map((r2) => vis(r2[i2] ?? ""))));
+  const fmt = (r2) => r2.map((cell, i2) => cell + " ".repeat(w[i2] - vis(cell))).join("  ").trimEnd();
+  const lines = [...header ? [import_picocolors.default.dim(fmt(header))] : [], ...rows.map(fmt)];
+  log.message(lines.join("\n"));
 }
-function cancelled(v2) {
-  xe("cancelled");
+function cancelled(v) {
+  cancel("cancelled");
   process.exit(130);
 }
-async function plainLine(q3) {
+async function plainLine(q) {
   const rl = createInterface2({ input: process.stdin, output: process.stdout });
-  return new Promise((res) => rl.question(q3, (a) => {
+  return new Promise((res) => rl.question(q, (a2) => {
     rl.close();
-    res(a.trim());
+    res(a2.trim());
   }));
 }
-async function text(message, opts = {}) {
-  const a = nextAnswer();
-  if (a !== void 0) {
-    const v3 = a === "<default>" ? opts.default ?? "" : a;
-    const err = opts.validate?.(v3);
-    if (err) throw new Error(`scripted answer '${v3}' rejected for '${message}': ${err}`);
-    return v3;
+async function text2(message, opts = {}) {
+  const a2 = nextAnswer();
+  if (a2 !== void 0) {
+    const v2 = a2 === "<default>" ? opts.default ?? "" : a2;
+    const err = opts.validate?.(v2);
+    if (err) throw new Error(`scripted answer '${v2}' rejected for '${message}': ${err}`);
+    return v2;
   }
   if (!isTTY()) {
     for (; ; ) {
-      const v3 = await plainLine(`? ${message}${opts.default ? ` [${opts.default}]` : ""}: `) || (opts.default ?? "");
-      const err = opts.validate?.(v3);
-      if (!err) return v3;
+      const v2 = await plainLine(`? ${message}${opts.default ? ` [${opts.default}]` : ""}: `) || (opts.default ?? "");
+      const err = opts.validate?.(v2);
+      if (!err) return v2;
       console.log("  ! " + err);
     }
   }
-  const v2 = await he({
+  const v = await text({
     message,
     placeholder: opts.placeholder,
     defaultValue: opts.default,
     initialValue: void 0,
-    validate: (x2) => {
-      const val = (x2 ?? "").trim() || (opts.default ?? "");
+    validate: (x) => {
+      const val = (x ?? "").trim() || (opts.default ?? "");
       return opts.validate?.(val);
     }
   });
-  if (pD(v2)) cancelled(v2);
-  return String(v2 ?? "").trim() || (opts.default ?? "");
+  if (isCancel(v)) cancelled(v);
+  return String(v ?? "").trim() || (opts.default ?? "");
 }
-async function password(message) {
-  const a = nextAnswer();
-  if (a !== void 0) return a;
+async function password2(message) {
+  const a2 = nextAnswer();
+  if (a2 !== void 0) return a2;
   if (!isTTY()) return plainLine(`? ${message}: `);
-  const v2 = await ge({ message });
-  if (pD(v2)) cancelled(v2);
-  return String(v2 ?? "");
+  const v = await password({ message });
+  if (isCancel(v)) cancelled(v);
+  return String(v ?? "");
 }
-async function confirm(message, initial = false) {
-  const a = nextAnswer();
-  if (a !== void 0) return a === "<default>" ? initial : a === "y" || a === "yes";
+async function confirm2(message, initial = false) {
+  const a2 = nextAnswer();
+  if (a2 !== void 0) return a2 === "<default>" ? initial : a2 === "y" || a2 === "yes";
   if (!isTTY()) {
-    const v3 = (await plainLine(`? ${message} [${initial ? "Y/n" : "y/N"}]: `)).toLowerCase();
-    return v3 ? v3.startsWith("y") : initial;
+    const v2 = (await plainLine(`? ${message} [${initial ? "Y/n" : "y/N"}]: `)).toLowerCase();
+    return v2 ? v2.startsWith("y") : initial;
   }
-  const v2 = await ye({ message, initialValue: initial });
-  if (pD(v2)) cancelled(v2);
-  return Boolean(v2);
+  const v = await confirm({ message, initialValue: initial });
+  if (isCancel(v)) cancelled(v);
+  return Boolean(v);
 }
-async function select(message, options, initial) {
-  const a = nextAnswer();
-  if (a !== void 0) {
-    if (a === "<default>") return initial ?? options[0].value;
-    const hit = options.find((o2) => o2.value === a || o2.label.toLowerCase().startsWith(a.toLowerCase()));
-    if (!hit) throw new Error(`scripted answer '${a}' matches no option for '${message}'`);
+async function select2(message, options, initial) {
+  const a2 = nextAnswer();
+  if (a2 !== void 0) {
+    if (a2 === "<default>") return initial ?? options[0].value;
+    const hit = options.find((o) => o.value === a2 || o.label.toLowerCase().startsWith(a2.toLowerCase()));
+    if (!hit) throw new Error(`scripted answer '${a2}' matches no option for '${message}'`);
     return hit.value;
   }
   if (!isTTY()) {
     console.log(`? ${message}`);
-    options.forEach((o2, i2) => console.log(`  ${i2 + 1}) ${o2.label}`));
-    const v3 = await plainLine(`  choose [${options.findIndex((o2) => o2.value === initial) + 1 || 1}]: `);
-    const i = parseInt(v3, 10);
-    return i >= 1 && i <= options.length ? options[i - 1].value : initial ?? options[0].value;
+    options.forEach((o, i3) => console.log(`  ${i3 + 1}) ${o.label}`));
+    const v2 = await plainLine(`  choose [${options.findIndex((o) => o.value === initial) + 1 || 1}]: `);
+    const i2 = parseInt(v2, 10);
+    return i2 >= 1 && i2 <= options.length ? options[i2 - 1].value : initial ?? options[0].value;
   }
-  const v2 = await ve({ message, options, initialValue: initial });
-  if (pD(v2)) cancelled(v2);
-  return v2;
+  const v = await select({ message, options, initialValue: initial });
+  if (isCancel(v)) cancelled(v);
+  return v;
 }
-async function groupMultiselect(message, groups, initial = []) {
+async function groupMultiselect2(message, groups, initial = []) {
   const all = Object.values(groups).flat();
-  const a = nextAnswer();
-  if (a !== void 0) return a === "<default>" ? initial : a === "all" ? all.map((o2) => o2.value) : a.split(",").map((x2) => x2.trim()).filter(Boolean);
+  const a2 = nextAnswer();
+  if (a2 !== void 0) return a2 === "<default>" ? initial : a2 === "all" ? all.map((o) => o.value) : a2.split(",").map((x) => x.trim()).filter(Boolean);
   if (!isTTY()) {
     console.log(`? ${message}`);
-    for (const [g2, opts] of Object.entries(groups)) console.log(`  ${g2}: ${opts.map((o2) => o2.value).join(", ")}`);
-    const v3 = await plainLine(`  comma list (Enter = ${initial.length === all.length ? "all" : initial.join(",")}): `);
-    return v3 ? v3.split(",").map((x2) => x2.trim()) : initial;
+    for (const [g, opts] of Object.entries(groups)) console.log(`  ${g}: ${opts.map((o) => o.value).join(", ")}`);
+    const v2 = await plainLine(`  comma list (Enter = ${initial.length === all.length ? "all" : initial.join(",")}): `);
+    return v2 ? v2.split(",").map((x) => x.trim()) : initial;
   }
-  const v2 = await be({ message, options: groups, initialValues: initial, required: false, selectableGroups: true });
-  if (pD(v2)) cancelled(v2);
-  return v2;
+  const v = await groupMultiselect({ message, options: groups, initialValues: initial, required: false, selectableGroups: true });
+  if (isCancel(v)) cancelled(v);
+  return v;
 }
 async function proceed(message, doneLabel = "Done \u2014 check again", skipLabel = "Skip for now") {
-  return await select(message, [{ value: "done", label: doneLabel }, { value: "skip", label: skipLabel }]) === "done";
+  return await select2(message, [{ value: "done", label: doneLabel }, { value: "skip", label: skipLabel }]) === "done";
 }
 async function spin(label, fn) {
+  if (activeSpinner) {
+    const outer = activeSpinner;
+    outer.message(label);
+    return fn((l2) => outer.message(l2));
+  }
   if (quiet || !process.stdout.isTTY) return fn(() => {
   });
-  const s = Y2();
+  const s = spinner();
   s.start(label);
+  activeSpinner = s;
   try {
     const r2 = await fn((l2) => s.message(l2));
     s.stop(label);
     return r2;
-  } catch (e2) {
-    s.stop(import_picocolors3.default.red(label + " failed"));
-    throw e2;
+  } catch (e) {
+    s.error(label + " failed");
+    throw e;
+  } finally {
+    activeSpinner = null;
   }
 }
-var import_picocolors3, quiet, collecting, setQuiet, strip, isTTY, scripted, isScripted, dim, bold, green, yellow, red, cyan, gray, magenta;
+var import_picocolors, quiet, collecting, setQuiet, strip, isQuiet, isTTY, scripted, isScripted, dim, bold, green, yellow, red, cyan, gray, magenta, activeSpinner, width, clip;
 var init_ui = __esm({
   "src/ui.ts"() {
     "use strict";
-    init_dist2();
-    import_picocolors3 = __toESM(require_picocolors(), 1);
+    init_dist4();
+    import_picocolors = __toESM(require_picocolors(), 1);
     quiet = false;
     collecting = null;
-    setQuiet = (q3) => {
-      quiet = q3;
+    setQuiet = (q) => {
+      quiet = q;
     };
     strip = (s) => s.replace(/\x1b\[[0-9;]*m/g, "");
+    isQuiet = () => quiet;
     isTTY = () => Boolean(process.stdin.isTTY && process.stdout.isTTY);
     scripted = process.env.CS_ANSWERS ? JSON.parse(process.env.CS_ANSWERS) : null;
     isScripted = () => scripted !== null;
-    dim = import_picocolors3.default.dim;
-    bold = import_picocolors3.default.bold;
-    green = import_picocolors3.default.green;
-    yellow = import_picocolors3.default.yellow;
-    red = import_picocolors3.default.red;
-    cyan = import_picocolors3.default.cyan;
-    gray = import_picocolors3.default.gray;
-    magenta = import_picocolors3.default.magenta;
+    dim = import_picocolors.default.dim;
+    bold = import_picocolors.default.bold;
+    green = import_picocolors.default.green;
+    yellow = import_picocolors.default.yellow;
+    red = import_picocolors.default.red;
+    cyan = import_picocolors.default.cyan;
+    gray = import_picocolors.default.gray;
+    magenta = import_picocolors.default.magenta;
+    activeSpinner = null;
+    width = () => Math.max(40, (process.stdout.columns || 100) - 6);
+    clip = (s, w = width()) => strip(s).length > w ? s.slice(0, w - 1) + "\u2026" : s;
   }
 });
 
@@ -4484,16 +5253,16 @@ __export(paths_exports, {
 });
 import { homedir, hostname } from "node:os";
 import { join, resolve, isAbsolute, relative } from "node:path";
-function expand(p2) {
-  let s = p2.replace(/\$([A-Za-z_][A-Za-z0-9_]*)/g, (_3, v2) => process.env[v2] ?? "");
+function expand(p) {
+  let s = p.replace(/\$([A-Za-z_][A-Za-z0-9_]*)/g, (_, v) => process.env[v] ?? "");
   if (s === "~" || s.startsWith("~/")) s = home() + s.slice(1);
   return s;
 }
-function contract(p2) {
+function contract(p) {
   const h2 = home();
-  if (p2 === h2) return "~";
-  if (p2.startsWith(h2 + "/")) return "~/" + p2.slice(h2.length + 1);
-  return p2;
+  if (p === h2) return "~";
+  if (p.startsWith(h2 + "/")) return "~/" + p.slice(h2.length + 1);
+  return p;
 }
 var home, claudeDir, claudeJson, csConfigDir, machineFile, repoDirDefault, stateDir, toolRoot, templatesDir, nodename, isUnder;
 var init_paths = __esm({
@@ -4651,15 +5420,15 @@ function makeCodeBlock(string, line, column) {
   let lines = string.split(/\r\n|\n|\r/g);
   let codeblock = "";
   let numberLen = (Math.log10(line + 1) | 0) + 1;
-  for (let i = line - 1; i <= line + 1; i++) {
-    let l2 = lines[i - 1];
+  for (let i2 = line - 1; i2 <= line + 1; i2++) {
+    let l2 = lines[i2 - 1];
     if (!l2)
       continue;
-    codeblock += i.toString().padEnd(numberLen, " ");
+    codeblock += i2.toString().padEnd(numberLen, " ");
     codeblock += ":  ";
     codeblock += l2;
     codeblock += "\n";
-    if (i === line) {
+    if (i2 === line) {
       codeblock += " ".repeat(numberLen + column + 2);
       codeblock += "^\n";
     }
@@ -4696,14 +5465,14 @@ function indexOfNewline(str, start = 0) {
 }
 function skipComment(ctx2) {
   for (; ctx2.p < ctx2.s.length; ctx2.p++) {
-    let c = ctx2.s.charCodeAt(ctx2.p);
-    if (c === 10)
+    let c2 = ctx2.s.charCodeAt(ctx2.p);
+    if (c2 === 10)
       break;
-    if (c === 13 && ctx2.s.charCodeAt(ctx2.p + 1) === 10) {
+    if (c2 === 13 && ctx2.s.charCodeAt(ctx2.p + 1) === 10) {
       ctx2.p++;
       break;
     }
-    if (c < 32 && c !== 9 || c === 127) {
+    if (c2 < 32 && c2 !== 9 || c2 === 127) {
       throw new TomlError("control characters are not allowed in comments", {
         toml: ctx2.s,
         ptr: ctx2.p
@@ -4712,11 +5481,11 @@ function skipComment(ctx2) {
   }
 }
 function skipVoid(ctx2, banNewLines, banComments) {
-  let c;
+  let c2;
   while (1) {
-    while ((c = ctx2.s.charCodeAt(ctx2.p)) === 32 || c === 9 || !banNewLines && (c === 10 || c === 13 && ctx2.s.charCodeAt(ctx2.p + 1) === 10))
+    while ((c2 = ctx2.s.charCodeAt(ctx2.p)) === 32 || c2 === 9 || !banNewLines && (c2 === 10 || c2 === 13 && ctx2.s.charCodeAt(ctx2.p + 1) === 10))
       ctx2.p++;
-    if (banComments || c !== 35)
+    if (banComments || c2 !== 35)
       break;
     skipComment(ctx2);
   }
@@ -4729,10 +5498,10 @@ function skipUntil(ctx2, sep, end) {
     return;
   }
   for (; ctx2.p < ctx2.s.length; ctx2.p++) {
-    let c = ctx2.s.charCodeAt(ctx2.p);
-    if (c === 35) {
+    let c2 = ctx2.s.charCodeAt(ctx2.p);
+    if (c2 === 35) {
       skipComment(ctx2);
-    } else if (c === end || c === sep) {
+    } else if (c2 === end || c2 === sep) {
       return;
     }
   }
@@ -4750,29 +5519,29 @@ var init_util = __esm({
 // node_modules/smol-toml/dist/primitive.js
 function parseString(ctx2) {
   let start = ctx2.p;
-  let c = ctx2.s.charCodeAt(ctx2.p++);
-  let first = c;
-  let isLiteral = c === 39;
-  let isMultiline = c === ctx2.s.charCodeAt(ctx2.p) && c === ctx2.s.charCodeAt(ctx2.p + 1);
+  let c2 = ctx2.s.charCodeAt(ctx2.p++);
+  let first = c2;
+  let isLiteral = c2 === 39;
+  let isMultiline = c2 === ctx2.s.charCodeAt(ctx2.p) && c2 === ctx2.s.charCodeAt(ctx2.p + 1);
   if (isMultiline) {
-    if ((c = ctx2.s.charCodeAt(ctx2.p += 2)) === 10)
+    if ((c2 = ctx2.s.charCodeAt(ctx2.p += 2)) === 10)
       ctx2.p++;
-    else if (c === 13 && ctx2.s.charCodeAt(ctx2.p + 1) === 10)
+    else if (c2 === 13 && ctx2.s.charCodeAt(ctx2.p + 1) === 10)
       ctx2.p += 2;
   }
   let parsed = "";
   let sliceStart = ctx2.p;
   let state = 0;
   for (; ctx2.p < ctx2.s.length; ctx2.p++) {
-    c = ctx2.s.charCodeAt(ctx2.p);
-    if (isMultiline && (c === 10 || c === 13 && ctx2.s.charCodeAt(ctx2.p + 1) === 10)) {
+    c2 = ctx2.s.charCodeAt(ctx2.p);
+    if (isMultiline && (c2 === 10 || c2 === 13 && ctx2.s.charCodeAt(ctx2.p + 1) === 10)) {
       state = state && 3;
-    } else if (c < 32 && c !== 9 || c === 127) {
+    } else if (c2 < 32 && c2 !== 9 || c2 === 127) {
       throw new TomlError("control characters are not allowed in strings", {
         toml: ctx2.s,
         ptr: ctx2.p
       });
-    } else if ((!state || state === 3) && c === first && (!isMultiline || ctx2.s.charCodeAt(ctx2.p + 1) === first && ctx2.s.charCodeAt(ctx2.p + 2) === first)) {
+    } else if ((!state || state === 3) && c2 === first && (!isMultiline || ctx2.s.charCodeAt(ctx2.p + 1) === first && ctx2.s.charCodeAt(ctx2.p + 2) === first)) {
       if (isMultiline) {
         if (ctx2.s.charCodeAt(ctx2.p + 3) === first)
           ctx2.p++;
@@ -4784,15 +5553,15 @@ function parseString(ctx2) {
       ctx2.p += isMultiline ? 3 : 1;
       return parsed;
     } else if (!state) {
-      if (!isLiteral && c === 92) {
+      if (!isLiteral && c2 === 92) {
         parsed += ctx2.s.slice(sliceStart, sliceStart = ctx2.p);
         state = 1;
       }
     } else if (state === 1) {
-      if (c === 120 || c === 117 || c === 85) {
+      if (c2 === 120 || c2 === 117 || c2 === 85) {
         let value = 0;
-        let len = c === 120 ? 2 : c === 117 ? 4 : 8;
-        for (let j2 = 0; j2 < len; j2++, ctx2.p++) {
+        let len = c2 === 120 ? 2 : c2 === 117 ? 4 : 8;
+        for (let j = 0; j < len; j++, ctx2.p++) {
           let hex = ctx2.s.charCodeAt(ctx2.p + 1);
           let digit = (
             /* 0-9 */
@@ -4814,38 +5583,38 @@ function parseString(ctx2) {
         parsed += String.fromCodePoint(value);
         sliceStart = ctx2.p + 1;
         state = 0;
-      } else if (c === 32 || c === 9) {
+      } else if (c2 === 32 || c2 === 9) {
         state = 2;
       } else {
-        if (c === 98)
+        if (c2 === 98)
           parsed += "\b";
-        else if (c === 116)
+        else if (c2 === 116)
           parsed += "	";
-        else if (c === 110)
+        else if (c2 === 110)
           parsed += "\n";
-        else if (c === 102)
+        else if (c2 === 102)
           parsed += "\f";
-        else if (c === 114)
+        else if (c2 === 114)
           parsed += "\r";
-        else if (c === 101)
+        else if (c2 === 101)
           parsed += "\x1B";
-        else if (c === 34)
+        else if (c2 === 34)
           parsed += '"';
-        else if (c === 92)
+        else if (c2 === 92)
           parsed += "\\";
         else
           throw new TomlError("unrecognized escape sequence", { toml: ctx2.s, ptr: ctx2.p });
         sliceStart = ctx2.p + 1;
         state = 0;
       }
-    } else if (c !== 32 && c !== 9) {
+    } else if (c2 !== 32 && c2 !== 9) {
       if (state === 2) {
         throw new TomlError("invalid escape: only line-ending whitespace may be escaped", {
           toml: ctx2.s,
           ptr: sliceStart
         });
       }
-      state = !isLiteral && c === 92 ? 1 : 0;
+      state = !isLiteral && c2 === 92 ? 1 : 0;
       sliceStart = ctx2.p;
     }
   }
@@ -4914,28 +5683,28 @@ var init_primitive = __esm({
 // node_modules/smol-toml/dist/extract.js
 function extractValue(ctx2, end, integersAsBigInt) {
   let ptr = ctx2.p;
-  let c = ctx2.s.charCodeAt(ptr);
-  if (c === 91 || c === 123) {
+  let c2 = ctx2.s.charCodeAt(ptr);
+  if (c2 === 91 || c2 === 123) {
     if (!ctx2.d--) {
       throw new TomlError("document contains excessively nested structures. aborting.", {
         toml: ctx2.s,
         ptr
       });
     }
-    let value = c === 91 ? parseArray(ctx2, integersAsBigInt) : parseInlineTable(ctx2, integersAsBigInt);
+    let value = c2 === 91 ? parseArray(ctx2, integersAsBigInt) : parseInlineTable(ctx2, integersAsBigInt);
     ctx2.d++;
     return value;
   }
-  if (c === 34 || c === 39) {
+  if (c2 === 34 || c2 === 39) {
     return parseString(ctx2);
   }
-  if (c === 116) {
+  if (c2 === 116) {
     if (ctx2.s.charCodeAt(++ctx2.p) !== 114 || ctx2.s.charCodeAt(++ctx2.p) !== 117 || ctx2.s.charCodeAt(++ctx2.p) !== 101)
       throw new TomlError("invalid value", { toml: ctx2.s, ptr });
     ctx2.p++;
     return true;
   }
-  if (c === 102) {
+  if (c2 === 102) {
     if (ctx2.s.charCodeAt(++ctx2.p) !== 97 || ctx2.s.charCodeAt(++ctx2.p) !== 108 || ctx2.s.charCodeAt(++ctx2.p) !== 115 || ctx2.s.charCodeAt(++ctx2.p) !== 101)
       throw new TomlError("invalid value", { toml: ctx2.s, ptr });
     ctx2.p++;
@@ -4964,10 +5733,10 @@ function parseKey(ctx2, end = "=") {
     });
   }
   do {
-    let c = ctx2.s.charCodeAt(ctx2.p = ++dot);
-    if (c !== 32 && c !== 9) {
-      if (c === 34 || c === 39) {
-        if (c === ctx2.s.charCodeAt(ctx2.p + 1) && c === ctx2.s.charCodeAt(ctx2.p + 2)) {
+    let c2 = ctx2.s.charCodeAt(ctx2.p = ++dot);
+    if (c2 !== 32 && c2 !== 9) {
+      if (c2 === 34 || c2 === 39) {
+        if (c2 === ctx2.s.charCodeAt(ctx2.p + 1) && c2 === ctx2.s.charCodeAt(ctx2.p + 2)) {
           throw new TomlError("multiline strings are not allowed in keys", {
             toml: ctx2.s,
             ptr: ctx2.p
@@ -5019,31 +5788,31 @@ function parseKey(ctx2, end = "=") {
 function parseInlineTable(ctx2, integersAsBigInt) {
   let res = {};
   let seen = /* @__PURE__ */ new Set();
-  let c;
+  let c2;
   ctx2.p++;
   while (ctx2.p < ctx2.s.length) {
     skipVoid(ctx2);
-    if ((c = ctx2.s.charCodeAt(ctx2.p)) === 125) {
+    if ((c2 = ctx2.s.charCodeAt(ctx2.p)) === 125) {
       ctx2.p++;
       return res;
     }
-    let k3;
-    let t = res;
+    let k;
+    let t2 = res;
     let hasOwn = false;
-    let p2 = ctx2.p;
+    let p = ctx2.p;
     let key = parseKey(ctx2);
-    for (let i = 0; i < key.length; i++) {
-      if (i)
-        t = hasOwn ? t[k3] : t[k3] = {};
-      k3 = key[i];
-      if ((hasOwn = Object.hasOwn(t, k3)) && (typeof t[k3] !== "object" || seen.has(t[k3]))) {
+    for (let i2 = 0; i2 < key.length; i2++) {
+      if (i2)
+        t2 = hasOwn ? t2[k] : t2[k] = {};
+      k = key[i2];
+      if ((hasOwn = Object.hasOwn(t2, k)) && (typeof t2[k] !== "object" || seen.has(t2[k]))) {
         throw new TomlError("trying to redefine an already defined value", {
           toml: ctx2.s,
-          ptr: p2
+          ptr: p
         });
       }
-      if (!hasOwn && k3 === "__proto__") {
-        Object.defineProperty(t, k3, { enumerable: true, configurable: true, writable: true });
+      if (!hasOwn && k === "__proto__") {
+        Object.defineProperty(t2, k, { enumerable: true, configurable: true, writable: true });
       }
     }
     if (hasOwn) {
@@ -5053,12 +5822,12 @@ function parseInlineTable(ctx2, integersAsBigInt) {
       });
     }
     let value = extractValue(ctx2, 125, integersAsBigInt);
-    seen.add(t[k3] = value);
+    seen.add(t2[k] = value);
     skipVoid(ctx2);
-    if ((c = ctx2.s.charCodeAt(ctx2.p++)) === 125) {
+    if ((c2 = ctx2.s.charCodeAt(ctx2.p++)) === 125) {
       return res;
     }
-    if (c !== 44) {
+    if (c2 !== 44) {
       throw new TomlError("expected comma or end of structure", { toml: ctx2.s, ptr: ctx2.p - 1 });
     }
   }
@@ -5069,20 +5838,20 @@ function parseInlineTable(ctx2, integersAsBigInt) {
 }
 function parseArray(ctx2, integersAsBigInt) {
   let res = [];
-  let c;
+  let c2;
   ctx2.p++;
   while (ctx2.p < ctx2.s.length) {
     skipVoid(ctx2);
-    if ((c = ctx2.s.charCodeAt(ctx2.p)) === 93) {
+    if ((c2 = ctx2.s.charCodeAt(ctx2.p)) === 93) {
       ctx2.p++;
       return res;
     }
     res.push(extractValue(ctx2, 93, integersAsBigInt));
     skipVoid(ctx2);
-    if ((c = ctx2.s.charCodeAt(ctx2.p++)) === 93) {
+    if ((c2 = ctx2.s.charCodeAt(ctx2.p++)) === 93) {
       return res;
     }
-    if (c !== 44) {
+    if (c2 !== 44) {
       throw new TomlError("expected comma or end of structure", { toml: ctx2.s, ptr: ctx2.p - 1 });
     }
   }
@@ -5104,51 +5873,51 @@ var init_struct = __esm({
 
 // node_modules/smol-toml/dist/parse.js
 function peekTable(key, table2, meta, type) {
-  let t = table2;
-  let m2 = meta;
-  let k3;
+  let t2 = table2;
+  let m = meta;
+  let k;
   let hasOwn = false;
   let state;
-  for (let i = 0; i < key.length; i++) {
-    if (i) {
-      t = hasOwn ? t[k3] : t[k3] = {};
-      m2 = (state = m2[k3]).c;
+  for (let i2 = 0; i2 < key.length; i2++) {
+    if (i2) {
+      t2 = hasOwn ? t2[k] : t2[k] = {};
+      m = (state = m[k]).c;
       if (type === 0 && (state.t === 1 || state.t === 2)) {
         return null;
       }
       if (state.t === 2) {
-        let l2 = t.length - 1;
-        t = t[l2];
-        m2 = m2[l2].c;
+        let l2 = t2.length - 1;
+        t2 = t2[l2];
+        m = m[l2].c;
       }
     }
-    k3 = key[i];
-    if ((hasOwn = Object.hasOwn(t, k3)) && m2[k3]?.t === 0 && m2[k3]?.d) {
+    k = key[i2];
+    if ((hasOwn = Object.hasOwn(t2, k)) && m[k]?.t === 0 && m[k]?.d) {
       return null;
     }
     if (!hasOwn) {
-      if (k3 === "__proto__") {
-        Object.defineProperty(t, k3, { enumerable: true, configurable: true, writable: true });
-        Object.defineProperty(m2, k3, { enumerable: true, configurable: true, writable: true });
+      if (k === "__proto__") {
+        Object.defineProperty(t2, k, { enumerable: true, configurable: true, writable: true });
+        Object.defineProperty(m, k, { enumerable: true, configurable: true, writable: true });
       }
-      m2[k3] = {
-        t: i < key.length - 1 && type === 2 ? 3 : type,
+      m[k] = {
+        t: i2 < key.length - 1 && type === 2 ? 3 : type,
         d: false,
         i: 0,
         c: {}
       };
     }
   }
-  state = m2[k3];
+  state = m[k];
   if (state.t !== type && !(type === 1 && state.t === 3)) {
     return null;
   }
   if (type === 2) {
     if (!state.d) {
       state.d = true;
-      t[k3] = [];
+      t2[k] = [];
     }
-    t[k3].push(t = {});
+    t2[k].push(t2 = {});
     state.c[state.i++] = state = { t: 1, d: false, i: 0, c: {} };
   }
   if (state.d) {
@@ -5156,11 +5925,11 @@ function peekTable(key, table2, meta, type) {
   }
   state.d = true;
   if (type === 1) {
-    t = hasOwn ? t[k3] : t[k3] = {};
+    t2 = hasOwn ? t2[k] : t2[k] = {};
   } else if (type === 0 && hasOwn) {
     return null;
   }
-  return [k3, t, state.c];
+  return [k, t2, state.c];
 }
 function parse(toml, { maxDepth = 1e3, integersAsBigInt } = {}) {
   let ctx2 = { s: toml, p: 0, d: maxDepth };
@@ -5168,13 +5937,13 @@ function parse(toml, { maxDepth = 1e3, integersAsBigInt } = {}) {
   let meta = {};
   let tmp;
   let tbl = res;
-  let m2 = meta;
+  let m = meta;
   skipVoid(ctx2);
   while (ctx2.p < toml.length) {
     if (toml.charCodeAt(ctx2.p) === 91) {
       let isTableArray = toml.charCodeAt(++ctx2.p) === 91;
       tmp = ctx2.p += +isTableArray;
-      let k3 = parseKey(ctx2, "]");
+      let k = parseKey(ctx2, "]");
       if (isTableArray) {
         if (toml.charCodeAt(ctx2.p - 1) !== 93) {
           throw new TomlError("expected end of table declaration", {
@@ -5184,38 +5953,38 @@ function parse(toml, { maxDepth = 1e3, integersAsBigInt } = {}) {
         }
         ctx2.p++;
       }
-      let p2 = peekTable(
-        k3,
+      let p = peekTable(
+        k,
         res,
         meta,
         isTableArray ? 2 : 1
         /* Type.EXPLICIT */
       );
-      if (!p2) {
+      if (!p) {
         throw new TomlError("trying to redefine an already defined table or value", {
           toml,
           ptr: tmp
         });
       }
-      m2 = p2[2];
-      tbl = p2[1];
+      m = p[2];
+      tbl = p[1];
     } else {
       tmp = ctx2.p;
-      let k3 = parseKey(ctx2);
-      let p2 = peekTable(
-        k3,
+      let k = parseKey(ctx2);
+      let p = peekTable(
+        k,
         tbl,
-        m2,
+        m,
         0
         /* Type.DOTTED */
       );
-      if (!p2) {
+      if (!p) {
         throw new TomlError("trying to redefine an already defined table or value", {
           toml,
           ptr: tmp
         });
       }
-      p2[1][p2[0]] = extractValue(ctx2, void 0, integersAsBigInt);
+      p[1][p[0]] = extractValue(ctx2, void 0, integersAsBigInt);
     }
     skipVoid(ctx2, true);
     if (ctx2.p < toml.length && (tmp = toml.charCodeAt(ctx2.p)) !== 10 && tmp !== 13) {
@@ -5253,8 +6022,8 @@ function extendedTypeOf(obj) {
   return type;
 }
 function isArrayOfTables(obj) {
-  for (let i = 0; i < obj.length; i++) {
-    if (extendedTypeOf(obj[i]) !== "object")
+  for (let i2 = 0; i2 < obj.length; i2++) {
+    if (extendedTypeOf(obj[i2]) !== "object")
       return false;
   }
   return obj.length != 0;
@@ -5305,13 +6074,13 @@ function stringifyInlineTable(obj, depth, numberAsFloat) {
   if (keys.length === 0)
     return "{}";
   let res = "{ ";
-  for (let i = 0; i < keys.length; i++) {
-    let k3 = keys[i];
-    if (i)
+  for (let i2 = 0; i2 < keys.length; i2++) {
+    let k = keys[i2];
+    if (i2)
       res += ", ";
-    res += BARE_KEY.test(k3) ? k3 : formatString(k3);
+    res += BARE_KEY.test(k) ? k : formatString(k);
     res += " = ";
-    res += stringifyValue(obj[k3], extendedTypeOf(obj[k3]), depth - 1, numberAsFloat);
+    res += stringifyValue(obj[k], extendedTypeOf(obj[k]), depth - 1, numberAsFloat);
   }
   return res + " }";
 }
@@ -5319,13 +6088,13 @@ function stringifyArray(array, depth, numberAsFloat) {
   if (array.length === 0)
     return "[]";
   let res = "[ ";
-  for (let i = 0; i < array.length; i++) {
-    if (i)
+  for (let i2 = 0; i2 < array.length; i2++) {
+    if (i2)
       res += ", ";
-    if (array[i] === null || array[i] === void 0) {
+    if (array[i2] === null || array[i2] === void 0) {
       throw new TypeError("arrays cannot contain null or undefined values");
     }
-    res += stringifyValue(array[i], extendedTypeOf(array[i]), depth - 1, numberAsFloat);
+    res += stringifyValue(array[i2], extendedTypeOf(array[i2]), depth - 1, numberAsFloat);
   }
   return res + " ]";
 }
@@ -5334,10 +6103,10 @@ function stringifyArrayTable(array, key, depth, numberAsFloat) {
     throw new Error("Could not stringify the object: maximum object depth exceeded");
   }
   let res = "";
-  for (let i = 0; i < array.length; i++) {
+  for (let i2 = 0; i2 < array.length; i2++) {
     res += `${res && "\n"}[[${key}]]
 `;
-    res += stringifyTable(0, array[i], key, depth, numberAsFloat);
+    res += stringifyTable(0, array[i2], key, depth, numberAsFloat);
   }
   return res;
 }
@@ -5348,23 +6117,23 @@ function stringifyTable(tableKey, obj, prefix, depth, numberAsFloat) {
   let preamble = "";
   let tables = "";
   let keys = Object.keys(obj);
-  for (let i = 0; i < keys.length; i++) {
-    let k3 = keys[i];
-    if (obj[k3] !== null && obj[k3] !== void 0) {
-      let type = extendedTypeOf(obj[k3]);
+  for (let i2 = 0; i2 < keys.length; i2++) {
+    let k = keys[i2];
+    if (obj[k] !== null && obj[k] !== void 0) {
+      let type = extendedTypeOf(obj[k]);
       if (type === "symbol" || type === "function") {
         throw new TypeError(`cannot serialize values of type '${type}'`);
       }
-      let key = BARE_KEY.test(k3) ? k3 : formatString(k3);
-      if (type === "array" && isArrayOfTables(obj[k3])) {
-        tables += (tables && "\n") + stringifyArrayTable(obj[k3], prefix ? `${prefix}.${key}` : key, depth - 1, numberAsFloat);
+      let key = BARE_KEY.test(k) ? k : formatString(k);
+      if (type === "array" && isArrayOfTables(obj[k])) {
+        tables += (tables && "\n") + stringifyArrayTable(obj[k], prefix ? `${prefix}.${key}` : key, depth - 1, numberAsFloat);
       } else if (type === "object") {
         let tblKey = prefix ? `${prefix}.${key}` : key;
-        tables += (tables && "\n") + stringifyTable(tblKey, obj[k3], tblKey, depth - 1, numberAsFloat);
+        tables += (tables && "\n") + stringifyTable(tblKey, obj[k], tblKey, depth - 1, numberAsFloat);
       } else {
         preamble += key;
         preamble += " = ";
-        preamble += stringifyValue(obj[k3], type, depth, numberAsFloat);
+        preamble += stringifyValue(obj[k], type, depth, numberAsFloat);
         preamble += "\n";
       }
     }
@@ -5392,7 +6161,7 @@ var init_stringify = __esm({
 });
 
 // node_modules/smol-toml/dist/index.js
-var init_dist3 = __esm({
+var init_dist5 = __esm({
   "node_modules/smol-toml/dist/index.js"() {
     init_parse();
     init_stringify();
@@ -5416,21 +6185,21 @@ function machineExists() {
 }
 function loadMachine() {
   if (!machineExists()) throw new Error("cs: no machine config yet \u2014 run `cs init` first");
-  const d3 = parse(readFileSync2(machineFile(), "utf8"));
+  const d = parse(readFileSync2(machineFile(), "utf8"));
   return {
-    name: d3.name,
-    profiles: d3.profiles ?? ["personal"],
-    exclude: d3.exclude ?? [],
-    workspace: d3.workspace,
-    repo: d3.repo,
-    secretsBackend: d3.secrets?.backend ?? "sops"
+    name: d.name,
+    profiles: d.profiles ?? ["personal"],
+    exclude: d.exclude ?? [],
+    workspace: d.workspace,
+    repo: d.repo,
+    secretsBackend: d.secrets?.backend ?? "sops"
   };
 }
-function saveMachine(m2) {
-  const obj = { name: m2.name, profiles: m2.profiles, exclude: m2.exclude };
-  if (m2.workspace) obj.workspace = m2.workspace;
-  if (m2.repo) obj.repo = m2.repo;
-  obj.secrets = { backend: m2.secretsBackend };
+function saveMachine(m) {
+  const obj = { name: m.name, profiles: m.profiles, exclude: m.exclude };
+  if (m.workspace) obj.workspace = m.workspace;
+  if (m.repo) obj.repo = m.repo;
+  obj.secrets = { backend: m.secretsBackend };
   mkdirSync(dirname(machineFile()), { recursive: true });
   writeFileSync(machineFile(), "# claude-share machine config (not synced). Edit freely.\n" + stringify(obj) + "\n");
 }
@@ -5438,9 +6207,9 @@ var repoDir;
 var init_config = __esm({
   "src/config.ts"() {
     "use strict";
-    init_dist3();
+    init_dist5();
     init_paths();
-    repoDir = (m2) => m2.repo ? expand(m2.repo) : repoDirDefault();
+    repoDir = (m) => m.repo ? expand(m.repo) : repoDirDefault();
   }
 });
 
@@ -5473,137 +6242,137 @@ __export(manifest_exports, {
 import { existsSync as existsSync2, readFileSync as readFileSync3, writeFileSync as writeFileSync2 } from "node:fs";
 import { join as join3, isAbsolute as isAbsolute2, resolve as resolve2 } from "node:path";
 function globMatch(pattern, s) {
-  const re = "^" + pattern.split("**").map((part) => part.split("*").map((x2) => x2.replace(/[.+^${}()|[\]\\?]/g, "\\$&")).join("[^/]*")).join(".*") + "$";
+  const re = "^" + pattern.split("**").map((part) => part.split("*").map((x) => x.replace(/[.+^${}()|[\]\\?]/g, "\\$&")).join("[^/]*")).join(".*") + "$";
   return new RegExp(re).test(s);
 }
-function identityForUrl(m2, url) {
-  return Object.values(m2.identities).find((i) => identityMatches(i, url));
+function identityForUrl(m, url) {
+  return Object.values(m.identities).find((i2) => identityMatches(i2, url));
 }
-function identityByFlag(m2, flag) {
+function identityByFlag(m, flag) {
   const f = flag.toLowerCase();
-  return Object.values(m2.identities).find((i) => i.id.toLowerCase() === f || i.owner?.toLowerCase() === f);
+  return Object.values(m.identities).find((i2) => i2.id.toLowerCase() === f || i2.owner?.toLowerCase() === f);
 }
-function selected(p2, m2) {
-  if (p2.machines.length && !p2.machines.includes(m2.name)) return false;
-  if (m2.exclude.includes(p2.name)) return false;
-  return p2.profiles.includes("all") || p2.profiles.some((x2) => m2.profiles.includes(x2));
+function selected(p, m) {
+  if (p.machines.length && !p.machines.includes(m.name)) return false;
+  if (m.exclude.includes(p.name)) return false;
+  return p.profiles.includes("all") || p.profiles.some((x) => m.profiles.includes(x));
 }
-function projectForPath(man, m2, path) {
-  const ws = resolve2(workspace(man, m2));
+function projectForPath(man, m, path) {
+  const ws = resolve2(workspace(man, m));
   const r2 = resolve2(path);
   if (!(r2 === ws || r2.startsWith(ws + "/"))) return void 0;
   const first = r2.slice(ws.length + 1).split("/")[0];
-  return first ? Object.values(man.projects).find((p2) => (p2.path || p2.name) === first) : void 0;
+  return first ? Object.values(man.projects).find((p) => (p.path || p.name) === first) : void 0;
 }
-function parseManifest(text2, path) {
-  const d3 = parse(text2);
+function parseManifest(text3, path) {
+  const d = parse(text3);
   const identities = {};
-  for (const [id, v2] of Object.entries(d3.identities ?? {}))
-    identities[id] = { id, name: v2.name ?? "", email: v2.email ?? "", owner: v2.owner ?? v2.github_owner ?? "", sshKey: v2.ssh_key, urlGlobs: v2.url_globs };
+  for (const [id, v] of Object.entries(d.identities ?? {}))
+    identities[id] = { id, name: v.name ?? "", email: v.email ?? "", owner: v.owner ?? v.github_owner ?? "", sshKey: v.ssh_key, urlGlobs: v.url_globs };
   const projects = {};
-  for (const [name2, v2] of Object.entries(d3.projects ?? {}))
+  for (const [name2, v] of Object.entries(d.projects ?? {}))
     projects[name2] = {
       name: name2,
-      kind: v2.kind ?? "git",
-      path: v2.path,
-      url: v2.url,
-      identity: v2.identity,
-      profiles: v2.profiles ?? ["all"],
-      machines: v2.machines ?? [],
-      branch: v2.branch,
-      layout: v2.layout ?? "plain",
-      postClone: v2.post_clone,
-      description: v2.description,
-      handoff: v2.handoff ?? {},
-      sync: v2.sync ?? {}
+      kind: v.kind ?? "git",
+      path: v.path,
+      url: v.url,
+      identity: v.identity,
+      profiles: v.profiles ?? ["all"],
+      machines: v.machines ?? [],
+      branch: v.branch,
+      layout: v.layout ?? "plain",
+      postClone: v.post_clone,
+      description: v.description,
+      handoff: v.handoff ?? {},
+      sync: v.sync ?? {}
     };
-  return { workspaceRoot: d3.workspace?.root ?? "~/dev", defaultBranch: d3.workspace?.default_branch ?? "master", identities, projects, schemaVersion: d3.schema_version ?? 1, path };
+  return { workspaceRoot: d.workspace?.root ?? "~/dev", defaultBranch: d.workspace?.default_branch ?? "master", identities, projects, schemaVersion: d.schema_version ?? 1, path };
 }
-function validate(m2) {
+function validate(m) {
   const errs = [];
-  if (m2.schemaVersion > SUPPORTED_SCHEMA) errs.push(`projects.toml schema_version ${m2.schemaVersion} > supported ${SUPPORTED_SCHEMA}; run cs self-update`);
-  for (const i of Object.values(m2.identities)) if (!i.owner && !i.urlGlobs?.length) errs.push(`identity ${i.id}: needs owner (GitHub user/org)`);
-  for (const p2 of Object.values(m2.projects)) {
-    if (!NAME_RE.test(p2.name)) errs.push(`${p2.name}: invalid project name`);
-    if (!KINDS.includes(p2.kind)) errs.push(`${p2.name}: kind must be one of ${KINDS.join("|")}`);
-    if (p2.kind === "git") {
-      if (!p2.url) errs.push(`${p2.name}: kind=git requires url`);
-      if (!p2.identity) errs.push(`${p2.name}: kind=git requires identity`);
-      else if (!m2.identities[p2.identity]) errs.push(`${p2.name}: unknown identity '${p2.identity}'`);
-      else if (p2.url && !identityMatches(m2.identities[p2.identity], p2.url)) errs.push(`${p2.name}: url ${p2.url} does not match identity '${p2.identity}'`);
+  if (m.schemaVersion > SUPPORTED_SCHEMA) errs.push(`projects.toml schema_version ${m.schemaVersion} > supported ${SUPPORTED_SCHEMA}; run cs self-update`);
+  for (const i2 of Object.values(m.identities)) if (!i2.owner && !i2.urlGlobs?.length) errs.push(`identity ${i2.id}: needs owner (GitHub user/org)`);
+  for (const p of Object.values(m.projects)) {
+    if (!NAME_RE.test(p.name)) errs.push(`${p.name}: invalid project name`);
+    if (!KINDS.includes(p.kind)) errs.push(`${p.name}: kind must be one of ${KINDS.join("|")}`);
+    if (p.kind === "git") {
+      if (!p.url) errs.push(`${p.name}: kind=git requires url`);
+      if (!p.identity) errs.push(`${p.name}: kind=git requires identity`);
+      else if (!m.identities[p.identity]) errs.push(`${p.name}: unknown identity '${p.identity}'`);
+      else if (p.url && !identityMatches(m.identities[p.identity], p.url)) errs.push(`${p.name}: url ${p.url} does not match identity '${p.identity}'`);
     }
-    if (p2.path && (isAbsolute2(p2.path) || p2.path.split("/").includes(".."))) errs.push(`${p2.name}: path must be relative and inside the workspace`);
+    if (p.path && (isAbsolute2(p.path) || p.path.split("/").includes(".."))) errs.push(`${p.name}: path must be relative and inside the workspace`);
   }
   return errs;
 }
 function loadManifest(repo) {
   const f = join3(repo, "projects.toml");
   if (!existsSync2(f)) throw new Error(`cs: no projects.toml in ${repo}`);
-  const m2 = parseManifest(readFileSync3(f, "utf8"), f);
-  const errs = validate(m2);
+  const m = parseManifest(readFileSync3(f, "utf8"), f);
+  const errs = validate(m);
   if (errs.length) throw new Error("cs: projects.toml invalid:\n  " + errs.join("\n  "));
-  return m2;
+  return m;
 }
-function block(header, values) {
+function block2(header, values) {
   const clean = {};
-  for (const [k3, v2] of Object.entries(values)) if (v2 !== void 0 && v2 !== "" && !(Array.isArray(v2) && !v2.length)) clean[k3] = v2;
+  for (const [k, v] of Object.entries(values)) if (v !== void 0 && v !== "" && !(Array.isArray(v) && !v.length)) clean[k] = v;
   return `[${header}]
 ` + stringify(clean).trimEnd() + "\n";
 }
-function projectBlock(p2) {
-  return block(`projects.${p2.name}`, {
-    kind: p2.kind,
-    path: p2.path && p2.path !== p2.name ? p2.path : void 0,
-    url: p2.kind === "git" ? p2.url : void 0,
-    identity: p2.kind === "git" ? p2.identity : void 0,
-    branch: p2.kind === "git" ? p2.branch : void 0,
-    profiles: p2.profiles,
-    machines: p2.machines,
-    layout: p2.layout !== "plain" ? p2.layout : void 0,
-    post_clone: p2.postClone,
-    description: p2.description
+function projectBlock(p) {
+  return block2(`projects.${p.name}`, {
+    kind: p.kind,
+    path: p.path && p.path !== p.name ? p.path : void 0,
+    url: p.kind === "git" ? p.url : void 0,
+    identity: p.kind === "git" ? p.identity : void 0,
+    branch: p.kind === "git" ? p.branch : void 0,
+    profiles: p.profiles,
+    machines: p.machines,
+    layout: p.layout !== "plain" ? p.layout : void 0,
+    post_clone: p.postClone,
+    description: p.description
   });
 }
-function identityBlock(i) {
-  return block(`identities.${i.id}`, {
-    owner: i.owner,
-    name: i.name,
-    email: i.email,
-    ssh_key: i.sshKey && i.sshKey !== `~/.ssh/cs/${i.id}` ? i.sshKey : void 0,
-    url_globs: i.urlGlobs && JSON.stringify(i.urlGlobs) !== JSON.stringify([`git@github.com:${i.owner}/**`]) ? i.urlGlobs : void 0
+function identityBlock(i2) {
+  return block2(`identities.${i2.id}`, {
+    owner: i2.owner,
+    name: i2.name,
+    email: i2.email,
+    ssh_key: i2.sshKey && i2.sshKey !== `~/.ssh/cs/${i2.id}` ? i2.sshKey : void 0,
+    url_globs: i2.urlGlobs && JSON.stringify(i2.urlGlobs) !== JSON.stringify([`git@github.com:${i2.owner}/**`]) ? i2.urlGlobs : void 0
   });
 }
-function appendProject(repo, p2) {
+function appendProject(repo, p) {
   const f = join3(repo, "projects.toml");
-  let t = readFileSync3(f, "utf8");
-  if (new RegExp(`^\\[projects\\.${p2.name.replace(/[.]/g, "\\.")}\\]\\s*$`, "m").test(t)) throw new Error(`cs: project '${p2.name}' already registered (edit projects.toml to change it)`);
-  writeFileSync2(f, t.replace(/\n*$/, "\n\n") + projectBlock(p2));
+  let t2 = readFileSync3(f, "utf8");
+  if (new RegExp(`^\\[projects\\.${p.name.replace(/[.]/g, "\\.")}\\]\\s*$`, "m").test(t2)) throw new Error(`cs: project '${p.name}' already registered (edit projects.toml to change it)`);
+  writeFileSync2(f, t2.replace(/\n*$/, "\n\n") + projectBlock(p));
 }
-function appendIdentity(repo, i) {
+function appendIdentity(repo, i2) {
   const f = join3(repo, "projects.toml");
-  let t = readFileSync3(f, "utf8");
-  if (new RegExp(`^\\[identities\\.${i.id.replace(/[.]/g, "\\.")}\\]\\s*$`, "m").test(t)) throw new Error(`cs: identity '${i.id}' already exists`);
+  let t2 = readFileSync3(f, "utf8");
+  if (new RegExp(`^\\[identities\\.${i2.id.replace(/[.]/g, "\\.")}\\]\\s*$`, "m").test(t2)) throw new Error(`cs: identity '${i2.id}' already exists`);
   const marker2 = "# ---- Projects";
-  const b3 = identityBlock(i);
-  t = t.includes(marker2) ? t.slice(0, t.indexOf(marker2)).replace(/\n*$/, "\n\n") + b3 + "\n" + t.slice(t.indexOf(marker2)) : t.replace(/\n*$/, "\n\n") + b3;
-  writeFileSync2(f, t);
+  const b = identityBlock(i2);
+  t2 = t2.includes(marker2) ? t2.slice(0, t2.indexOf(marker2)).replace(/\n*$/, "\n\n") + b + "\n" + t2.slice(t2.indexOf(marker2)) : t2.replace(/\n*$/, "\n\n") + b;
+  writeFileSync2(f, t2);
 }
 var SUPPORTED_SCHEMA, NAME_RE, KINDS, keyPath, globs, identityMatches, workspace, container, checkoutRoot, selectedProjects;
 var init_manifest = __esm({
   "src/manifest.ts"() {
     "use strict";
-    init_dist3();
+    init_dist5();
     init_paths();
     SUPPORTED_SCHEMA = 1;
     NAME_RE = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/;
     KINDS = ["git", "synced", "local"];
-    keyPath = (i) => i.sshKey || `~/.ssh/cs/${i.id}`;
-    globs = (i) => i.urlGlobs?.length ? i.urlGlobs : i.owner ? [`git@github.com:${i.owner}/**`] : [];
-    identityMatches = (i, url) => globs(i).some((g2) => globMatch(g2, url));
-    workspace = (man, m2) => expand(m2?.workspace || man.workspaceRoot);
-    container = (p2, ws) => join3(ws, p2.path || p2.name);
-    checkoutRoot = (p2, ws) => p2.layout === "worktrees" ? join3(container(p2, ws), "repo") : container(p2, ws);
-    selectedProjects = (man, m2) => Object.values(man.projects).filter((p2) => selected(p2, m2));
+    keyPath = (i2) => i2.sshKey || `~/.ssh/cs/${i2.id}`;
+    globs = (i2) => i2.urlGlobs?.length ? i2.urlGlobs : i2.owner ? [`git@github.com:${i2.owner}/**`] : [];
+    identityMatches = (i2, url) => globs(i2).some((g) => globMatch(g, url));
+    workspace = (man, m) => expand(m?.workspace || man.workspaceRoot);
+    container = (p, ws) => join3(ws, p.path || p.name);
+    checkoutRoot = (p, ws) => p.layout === "worktrees" ? join3(container(p, ws), "repo") : container(p, ws);
+    selectedProjects = (man, m) => Object.values(man.projects).filter((p) => selected(p, m));
   }
 });
 
@@ -5614,8 +6383,8 @@ import { join as join4, resolve as resolve3, isAbsolute as isAbsolute3 } from "n
 function git(args, cwd, opts = {}) {
   const env2 = { ...process.env };
   if (opts.sshKey) env2.GIT_SSH_COMMAND = `ssh -i ${opts.sshKey} -o IdentitiesOnly=yes`;
-  const p2 = spawnSync("git", args, { cwd, env: env2, encoding: "utf8", timeout: opts.timeout ? opts.timeout * 1e3 : void 0, input: opts.input, stdio: ["pipe", "pipe", "pipe"] });
-  const r2 = { code: p2.status ?? 1, out: (p2.stdout ?? "").trim(), err: (p2.stderr ?? "").trim() };
+  const p = spawnSync("git", args, { cwd, env: env2, encoding: "utf8", timeout: opts.timeout ? opts.timeout * 1e3 : void 0, input: opts.input, stdio: ["pipe", "pipe", "pipe"] });
+  const r2 = { code: p.status ?? 1, out: (p.stdout ?? "").trim(), err: (p.stderr ?? "").trim() };
   if (opts.check !== false && r2.code !== 0) {
     const last = r2.err.split("\n").filter(Boolean).pop() ?? "";
     throw new Error(`cs: git ${args.slice(0, 2).join(" ")} failed in ${cwd ?? "."}
@@ -5624,31 +6393,31 @@ function git(args, cwd, opts = {}) {
   return r2;
 }
 function version() {
-  const v2 = out(["--version"]).split(" ").pop() ?? "0.0.0";
-  const [a, b3, c] = v2.split(".").map((x2) => parseInt(x2, 10) || 0);
-  return [a, b3, c];
+  const v = out(["--version"]).split(" ").pop() ?? "0.0.0";
+  const [a2, b, c2] = v.split(".").map((x) => parseInt(x, 10) || 0);
+  return [a2, b, c2];
 }
-function aheadBehind(p2) {
-  const s = out(["rev-list", "--left-right", "--count", "@{upstream}...HEAD"], p2);
+function aheadBehind(p) {
+  const s = out(["rev-list", "--left-right", "--count", "@{upstream}...HEAD"], p);
   if (!s) return void 0;
-  const [behind, ahead] = s.split(/\s+/).map((x2) => parseInt(x2, 10));
+  const [behind, ahead] = s.split(/\s+/).map((x) => parseInt(x, 10));
   return [ahead, behind];
 }
-function commonDir(p2) {
-  const c = out(["rev-parse", "--git-common-dir"], p2);
-  return isAbsolute3(c) ? c : resolve3(p2, c);
+function commonDir(p) {
+  const c2 = out(["rev-parse", "--git-common-dir"], p);
+  return isAbsolute3(c2) ? c2 : resolve3(p, c2);
 }
-function commit(p2, message, fallbackName = "cs", fallbackEmail = "cs@localhost") {
-  const pre = configGet(p2, "user.email") ? [] : ["-c", `user.name=${fallbackName}`, "-c", `user.email=${fallbackEmail}`];
-  git([...pre, "commit", "-q", "-m", message], p2);
+function commit(p, message, fallbackName = "cs", fallbackEmail = "cs@localhost") {
+  const pre = configGet(p, "user.email") ? [] : ["-c", `user.name=${fallbackName}`, "-c", `user.email=${fallbackEmail}`];
+  git([...pre, "commit", "-q", "-m", message], p);
 }
 function canonicalGithub(url) {
-  let u2 = url.trim();
-  if (u2.startsWith("https://github.com/")) u2 = "git@github.com:" + u2.slice("https://github.com/".length);
-  else if (u2.startsWith("ssh://git@github.com/")) u2 = "git@github.com:" + u2.slice("ssh://git@github.com/".length);
-  else if (u2.startsWith("git@github-") && u2.includes(":")) u2 = "git@github.com:" + u2.split(":").slice(1).join(":");
-  if (!u2.endsWith(".git")) u2 += ".git";
-  return u2;
+  let u5 = url.trim();
+  if (u5.startsWith("https://github.com/")) u5 = "git@github.com:" + u5.slice("https://github.com/".length);
+  else if (u5.startsWith("ssh://git@github.com/")) u5 = "git@github.com:" + u5.slice("ssh://git@github.com/".length);
+  else if (u5.startsWith("git@github-") && u5.includes(":")) u5 = "git@github.com:" + u5.split(":").slice(1).join(":");
+  if (!u5.endsWith(".git")) u5 += ".git";
+  return u5;
 }
 var out, isRepo, isBare, toplevel, remoteUrl, currentBranch, dirtyCount, isDirty, worktrees, infoExclude, configGet;
 var init_git = __esm({
@@ -5658,19 +6427,19 @@ var init_git = __esm({
       const r2 = git(args, cwd, { check: false });
       return r2.code === 0 ? r2.out : dflt;
     };
-    isRepo = (p2) => existsSync3(join4(p2, ".git"));
-    isBare = (p2) => existsSync3(join4(p2, "HEAD")) && existsSync3(join4(p2, "objects"));
-    toplevel = (p2) => out(["rev-parse", "--show-toplevel"], p2) || void 0;
-    remoteUrl = (p2, name2 = "origin") => out(["remote", "get-url", name2], p2);
-    currentBranch = (p2) => out(["symbolic-ref", "--short", "-q", "HEAD"], p2);
-    dirtyCount = (p2) => {
-      const s = out(["status", "--porcelain", "--untracked-files=normal"], p2);
+    isRepo = (p) => existsSync3(join4(p, ".git"));
+    isBare = (p) => existsSync3(join4(p, "HEAD")) && existsSync3(join4(p, "objects"));
+    toplevel = (p) => out(["rev-parse", "--show-toplevel"], p) || void 0;
+    remoteUrl = (p, name2 = "origin") => out(["remote", "get-url", name2], p);
+    currentBranch = (p) => out(["symbolic-ref", "--short", "-q", "HEAD"], p);
+    dirtyCount = (p) => {
+      const s = out(["status", "--porcelain", "--untracked-files=normal"], p);
       return s ? s.split("\n").length : 0;
     };
-    isDirty = (p2) => dirtyCount(p2) > 0;
-    worktrees = (p2) => out(["worktree", "list", "--porcelain"], p2).split("\n").filter((l2) => l2.startsWith("worktree ")).map((l2) => l2.slice(9));
-    infoExclude = (p2) => join4(commonDir(p2), "info", "exclude");
-    configGet = (p2, key) => out(["config", "--get", key], p2);
+    isDirty = (p) => dirtyCount(p) > 0;
+    worktrees = (p) => out(["worktree", "list", "--porcelain"], p).split("\n").filter((l2) => l2.startsWith("worktree ")).map((l2) => l2.slice(9));
+    infoExclude = (p) => join4(commonDir(p), "info", "exclude");
+    configGet = (p, key) => out(["config", "--get", key], p);
   }
 });
 
@@ -5699,7 +6468,7 @@ function getToken(owner2) {
   return existsSync4(f) ? readFileSync4(f, "utf8").trim() || void 0 : void 0;
 }
 async function setToken(owner2, token2) {
-  token2 ||= await password(`GitHub fine-grained token for '${owner2}' (Administration r/w on all repos)`);
+  token2 ||= await password2(`GitHub fine-grained token for '${owner2}' (Administration r/w on all repos)`);
   if (!token2) throw new Error("cs: empty token");
   const f = tokenFile(owner2);
   mkdirSync2(join5(csConfigDir(), "tokens"), { recursive: true, mode: 448 });
@@ -5726,49 +6495,49 @@ async function api(method, path, token2, body) {
       body: body ? JSON.stringify(body) : void 0,
       signal: AbortSignal.timeout(2e4)
     });
-  } catch (e2) {
-    throw new GitHubError(`GitHub unreachable: ${e2?.message ?? e2}`);
+  } catch (e) {
+    throw new GitHubError(`GitHub unreachable: ${e?.message ?? e}`);
   }
-  const text2 = await r2.text();
+  const text3 = await r2.text();
   if (!r2.ok) {
     let msg = "";
     try {
-      msg = JSON.parse(text2).message ?? "";
+      msg = JSON.parse(text3).message ?? "";
     } catch {
     }
     throw new GitHubError(`GitHub ${method} ${path}: ${r2.status} ${msg}`.trim());
   }
-  return text2 ? JSON.parse(text2) : {};
+  return text3 ? JSON.parse(text3) : {};
 }
-async function repoExists(o2, n, t) {
+async function repoExists(o, n3, t2) {
   try {
-    await api("GET", `/repos/${o2}/${n}`, t);
+    await api("GET", `/repos/${o}/${n3}`, t2);
     return true;
-  } catch (e2) {
-    if (String(e2).includes(" 404")) return false;
-    throw e2;
+  } catch (e) {
+    if (String(e).includes(" 404")) return false;
+    throw e;
   }
 }
-async function createRepo(o2, n, t, priv = true, description = "") {
-  const body = { name: n, private: priv, description, auto_init: false };
-  if (await ownerType(o2, t) === "Organization") return api("POST", `/orgs/${o2}/repos`, t, body);
-  const me2 = await whoami(t);
-  if (me2.toLowerCase() !== o2.toLowerCase()) throw new GitHubError(`token belongs to '${me2}', cannot create repos for user '${o2}'`);
-  return api("POST", "/user/repos", t, body);
+async function createRepo(o, n3, t2, priv = true, description = "") {
+  const body = { name: n3, private: priv, description, auto_init: false };
+  if (await ownerType(o, t2) === "Organization") return api("POST", `/orgs/${o}/repos`, t2, body);
+  const me = await whoami(t2);
+  if (me.toLowerCase() !== o.toLowerCase()) throw new GitHubError(`token belongs to '${me}', cannot create repos for user '${o}'`);
+  return api("POST", "/user/repos", t2, body);
 }
 async function ensureToken(owner2, interactive = true) {
-  const t = getToken(owner2);
-  if (t) return t;
+  const t2 = getToken(owner2);
+  if (t2) return t2;
   if (!interactive) throw new GitHubError(`no GitHub token for '${owner2}' \u2014 run cs token set ${owner2}`);
   await setToken(owner2);
   const tok = getToken(owner2);
-  const me2 = await whoami(tok);
-  if (await ownerType(owner2, tok) === "User" && me2.toLowerCase() !== owner2.toLowerCase()) throw new GitHubError(`token authenticates as '${me2}', not '${owner2}'`);
+  const me = await whoami(tok);
+  if (await ownerType(owner2, tok) === "User" && me.toLowerCase() !== owner2.toLowerCase()) throw new GitHubError(`token authenticates as '${me}', not '${owner2}'`);
   return tok;
 }
-async function ensureRepo(o2, n, t, priv = true, description = "") {
-  if (await repoExists(o2, n, t)) return false;
-  await createRepo(o2, n, t, priv, description);
+async function ensureRepo(o, n3, t2, priv = true, description = "") {
+  if (await repoExists(o, n3, t2)) return false;
+  await createRepo(o, n3, t2, priv, description);
   return true;
 }
 var GitHubError, tokenFile, whoami, ownerType;
@@ -5780,8 +6549,8 @@ var init_github = __esm({
     GitHubError = class extends Error {
     };
     tokenFile = (owner2) => join5(csConfigDir(), "tokens", owner2.toLowerCase());
-    whoami = async (t) => (await api("GET", "/user", t)).login;
-    ownerType = async (o2, t) => (await api("GET", `/users/${o2}`, t)).type;
+    whoami = async (t2) => (await api("GET", "/user", t2)).login;
+    ownerType = async (o, t2) => (await api("GET", `/users/${o}`, t2)).type;
   }
 });
 
@@ -5807,48 +6576,48 @@ function ensureKey(machine = "") {
   const key = keyPath2(), pubf = key + ".pub";
   if (existsSync5(key) && existsSync5(pubf)) return { key, pub: readFileSync5(pubf, "utf8").trim(), created: false };
   mkdirSync3(dirname2(key), { recursive: true, mode: 448 });
-  const p2 = spawnSync2("ssh-keygen", ["-q", "-t", "ed25519", "-N", "", "-C", `cs:${machine || nodename()}:master`, "-f", key]);
-  if (p2.status !== 0) throw new Error("cs: ssh-keygen failed");
+  const p = spawnSync2("ssh-keygen", ["-q", "-t", "ed25519", "-N", "", "-C", `cs:${machine || nodename()}:master`, "-f", key]);
+  if (p.status !== 0) throw new Error("cs: ssh-keygen failed");
   chmodSync2(key, 384);
   return { key, pub: readFileSync5(pubf, "utf8").trim(), created: true };
 }
-function parseRepoUrl(text2) {
-  const t = text2.trim().replace(/\/+$/, "");
-  const m2 = t.match(/^(?:https?:\/\/|ssh:\/\/git@|git@)?(?:www\.)?github\.com[/:]([^/]+)\/([^/]+?)(?:\.git)?$/);
-  return m2 ? [`git@github.com:${m2[1]}/${m2[2]}.git`, [m2[1], m2[2]]] : [t, void 0];
+function parseRepoUrl(text3) {
+  const t2 = text3.trim().replace(/\/+$/, "");
+  const m = t2.match(/^(?:https?:\/\/|ssh:\/\/git@|git@)?(?:www\.)?github\.com[/:]([^/]+)\/([^/]+?)(?:\.git)?$/);
+  return m ? [`git@github.com:${m[1]}/${m[2]}.git`, [m[1], m[2]]] : [t2, void 0];
 }
 function isPublic(url) {
   if (!url.startsWith("https://") || process.env.CS_OFFLINE) return void 0;
-  const p2 = spawnSync2("git", ["ls-remote", "--exit-code", url, "HEAD"], { encoding: "utf8", env: { ...process.env, GIT_TERMINAL_PROMPT: "0" }, timeout: 3e4, stdio: ["ignore", "pipe", "pipe"] });
-  if (p2.status === 0) return true;
-  return /Authentication failed|could not read Username|Repository not found/.test(p2.stderr ?? "") ? false : void 0;
+  const p = spawnSync2("git", ["ls-remote", "--exit-code", url, "HEAD"], { encoding: "utf8", env: { ...process.env, GIT_TERMINAL_PROMPT: "0" }, timeout: 3e4, stdio: ["ignore", "pipe", "pipe"] });
+  if (p.status === 0) return true;
+  return /Authentication failed|could not read Username|Repository not found/.test(p.stderr ?? "") ? false : void 0;
 }
 function canAccess(sshUrl) {
-  const p2 = spawnSync2("git", ["ls-remote", sshUrl, "HEAD"], {
+  const p = spawnSync2("git", ["ls-remote", sshUrl, "HEAD"], {
     encoding: "utf8",
     timeout: 3e4,
     stdio: ["ignore", "pipe", "pipe"],
     env: { ...process.env, GIT_SSH_COMMAND: `ssh -i ${keyPath2()} -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=accept-new` }
   });
-  return [p2.status === 0, (p2.stderr ?? "").trim().split("\n").pop() ?? ""];
+  return [p.status === 0, (p.stderr ?? "").trim().split("\n").pop() ?? ""];
 }
 async function registerDeployKey(owner2, repo, pub, title) {
   const tok = getToken(owner2);
   if (!tok || process.env.CS_OFFLINE) return void 0;
   try {
     const keys = await api("GET", `/repos/${owner2}/${repo}/keys`, tok);
-    if (keys.some((k3) => (k3.key ?? "").split(" ").slice(0, 2).join(" ") === pub.split(" ").slice(0, 2).join(" "))) return "already a deploy key";
+    if (keys.some((k) => (k.key ?? "").split(" ").slice(0, 2).join(" ") === pub.split(" ").slice(0, 2).join(" "))) return "already a deploy key";
     await api("POST", `/repos/${owner2}/${repo}/keys`, tok, { title, key: pub, read_only: false });
     return "registered as deploy key (write)";
-  } catch (e2) {
-    return `could not register via API: ${e2.message}`;
+  } catch (e) {
+    return `could not register via API: ${e.message}`;
   }
 }
 function instructions(pub, gh, machine) {
   const lines = [];
   if (gh) lines.push(`${cyan(`https://github.com/${gh[0]}/${gh[1]}/settings/keys/new`)}  ${dim('\u2192 deploy key, tick "Allow write access"')}`, "");
   lines.push(`title  ${bold(`cs:${machine}:master`)}`, `key    ${bold(pub)}`, "", dim("this key only reaches the config repo; identities get their own keys"));
-  note(lines, "Add this machine's master key to the config repo");
+  note2(lines, "Add this machine's master key to the config repo");
 }
 async function setup(repoDir2, interactive = true) {
   const url = remoteUrl(repoDir2);
@@ -5880,7 +6649,7 @@ var init_master = __esm({
     init_ui();
     KEY = "~/.ssh/cs/master";
     keyPath2 = () => expand(KEY);
-    httpsUrl = (o2, r2) => `https://github.com/${o2}/${r2}.git`;
+    httpsUrl = (o, r2) => `https://github.com/${o}/${r2}.git`;
     configureRepo = (repoDir2) => git(["config", "core.sshCommand", `ssh -i ${KEY} -o IdentitiesOnly=yes`], repoDir2);
   }
 });
@@ -5889,30 +6658,30 @@ var init_master = __esm({
 function deepMerge(base, over, path = "") {
   if (isObj(base) && isObj(over)) {
     const out2 = { ...base };
-    for (const [k3, v2] of Object.entries(over)) out2[k3] = k3 in base ? deepMerge(base[k3], v2, path ? `${path}.${k3}` : k3) : v2;
+    for (const [k, v] of Object.entries(over)) out2[k] = k in base ? deepMerge(base[k], v, path ? `${path}.${k}` : k) : v;
     return out2;
   }
   if (Array.isArray(base) && Array.isArray(over) && UNION.has(path)) {
-    const seen = new Set(base.map((x2) => JSON.stringify(x2)));
+    const seen = new Set(base.map((x) => JSON.stringify(x)));
     const out2 = [...base];
-    for (const x2 of over) {
-      const k3 = JSON.stringify(x2);
-      if (!seen.has(k3)) {
-        seen.add(k3);
-        out2.push(x2);
+    for (const x of over) {
+      const k = JSON.stringify(x);
+      if (!seen.has(k)) {
+        seen.add(k);
+        out2.push(x);
       }
     }
     return out2;
   }
   return over;
 }
-function diffKeys(a, b3, prefix = "") {
+function diffKeys(a2, b, prefix = "") {
   const out2 = [];
-  for (const k3 of [.../* @__PURE__ */ new Set([...Object.keys(a), ...Object.keys(b3)])].sort()) {
-    const p2 = prefix ? `${prefix}.${k3}` : k3;
-    if (!(k3 in a) || !(k3 in b3)) out2.push(p2);
-    else if (isObj(a[k3]) && isObj(b3[k3])) out2.push(...diffKeys(a[k3], b3[k3], p2));
-    else if (JSON.stringify(a[k3]) !== JSON.stringify(b3[k3])) out2.push(p2);
+  for (const k of [.../* @__PURE__ */ new Set([...Object.keys(a2), ...Object.keys(b)])].sort()) {
+    const p = prefix ? `${prefix}.${k}` : k;
+    if (!(k in a2) || !(k in b)) out2.push(p);
+    else if (isObj(a2[k]) && isObj(b[k])) out2.push(...diffKeys(a2[k], b[k], p));
+    else if (JSON.stringify(a2[k]) !== JSON.stringify(b[k])) out2.push(p);
   }
   return out2;
 }
@@ -5921,10 +6690,10 @@ var init_jsonmerge = __esm({
   "src/jsonmerge.ts"() {
     "use strict";
     UNION = /* @__PURE__ */ new Set(["permissions.allow", "permissions.deny", "permissions.ask", "permissions.additionalDirectories", "enabledMcpjsonServers", "disabledMcpjsonServers"]);
-    isObj = (x2) => !!x2 && typeof x2 === "object" && !Array.isArray(x2);
+    isObj = (x) => !!x && typeof x === "object" && !Array.isArray(x);
     mergeLayers = (...layers) => layers.reduce((acc, l2) => deepMerge(acc, l2), {});
-    dumps = (o2) => JSON.stringify(o2, null, 2) + "\n";
-    loads = (t) => t.trim() ? JSON.parse(t) : {};
+    dumps = (o) => JSON.stringify(o, null, 2) + "\n";
+    loads = (t2) => t2.trim() ? JSON.parse(t2) : {};
   }
 });
 
@@ -5943,9 +6712,9 @@ __export(apply_exports, {
 import { existsSync as existsSync6, lstatSync, mkdirSync as mkdirSync4, readdirSync, readFileSync as readFileSync6, readlinkSync, renameSync, rmSync, statSync as statSync2, symlinkSync, unlinkSync as unlinkSync2, writeFileSync as writeFileSync4, copyFileSync } from "node:fs";
 import { basename, dirname as dirname3, join as join6, resolve as resolve4 } from "node:path";
 function backup(target) {
-  const d3 = join6(stateDir(), "backups", stamp());
-  mkdirSync4(d3, { recursive: true });
-  const dest = join6(d3, basename(target));
+  const d = join6(stateDir(), "backups", stamp());
+  mkdirSync4(d, { recursive: true });
+  const dest = join6(d, basename(target));
   if (statSync2(target).isDirectory()) renameSync(target, dest);
   else {
     copyFileSync(target, dest);
@@ -5954,15 +6723,15 @@ function backup(target) {
 }
 function mergeDirInto(src, dst) {
   const walk2 = (dir) => {
-    for (const e2 of readdirSync(dir, { withFileTypes: true })) {
-      const f = join6(dir, e2.name);
-      if (e2.isDirectory()) walk2(f);
+    for (const e of readdirSync(dir, { withFileTypes: true })) {
+      const f = join6(dir, e.name);
+      if (e.isDirectory()) walk2(f);
       else {
         const rel = f.slice(dst.length + 1);
-        const t = join6(src, rel);
-        if (!existsSync6(t)) {
-          mkdirSync4(dirname3(t), { recursive: true });
-          renameSync(f, t);
+        const t2 = join6(src, rel);
+        if (!existsSync6(t2)) {
+          mkdirSync4(dirname3(t2), { recursive: true });
+          renameSync(f, t2);
         }
       }
     }
@@ -6011,14 +6780,14 @@ function link(src, dst, check, changes) {
     symlinkSync(src, dst);
   }
 }
-function settingsLayers(repo, m2) {
-  const names = ["settings.base.json", ...m2.profiles.map((p2) => `settings.${p2}.json`), `settings.${m2.name}.json`];
-  return names.filter((n) => existsSync6(join6(repo, "claude", n))).map((n) => [n, loads(readFileSync6(join6(repo, "claude", n), "utf8"))]);
+function settingsLayers(repo, m) {
+  const names = ["settings.base.json", ...m.profiles.map((p) => `settings.${p}.json`), `settings.${m.name}.json`];
+  return names.filter((n3) => existsSync6(join6(repo, "claude", n3))).map((n3) => [n3, loads(readFileSync6(join6(repo, "claude", n3), "utf8"))]);
 }
-function applySettings(repo, m2, check, changes) {
-  if (!settingsLayers(repo, m2).length) return;
+function applySettings(repo, m, check, changes) {
+  if (!settingsLayers(repo, m).length) return;
   const target = join6(claudeDir(), "settings.json");
-  const desired = renderSettings(repo, m2);
+  const desired = renderSettings(repo, m);
   const current = existsSync6(target) ? loads(readFileSync6(target, "utf8")) : {};
   if (JSON.stringify(current) === JSON.stringify(desired)) return;
   const keys = diffKeys(current, desired);
@@ -6026,9 +6795,9 @@ function applySettings(repo, m2, check, changes) {
   if (!check) {
     mkdirSync4(claudeDir(), { recursive: true });
     if (existsSync6(target)) {
-      const d3 = join6(stateDir(), "backups", stamp());
-      mkdirSync4(d3, { recursive: true });
-      copyFileSync(target, join6(d3, "settings.json"));
+      const d = join6(stateDir(), "backups", stamp());
+      mkdirSync4(d, { recursive: true });
+      copyFileSync(target, join6(d, "settings.json"));
     }
     writeFileSync4(target, dumps(desired));
   }
@@ -6040,7 +6809,7 @@ function applyLinks(repo, check, changes) {
   const skills = join6(repo, "claude", "skills");
   if (existsSync6(skills)) {
     mkdirSync4(join6(cdir, "skills"), { recursive: true });
-    for (const e2 of readdirSync(skills, { withFileTypes: true })) if (e2.isDirectory()) link(join6(skills, e2.name), join6(cdir, "skills", e2.name), check, changes);
+    for (const e of readdirSync(skills, { withFileTypes: true })) if (e.isDirectory()) link(join6(skills, e.name), join6(cdir, "skills", e.name), check, changes);
   }
   link(join6(repo, "plans"), join6(cdir, "plans"), check, changes);
 }
@@ -6048,16 +6817,16 @@ function renderGitIncludes(man) {
   const gdir = join6(home(), ".config", "git");
   const files = {};
   const inc = ["# generated by `cs apply` \u2014 do not edit; edit projects.toml [identities] instead"];
-  for (const i of Object.values(man.identities)) {
-    files[join6(gdir, `identity-${i.id}.inc`)] = [
-      `# identity '${i.id}' (generated by cs apply)`,
+  for (const i2 of Object.values(man.identities)) {
+    files[join6(gdir, `identity-${i2.id}.inc`)] = [
+      `# identity '${i2.id}' (generated by cs apply)`,
       "[user]",
-      `	name = ${i.name}`,
-      `	email = ${i.email}`,
+      `	name = ${i2.name}`,
+      `	email = ${i2.email}`,
       "[core]",
-      `	sshCommand = ssh -i ${contract(expand(keyPath(i)))} -o IdentitiesOnly=yes`
+      `	sshCommand = ssh -i ${contract(expand(keyPath(i2)))} -o IdentitiesOnly=yes`
     ].join("\n") + "\n";
-    for (const g2 of globs(i)) inc.push(`[includeIf "hasconfig:remote.*.url:${g2}"]`, `	path = identity-${i.id}.inc`);
+    for (const g of globs(i2)) inc.push(`[includeIf "hasconfig:remote.*.url:${g}"]`, `	path = identity-${i2.id}.inc`);
   }
   files[join6(gdir, "claude-share.inc")] = inc.join("\n") + "\n";
   return files;
@@ -6080,14 +6849,14 @@ function applyGit(man, check, changes) {
     }
   }
   const gc = join6(home(), ".gitconfig");
-  const text2 = existsSync6(gc) ? readFileSync6(gc, "utf8") : "";
-  const block2 = `${GIT_MARK}
+  const text3 = existsSync6(gc) ? readFileSync6(gc, "utf8") : "";
+  const block3 = `${GIT_MARK}
 [include]
 	path = ~/.config/git/claude-share.inc
 ${GIT_END}
 `;
-  const next = text2.includes(GIT_MARK) ? text2.slice(0, text2.indexOf(GIT_MARK)) + block2 + text2.slice(text2.indexOf(GIT_END) + GIT_END.length + 1) : text2 + (text2 && !text2.endsWith("\n") ? "\n" : "") + block2;
-  if (next !== text2) {
+  const next = text3.includes(GIT_MARK) ? text3.slice(0, text3.indexOf(GIT_MARK)) + block3 + text3.slice(text3.indexOf(GIT_END) + GIT_END.length + 1) : text3 + (text3 && !text3.endsWith("\n") ? "\n" : "") + block3;
+  if (next !== text3) {
     changes.push("~/.gitconfig: include claude-share.inc");
     if (!check) writeFileSync4(gc, next);
   }
@@ -6095,24 +6864,24 @@ ${GIT_END}
 function applyShellRc(check, changes) {
   const rc = shellRc();
   const sh2 = contract(join6(toolRoot(), "shell", "cs.sh"));
-  const block2 = `${GIT_MARK}
+  const block3 = `${GIT_MARK}
 [ -f "${sh2}" ] && . "${sh2}"
 ${GIT_END}
 `;
-  const text2 = existsSync6(rc) ? readFileSync6(rc, "utf8") : "";
-  const next = text2.includes(GIT_MARK) ? text2.slice(0, text2.indexOf(GIT_MARK)) + block2 + text2.slice(text2.indexOf(GIT_END) + GIT_END.length + 1) : text2 + (text2 && !text2.endsWith("\n") ? "\n" : "") + block2;
-  if (next !== text2) {
+  const text3 = existsSync6(rc) ? readFileSync6(rc, "utf8") : "";
+  const next = text3.includes(GIT_MARK) ? text3.slice(0, text3.indexOf(GIT_MARK)) + block3 + text3.slice(text3.indexOf(GIT_END) + GIT_END.length + 1) : text3 + (text3 && !text3.endsWith("\n") ? "\n" : "") + block3;
+  if (next !== text3) {
     changes.push(`${contract(rc)}: source shell/cs.sh (claude() wrapper, PATH)`);
     if (!check) writeFileSync4(rc, next);
   }
 }
-function runApply(repo, m2, man, check = false) {
+function runApply(repo, m, man, check = false) {
   const changes = [];
-  applySettings(repo, m2, check, changes);
+  applySettings(repo, m, check, changes);
   applyLinks(repo, check, changes);
   applyGit(man, check, changes);
   applyShellRc(check, changes);
-  for (const c of changes) check ? info(c) : step(c);
+  for (const c2 of changes) check ? info(c2) : step(c2);
   if (!changes.length) ok("~/.claude up to date");
   return changes;
 }
@@ -6129,14 +6898,14 @@ var init_apply = __esm({
     GIT_MARK = "# >>> claude-share >>>";
     GIT_END = "# <<< claude-share <<<";
     stamp = () => (/* @__PURE__ */ new Date()).toISOString().replace(/[-:]/g, "").slice(0, 15);
-    isLink = (p2) => {
+    isLink = (p) => {
       try {
-        return lstatSync(p2).isSymbolicLink();
+        return lstatSync(p).isSymbolicLink();
       } catch {
         return false;
       }
     };
-    renderSettings = (repo, m2) => mergeLayers(...settingsLayers(repo, m2).map(([, d3]) => d3));
+    renderSettings = (repo, m) => mergeLayers(...settingsLayers(repo, m).map(([, d]) => d));
   }
 });
 
@@ -6152,21 +6921,21 @@ __export(link_exports, {
 });
 import { existsSync as existsSync7, mkdirSync as mkdirSync5, readdirSync as readdirSync2, readFileSync as readFileSync7, renameSync as renameSync2, statSync as statSync3, unlinkSync as unlinkSync3, utimesSync, writeFileSync as writeFileSync5 } from "node:fs";
 import { dirname as dirname4, join as join7, relative as relative2 } from "node:path";
-function checkouts(p2, ws) {
-  const root = checkoutRoot(p2, ws);
+function checkouts(p, ws) {
+  const root = checkoutRoot(p, ws);
   if (!existsSync7(root)) return [];
-  if (p2.kind !== "git" || !isRepo(root)) return [root];
-  const w2 = worktrees(root);
-  return w2.length ? w2 : [root];
+  if (p.kind !== "git" || !isRepo(root)) return [root];
+  const w = worktrees(root);
+  return w.length ? w : [root];
 }
 function walk(dir, fn, skipDir, base = dir) {
   if (!existsSync7(dir)) return;
-  for (const e2 of readdirSync2(dir, { withFileTypes: true })) {
-    const f = join7(dir, e2.name);
+  for (const e of readdirSync2(dir, { withFileTypes: true })) {
+    const f = join7(dir, e.name);
     const rel = relative2(base, f);
-    if (e2.isDirectory()) {
+    if (e.isDirectory()) {
       if (!skipDir?.(rel)) walk(f, fn, skipDir, base);
-    } else if (e2.isFile()) fn(rel);
+    } else if (e.isFile()) fn(rel);
   }
 }
 function managedRels(base) {
@@ -6185,22 +6954,22 @@ function sideRels(side) {
 function normalize(rel, data) {
   if (rel !== SETTINGS_LOCAL) return data;
   try {
-    const d3 = JSON.parse(data.toString("utf8") || "{}");
-    delete d3.autoMemoryDirectory;
-    return Buffer.from(Object.keys(d3).length ? dumps(d3) : "");
+    const d = JSON.parse(data.toString("utf8") || "{}");
+    delete d.autoMemoryDirectory;
+    return Buffer.from(Object.keys(d).length ? dumps(d) : "");
   } catch {
     return data;
   }
 }
 function localize(rel, data, mem) {
   if (rel !== SETTINGS_LOCAL) return data;
-  let d3 = {};
+  let d = {};
   try {
-    d3 = data.toString("utf8").trim() ? JSON.parse(data.toString("utf8")) : {};
+    d = data.toString("utf8").trim() ? JSON.parse(data.toString("utf8")) : {};
   } catch {
   }
-  d3.autoMemoryDirectory = contract(mem);
-  return Buffer.from(dumps(d3));
+  d.autoMemoryDirectory = contract(mem);
+  return Buffer.from(dumps(d));
 }
 function write(path, data, mtime) {
   mkdirSync5(dirname4(path), { recursive: true });
@@ -6212,25 +6981,25 @@ function write(path, data, mtime) {
 function ensureExclude(checkout, check, changes) {
   if (!existsSync7(join7(checkout, ".git"))) return;
   const ex = infoExclude(checkout);
-  const text2 = existsSync7(ex) ? readFileSync7(ex, "utf8") : "";
-  const missing = EXCLUDE_LINES.filter((l2) => !text2.split("\n").includes(l2));
+  const text3 = existsSync7(ex) ? readFileSync7(ex, "utf8") : "";
+  const missing = EXCLUDE_LINES.filter((l2) => !text3.split("\n").includes(l2));
   if (!missing.length) return;
   changes.push(`exclude ${missing.join(", ")} in ${contract(checkout)}`);
   if (!check) {
     mkdirSync5(dirname4(ex), { recursive: true });
-    writeFileSync5(ex, text2 + (!text2 || text2.endsWith("\n") ? "" : "\n") + "# claude-share managed files\n" + missing.join("\n") + "\n");
+    writeFileSync5(ex, text3 + (!text3 || text3.endsWith("\n") ? "" : "\n") + "# claude-share managed files\n" + missing.join("\n") + "\n");
   }
 }
-function syncProject(repo, p2, ws, check = false) {
+function syncProject(repo, p, ws, check = false) {
   const changes = [];
-  const side = sideStore(repo, p2);
-  const targets = checkouts(p2, ws);
+  const side = sideStore(repo, p);
+  const targets = checkouts(p, ws);
   if (!targets.length) return changes;
-  const mem = memoryDir(repo, p2);
+  const mem = memoryDir(repo, p);
   if (!existsSync7(mem) && !check) mkdirSync5(mem, { recursive: true });
-  const previously = loadState(p2);
+  const previously = loadState(p);
   const all = new Set(sideRels(side));
-  for (const t of targets) for (const r2 of managedRels(t)) all.add(r2);
+  for (const t2 of targets) for (const r2 of managedRels(t2)) all.add(r2);
   all.add(SETTINGS_LOCAL);
   const final = /* @__PURE__ */ new Set();
   for (const rel of [...all].sort()) {
@@ -6239,23 +7008,23 @@ function syncProject(repo, p2, ws, check = false) {
     const sideData = sideExists ? normalize(rel, readFileSync7(sp)) : void 0;
     const sideMtime = sideExists ? statSync3(sp).mtimeMs / 1e3 : -1;
     let best = sideData, bestM = sideMtime, from = "side-store";
-    for (const t of targets) {
-      const tp = join7(t, rel);
+    for (const t2 of targets) {
+      const tp = join7(t2, rel);
       if (existsSync7(tp) && statSync3(tp).isFile()) {
-        const d3 = normalize(rel, readFileSync7(tp));
+        const d = normalize(rel, readFileSync7(tp));
         const mt = statSync3(tp).mtimeMs / 1e3;
-        if ((!best || !d3.equals(best)) && mt > bestM + 1e-6) {
-          best = d3;
+        if ((!best || !d.equals(best)) && mt > bestM + 1e-6) {
+          best = d;
           bestM = mt;
-          from = contract(t);
+          from = contract(t2);
         }
       }
     }
     if (!sideExists && previously.has(rel) && rel !== SETTINGS_LOCAL) {
-      for (const t of targets) {
-        const tp = join7(t, rel);
+      for (const t2 of targets) {
+        const tp = join7(t2, rel);
         if (existsSync7(tp)) {
-          changes.push(`remove ${rel} from ${contract(t)} (deleted in side-store)`);
+          changes.push(`remove ${rel} from ${contract(t2)} (deleted in side-store)`);
           if (!check) unlinkSync3(tp);
         }
       }
@@ -6272,30 +7041,30 @@ function syncProject(repo, p2, ws, check = false) {
       if (!check) write(sp, best, bestM > 0 ? bestM : void 0);
     }
     if (best.length || rel !== SETTINGS_LOCAL) final.add(rel);
-    for (const t of targets) {
-      const tp = join7(t, rel);
+    for (const t2 of targets) {
+      const tp = join7(t2, rel);
       const want = localize(rel, best, mem);
       const have = existsSync7(tp) && statSync3(tp).isFile() ? readFileSync7(tp) : void 0;
       if (!have || !have.equals(want)) {
-        changes.push(`${contract(t)}/${rel} \u2190 side-store`);
+        changes.push(`${contract(t2)}/${rel} \u2190 side-store`);
         if (!check) write(tp, want, bestM > 0 ? bestM : void 0);
       }
     }
   }
-  for (const t of targets) ensureExclude(t, check, changes);
-  if (!check) saveState(p2, final);
+  for (const t2 of targets) ensureExclude(t2, check, changes);
+  if (!check) saveState(p, final);
   return changes;
 }
-function runLink(repo, m2, man, names = [], check = false) {
-  const ws = workspace(man, m2);
-  const unknown = names.filter((n) => !man.projects[n]);
+function runLink(repo, m, man, names = [], check = false) {
+  const ws = workspace(man, m);
+  const unknown = names.filter((n3) => !man.projects[n3]);
   if (unknown.length) throw new Error(`cs: unknown project(s): ${unknown.join(", ")}`);
   let total = 0;
-  for (const p2 of selectedProjects(man, m2)) {
-    if (names.length && !names.includes(p2.name)) continue;
-    if (!checkouts(p2, ws).length) continue;
-    const ch = syncProject(repo, p2, ws, check);
-    for (const c of ch) check ? info(`${p2.name}: ${c}`) : step(`${p2.name}: ${c}`);
+  for (const p of selectedProjects(man, m)) {
+    if (names.length && !names.includes(p.name)) continue;
+    if (!checkouts(p, ws).length) continue;
+    const ch = syncProject(repo, p, ws, check);
+    for (const c2 of ch) check ? info(`${p.name}: ${c2}`) : step(`${p.name}: ${c2}`);
     total += ch.length;
   }
   if (!total) ok("project files in sync");
@@ -6315,19 +7084,19 @@ var init_link = __esm({
     EXCLUDE_LINES = [".claude/", ".mcp.json", "CLAUDE.md", "CLAUDE.local.md"];
     SETTINGS_LOCAL = ".claude/settings.local.json";
     NOT_SYNCED = /* @__PURE__ */ new Set(["memory", "secrets"]);
-    sideStore = (repo, p2) => join7(repo, "projects", p2.name);
-    memoryDir = (repo, p2) => join7(sideStore(repo, p2), "memory");
-    stateFile = (p2) => join7(stateDir(), "link", `${p2.name}.json`);
-    loadState = (p2) => {
+    sideStore = (repo, p) => join7(repo, "projects", p.name);
+    memoryDir = (repo, p) => join7(sideStore(repo, p), "memory");
+    stateFile = (p) => join7(stateDir(), "link", `${p.name}.json`);
+    loadState = (p) => {
       try {
-        return new Set(JSON.parse(readFileSync7(stateFile(p2), "utf8")).files);
+        return new Set(JSON.parse(readFileSync7(stateFile(p), "utf8")).files);
       } catch {
         return /* @__PURE__ */ new Set();
       }
     };
-    saveState = (p2, files) => {
-      mkdirSync5(dirname4(stateFile(p2)), { recursive: true });
-      writeFileSync5(stateFile(p2), JSON.stringify({ files: [...files].sort() }, null, 2));
+    saveState = (p, files) => {
+      mkdirSync5(dirname4(stateFile(p)), { recursive: true });
+      writeFileSync5(stateFile(p), JSON.stringify({ files: [...files].sort() }, null, 2));
     };
   }
 });
@@ -6343,7 +7112,7 @@ import { join as join8 } from "node:path";
 import { spawnSync as spawnSync3 } from "node:child_process";
 import { arch } from "node:os";
 function which(cmd) {
-  for (const d3 of [...(process.env.PATH ?? "").split(":"), BIN()]) if (d3 && existsSync8(join8(d3, cmd))) return join8(d3, cmd);
+  for (const d of [...(process.env.PATH ?? "").split(":"), BIN()]) if (d && existsSync8(join8(d, cmd))) return join8(d, cmd);
   return void 0;
 }
 async function latest(repo) {
@@ -6357,22 +7126,22 @@ async function download(url, dest) {
   writeFileSync15(dest, Buffer.from(await r2.arrayBuffer()));
 }
 async function sopsLinux() {
-  const t = await latest("getsops/sops");
+  const t2 = await latest("getsops/sops");
   mkdirSync6(BIN(), { recursive: true });
-  await download(`https://github.com/getsops/sops/releases/download/${t}/sops-${t}.linux.${a64()}`, join8(BIN(), "sops"));
+  await download(`https://github.com/getsops/sops/releases/download/${t2}/sops-${t2}.linux.${a64()}`, join8(BIN(), "sops"));
   chmodSync3(join8(BIN(), "sops"), 493);
 }
 async function ageLinux() {
-  const t = await latest("FiloSottile/age");
+  const t2 = await latest("FiloSottile/age");
   const tmp = join8(home(), ".cache", "cs-age");
   mkdirSync6(tmp, { recursive: true });
   const tgz = join8(tmp, "age.tgz");
-  await download(`https://github.com/FiloSottile/age/releases/download/${t}/age-${t}-linux-${a64()}.tar.gz`, tgz);
+  await download(`https://github.com/FiloSottile/age/releases/download/${t2}/age-${t2}-linux-${a64()}.tar.gz`, tgz);
   sh(`tar -xzf ${tgz} -C ${tmp}`);
   mkdirSync6(BIN(), { recursive: true });
-  for (const n of ["age", "age-keygen"]) {
-    copyFileSync2(join8(tmp, "age", n), join8(BIN(), n));
-    chmodSync3(join8(BIN(), n), 493);
+  for (const n3 of ["age", "age-keygen"]) {
+    copyFileSync2(join8(tmp, "age", n3), join8(BIN(), n3));
+    chmodSync3(join8(BIN(), n3), 493);
   }
   rmSync2(tmp, { recursive: true, force: true });
 }
@@ -6395,8 +7164,8 @@ async function runDeps(install = false, compact = false) {
       try {
         await spin(`installing ${name2}\u2026`, async () => inst());
         path = which(it.cmd);
-      } catch (e2) {
-        warn(`${name2}: install failed: ${e2.message}`);
+      } catch (e) {
+        warn(`${name2}: install failed: ${e.message}`);
       }
     }
     if (path) {
@@ -6431,14 +7200,14 @@ var init_deps = __esm({
     init_ui();
     BIN = () => join8(home(), ".local", "bin");
     ver = (args) => {
-      const p2 = spawnSync3(args[0], args.slice(1), { encoding: "utf8", timeout: 1e4 });
-      return ((p2.stdout || p2.stderr || "").split("\n")[0] ?? "").trim();
+      const p = spawnSync3(args[0], args.slice(1), { encoding: "utf8", timeout: 1e4 });
+      return ((p.stdout || p.stderr || "").split("\n")[0] ?? "").trim();
     };
     a64 = () => ["arm64", "aarch64"].includes(arch()) ? "arm64" : "amd64";
     sh = (cmd) => {
-      const p2 = spawnSync3("bash", ["-lc", cmd], { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
-      if (p2.status !== 0) throw new Error(`command failed: ${cmd}
-${(p2.stderr || p2.stdout || "").trim().split("\n").slice(-5).join("\n")}`);
+      const p = spawnSync3("bash", ["-lc", cmd], { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
+      if (p.status !== 0) throw new Error(`command failed: ${cmd}
+${(p.stderr || p.stdout || "").trim().split("\n").slice(-5).join("\n")}`);
     };
     brew = (pkg2) => async () => sh(`brew install ${pkg2}`);
     CATALOG = {
@@ -6462,50 +7231,50 @@ __export(doctor_exports, {
 });
 import { existsSync as existsSync9, lstatSync as lstatSync2, readFileSync as readFileSync8 } from "node:fs";
 import { join as join9 } from "node:path";
-function fix(repo, m2, man) {
-  const ws = workspace(man, m2);
-  for (const p2 of selectedProjects(man, m2)) {
-    const root = checkoutRoot(p2, ws);
-    if (p2.kind !== "git" || !existsSync9(root) || !isRepo(root) || !p2.url) continue;
+function fix(repo, m, man) {
+  const ws = workspace(man, m);
+  for (const p of selectedProjects(man, m)) {
+    const root = checkoutRoot(p, ws);
+    if (p.kind !== "git" || !existsSync9(root) || !isRepo(root) || !p.url) continue;
     const url = remoteUrl(root);
-    if (url === p2.url) continue;
-    const cur = canonicalGithub(url), want = canonicalGithub(p2.url);
+    if (url === p.url) continue;
+    const cur = canonicalGithub(url), want = canonicalGithub(p.url);
     let same = cur === want;
-    const ident2 = p2.identity ? man.identities[p2.identity] : void 0;
+    const ident2 = p.identity ? man.identities[p.identity] : void 0;
     if (!same && ident2 && identityMatches(ident2, cur) && cur.split("/").pop() === want.split("/").pop()) same = true;
     if (same) {
-      git(["remote", "set-url", "origin", p2.url], root);
-      ok(`${p2.name}: remote url ${url} \u2192 ${p2.url}`);
-    } else warn(`${p2.name}: remote ${url} is a different repo than manifest ${p2.url}; not changing it`);
+      git(["remote", "set-url", "origin", p.url], root);
+      ok(`${p.name}: remote url ${url} \u2192 ${p.url}`);
+    } else warn(`${p.name}: remote ${url} is a different repo than manifest ${p.url}; not changing it`);
   }
 }
-function runDoctor(repo, m2, man, doFix = false, compact = false) {
-  if (doFix) fix(repo, m2, man);
+function runDoctor(repo, m, man, doFix = false, compact = false) {
+  if (doFix) fix(repo, m, man);
   const res = [];
   refuseUnsupported();
   res.push(["ok", describe()]);
   res.push(["ok", `node ${process.versions.node}`]);
-  const v2 = version();
-  res.push(v2[0] > 2 || v2[0] === 2 && v2[1] >= 36 ? ["ok", `git ${v2.join(".")}`] : ["warn", `git ${v2.join(".")} < 2.36: identities fall back to per-repo config`]);
+  const v = version();
+  res.push(v[0] > 2 || v[0] === 2 && v[1] >= 36 ? ["ok", `git ${v.join(".")}`] : ["warn", `git ${v.join(".")} < 2.36: identities fall back to per-repo config`]);
   res.push(which("claude") ? ["ok", `claude at ${which("claude")}`] : ["warn", "claude not on PATH (curl -fsSL https://claude.ai/install.sh | bash)"]);
-  const ws = workspace(man, m2);
+  const ws = workspace(man, m);
   res.push(isWSL() && ws.startsWith("/mnt/") ? ["fail", `workspace ${ws} is on the Windows filesystem; use the WSL home`] : ["ok", `workspace ${contract(ws)}`]);
-  const broken = LINKS.filter((i) => {
+  const broken = LINKS.filter((i2) => {
     try {
-      return lstatSync2(join9(claudeDir(), i)).isSymbolicLink() && !existsSync9(join9(claudeDir(), i));
+      return lstatSync2(join9(claudeDir(), i2)).isSymbolicLink() && !existsSync9(join9(claudeDir(), i2));
     } catch {
       return false;
     }
   });
   res.push(broken.length ? ["fail", "broken links in ~/.claude: " + broken.join(", ") + "  (cs apply)"] : ["ok", "~/.claude links healthy"]);
   const ch = [];
-  applySettings(repo, m2, true, ch);
+  applySettings(repo, m, true, ch);
   res.push(ch.length ? ["warn", "settings.json drift: " + ch.join("; ") + "  (cs apply)"] : ["ok", "settings.json rendered"]);
   if (existsSync9(claudeJson())) {
     try {
-      const d3 = JSON.parse(readFileSync8(claudeJson(), "utf8"));
+      const d = JSON.parse(readFileSync8(claudeJson(), "utf8"));
       const hits = [];
-      for (const [path, e2] of Object.entries(d3.projects ?? {})) for (const [n, c] of Object.entries(e2.mcpServers ?? {})) if (c.env || c.headers) hits.push(`${n}@${contract(path)}`);
+      for (const [path, e] of Object.entries(d.projects ?? {})) for (const [n3, c2] of Object.entries(e.mcpServers ?? {})) if (c2.env || c2.headers) hits.push(`${n3}@${contract(path)}`);
       res.push(hits.length ? ["warn", `local-scope MCP servers with secrets in ~/.claude.json (machine-only): ${hits.join(", ")} \u2014 keep until cs secrets provides the \${VAR}s, then \`claude mcp remove <name> -s local\``] : ["ok", "no secret-bearing local-scope MCP servers"]);
     } catch {
       res.push(["warn", "~/.claude.json unparsable"]);
@@ -6513,15 +7282,15 @@ function runDoctor(repo, m2, man, doFix = false, compact = false) {
   }
   res.push(process.env.GH_TOKEN || process.env.GITHUB_TOKEN ? ["warn", "GH_TOKEN/GITHUB_TOKEN is exported in this shell; gh ignores its stored logins while set"] : ["ok", "no GH_TOKEN override in env"]);
   const idr = [];
-  for (const p2 of selectedProjects(man, m2)) {
-    const root = checkoutRoot(p2, ws);
-    if (p2.kind !== "git" || !existsSync9(root) || !isRepo(root)) continue;
-    const ident2 = p2.identity ? man.identities[p2.identity] : void 0;
+  for (const p of selectedProjects(man, m)) {
+    const root = checkoutRoot(p, ws);
+    if (p.kind !== "git" || !existsSync9(root) || !isRepo(root)) continue;
+    const ident2 = p.identity ? man.identities[p.identity] : void 0;
     const email2 = configGet(root, "user.email");
     const url = remoteUrl(root);
-    if (p2.url && canonicalGithub(url) !== canonicalGithub(p2.url)) idr.push(["warn", `${p2.name}: remote ${url} \u2260 manifest ${p2.url}  (cs doctor --fix)`]);
-    else if (url && p2.url && url !== p2.url) idr.push(["warn", `${p2.name}: remote uses alias/other form ${url}; manifest ${p2.url}  (cs doctor --fix)`]);
-    if (ident2 && email2 !== ident2.email) idr.push(["fail", `${p2.name}: user.email resolves to '${email2 || "UNSET"}', expected ${ident2.email}`]);
+    if (p.url && canonicalGithub(url) !== canonicalGithub(p.url)) idr.push(["warn", `${p.name}: remote ${url} \u2260 manifest ${p.url}  (cs doctor --fix)`]);
+    else if (url && p.url && url !== p.url) idr.push(["warn", `${p.name}: remote uses alias/other form ${url}; manifest ${p.url}  (cs doctor --fix)`]);
+    if (ident2 && email2 !== ident2.email) idr.push(["fail", `${p.name}: user.email resolves to '${email2 || "UNSET"}', expected ${ident2.email}`]);
   }
   res.push(...idr.length ? idr : [["ok", "git identities resolve per manifest"]]);
   const sym = { ok: green("\u2713"), warn: yellow("!"), fail: red("\u2717") };
@@ -6556,51 +7325,51 @@ __export(identity_exports, {
 });
 import { existsSync as existsSync10, renameSync as renameSync3, readFileSync as readFileSync9, writeFileSync as writeFileSync6 } from "node:fs";
 import { join as join10 } from "node:path";
-async function add(repo, m2, man, id, o2) {
+async function add(repo, m, man, id, o) {
   if (!NAME_RE.test(id)) throw new Error(`cs: '${id}' is not a valid identity id`);
-  const ident2 = { id, name: o2.name, email: o2.email, owner: o2.owner, sshKey: o2.key };
+  const ident2 = { id, name: o.name, email: o.email, owner: o.owner, sshKey: o.key };
   appendIdentity(repo, ident2);
   git(["add", "projects.toml"], repo);
-  commit(repo, `identities: add ${id}`, "cs", `cs@${m2.name}`);
-  step(`identity ${bold(id)}  ${dim(`${o2.name} <${o2.email}> \xB7 github.com/${o2.owner} \xB7 key ${keyPath(ident2)}`)}`);
+  commit(repo, `identities: add ${id}`, "cs", `cs@${m.name}`);
+  step(`identity ${bold(id)}  ${dim(`${o.name} <${o.email}> \xB7 github.com/${o.owner} \xB7 key ${keyPath(ident2)}`)}`);
   const ch = [];
   applyGit(loadManifest(repo), false, ch);
   if (ch.length) step("git identity includes updated");
   if (!existsSync10(expand(keyPath(ident2)))) info(`no key at ${keyPath(ident2)} yet \u2014 cs ssh setup generates and registers it`);
-  if (!o2.noToken && !getToken(o2.owner)) {
-    info(`a GitHub token for ${o2.owner} lets cs new --${id} create repos:`);
+  if (!o.noToken && !getToken(o.owner)) {
+    info(`a GitHub token for ${o.owner} lets cs new --${id} create repos:`);
     try {
-      await ensureToken(o2.owner);
-      ok(`token for ${o2.owner} stored`);
-    } catch (e2) {
-      warn(`no token stored (${e2.message}); run cs token set ${o2.owner} later`);
+      await ensureToken(o.owner);
+      ok(`token for ${o.owner} stored`);
+    } catch (e) {
+      warn(`no token stored (${e.message}); run cs token set ${o.owner} later`);
     }
   }
   return 0;
 }
-function rename(repo, m2, man, oldId, newId) {
+function rename(repo, m, man, oldId, newId) {
   if (!man.identities[oldId]) throw new Error(`cs: unknown identity '${oldId}'`);
   if (man.identities[newId] || !NAME_RE.test(newId)) throw new Error(`cs: '${newId}' is taken or invalid`);
   const ident2 = man.identities[oldId];
   const f = join10(repo, "projects.toml");
-  let t = readFileSync9(f, "utf8");
-  t = t.replace(new RegExp(`^\\[identities\\.${oldId}\\]`, "m"), `[identities.${newId}]`).replace(new RegExp(`^(identity\\s*=\\s*)"${oldId}"`, "mg"), `$1"${newId}"`);
-  writeFileSync6(f, t);
+  let t2 = readFileSync9(f, "utf8");
+  t2 = t2.replace(new RegExp(`^\\[identities\\.${oldId}\\]`, "m"), `[identities.${newId}]`).replace(new RegExp(`^(identity\\s*=\\s*)"${oldId}"`, "mg"), `$1"${newId}"`);
+  writeFileSync6(f, t2);
   if (!ident2.sshKey) {
     for (const s of ["", ".pub"]) {
-      const a = expand(`~/.ssh/cs/${oldId}${s}`), b3 = expand(`~/.ssh/cs/${newId}${s}`);
-      if (existsSync10(a)) renameSync3(a, b3);
+      const a2 = expand(`~/.ssh/cs/${oldId}${s}`), b = expand(`~/.ssh/cs/${newId}${s}`);
+      if (existsSync10(a2)) renameSync3(a2, b);
     }
     step(`~/.ssh/cs/${oldId} \u2192 ~/.ssh/cs/${newId}`);
   }
-  for (const d3 of out(["ls-files", `machines/*/ssh/${oldId}.pub`], repo).split("\n").filter(Boolean)) git(["mv", d3, d3.replace(`${oldId}.pub`, `${newId}.pub`)], repo);
+  for (const d of out(["ls-files", `machines/*/ssh/${oldId}.pub`], repo).split("\n").filter(Boolean)) git(["mv", d, d.replace(`${oldId}.pub`, `${newId}.pub`)], repo);
   git(["add", "projects.toml"], repo);
-  commit(repo, `identities: rename ${oldId} \u2192 ${newId}`, "cs", `cs@${m2.name}`);
-  const n = Object.values(man.projects).filter((p2) => p2.identity === oldId).length;
-  ok(`identity ${oldId} \u2192 ${newId} (${n} projects updated)`);
+  commit(repo, `identities: rename ${oldId} \u2192 ${newId}`, "cs", `cs@${m.name}`);
+  const n3 = Object.values(man.projects).filter((p) => p.identity === oldId).length;
+  ok(`identity ${oldId} \u2192 ${newId} (${n3} projects updated)`);
   const ch = [];
   applyGit(loadManifest(repo), false, ch);
-  for (const c of ch) step(c);
+  for (const c2 of ch) step(c2);
   return 0;
 }
 function ls(man) {
@@ -6610,10 +7379,10 @@ function ls(man) {
     return;
   }
   table(
-    ids.map((i) => {
-      const n = Object.values(man.projects).filter((p2) => p2.identity === i.id).length;
-      const key = expand(keyPath(i));
-      return [bold(i.id), `${i.name} <${i.email}>`, i.owner || dim("-"), existsSync10(key) ? keyPath(i) : red(keyPath(i) + " (missing)"), getToken(i.owner) ? green("token \u2713") : dim("no token"), dim(`${n} project${n === 1 ? "" : "s"}`)];
+    ids.map((i2) => {
+      const n3 = Object.values(man.projects).filter((p) => p.identity === i2.id).length;
+      const key = expand(keyPath(i2));
+      return [bold(i2.id), `${i2.name} <${i2.email}>`, i2.owner || dim("-"), existsSync10(key) ? keyPath(i2) : red(keyPath(i2) + " (missing)"), getToken(i2.owner) ? green("token \u2713") : dim("no token"), dim(`${n3} project${n3 === 1 ? "" : "s"}`)];
     }),
     ["id", "commits as", "github owner", "ssh key", "", ""]
   );
@@ -6643,42 +7412,42 @@ import { dirname as dirname5, join as join11 } from "node:path";
 import { spawnSync as spawnSync4 } from "node:child_process";
 function keygen(key, comment) {
   mkdirSync7(dirname5(key), { recursive: true, mode: 448 });
-  const p2 = spawnSync4("ssh-keygen", ["-q", "-t", "ed25519", "-N", "", "-C", comment, "-f", key]);
-  if (p2.status !== 0) throw new Error("cs: ssh-keygen failed");
+  const p = spawnSync4("ssh-keygen", ["-q", "-t", "ed25519", "-N", "", "-C", comment, "-f", key]);
+  if (p.status !== 0) throw new Error("cs: ssh-keygen failed");
   chmodSync4(key, 384);
 }
 function githubUserForKey(key) {
   if (process.env.CS_OFFLINE) return void 0;
-  const p2 = spawnSync4("ssh", ["-T", "-i", key, "-o", "IdentitiesOnly=yes", "-o", "StrictHostKeyChecking=accept-new", "-o", "BatchMode=yes", "git@github.com"], { encoding: "utf8", timeout: 2e4, stdio: ["ignore", "pipe", "pipe"] });
-  return ((p2.stdout ?? "") + (p2.stderr ?? "")).match(/Hi ([^!]+)!/)?.[1];
+  const p = spawnSync4("ssh", ["-T", "-i", key, "-o", "IdentitiesOnly=yes", "-o", "StrictHostKeyChecking=accept-new", "-o", "BatchMode=yes", "git@github.com"], { encoding: "utf8", timeout: 2e4, stdio: ["ignore", "pipe", "pipe"] });
+  return ((p.stdout ?? "") + (p.stderr ?? "")).match(/Hi ([^!]+)!/)?.[1];
 }
 function writeSshConfig() {
   const cfg = join11(home(), ".ssh", "config");
-  const text2 = existsSync11(cfg) ? readFileSync10(cfg, "utf8") : "";
-  const block2 = [MARK, "Host github.com", "    IdentitiesOnly yes", "    AddKeysToAgent yes", ...isMac() ? ["    UseKeychain yes"] : [], END].join("\n") + "\n";
-  const next = text2.includes(MARK) ? text2.slice(0, text2.indexOf(MARK)) + block2 + text2.slice(text2.indexOf(END) + END.length + 1) : block2 + (text2 && !text2.startsWith("\n") ? "\n" : "") + text2;
-  if (next === text2) return false;
+  const text3 = existsSync11(cfg) ? readFileSync10(cfg, "utf8") : "";
+  const block3 = [MARK, "Host github.com", "    IdentitiesOnly yes", "    AddKeysToAgent yes", ...isMac() ? ["    UseKeychain yes"] : [], END].join("\n") + "\n";
+  const next = text3.includes(MARK) ? text3.slice(0, text3.indexOf(MARK)) + block3 + text3.slice(text3.indexOf(END) + END.length + 1) : block3 + (text3 && !text3.startsWith("\n") ? "\n" : "") + text3;
+  if (next === text3) return false;
   mkdirSync7(dirname5(cfg), { recursive: true, mode: 448 });
   writeFileSync7(cfg, next);
   chmodSync4(cfg, 384);
   return true;
 }
-async function register(i, pub, title) {
+async function register(i2, pub, title) {
   if (process.env.CS_OFFLINE) return "offline";
-  if (!i.owner) return "no owner; add the key manually";
-  const tok = getToken(i.owner);
-  if (!tok) return `no token for ${i.owner}; add manually: https://github.com/settings/ssh/new`;
+  if (!i2.owner) return "no owner; add the key manually";
+  const tok = getToken(i2.owner);
+  if (!tok) return `no token for ${i2.owner}; add manually: https://github.com/settings/ssh/new`;
   try {
-    if (await ownerType(i.owner, tok) !== "User") return `${i.owner} is an organization \u2014 add the key to the user account that belongs to it: https://github.com/settings/ssh/new`;
+    if (await ownerType(i2.owner, tok) !== "User") return `${i2.owner} is an organization \u2014 add the key to the user account that belongs to it: https://github.com/settings/ssh/new`;
     const keys = await api("GET", "/user/keys", tok);
-    if (keys.some((k3) => (k3.key ?? "").split(" ").slice(0, 2).join(" ") === pub.split(" ").slice(0, 2).join(" "))) return "already registered on GitHub";
+    if (keys.some((k) => (k.key ?? "").split(" ").slice(0, 2).join(" ") === pub.split(" ").slice(0, 2).join(" "))) return "already registered on GitHub";
     await api("POST", "/user/keys", tok, { title, key: pub });
     return "registered on GitHub";
-  } catch (e2) {
-    return /403|404/.test(e2.message) ? "token lacks 'Git SSH keys: write' \u2014 add manually: https://github.com/settings/ssh/new" : e2.message;
+  } catch (e) {
+    return /403|404/.test(e.message) ? "token lacks 'Git SSH keys: write' \u2014 add manually: https://github.com/settings/ssh/new" : e.message;
   }
 }
-async function setup2(repo, m2, man, checkOnly = false) {
+async function setup2(repo, m, man, checkOnly = false) {
   const ids = Object.values(man.identities);
   if (!ids.length) {
     warn("no identities yet (cs identity add \u2026)");
@@ -6687,50 +7456,50 @@ async function setup2(repo, m2, man, checkOnly = false) {
   const rows = [];
   let published = false;
   const unregistered = [];
-  for (const i of ids) {
-    const key = expand(keyPath(i)), pubf = key + ".pub";
+  for (const i2 of ids) {
+    const key = expand(keyPath(i2)), pubf = key + ".pub";
     const state = [];
     if (!existsSync11(key)) {
       if (checkOnly) {
-        rows.push([i.id, keyPath(i), red("missing")]);
-        unregistered.push(i);
+        rows.push([i2.id, keyPath(i2), red("missing")]);
+        unregistered.push(i2);
         continue;
       }
-      keygen(key, `cs:${m2.name}:${i.id}`);
+      keygen(key, `cs:${m.name}:${i2.id}`);
       state.push(green("generated"));
     }
     const pub = readFileSync10(pubf, "utf8").trim();
-    const dest = join11(repo, "machines", m2.name, "ssh", `${i.id}.pub`);
+    const dest = join11(repo, "machines", m.name, "ssh", `${i2.id}.pub`);
     if (!checkOnly && (!existsSync11(dest) || readFileSync10(dest, "utf8").trim() !== pub)) {
       mkdirSync7(dirname5(dest), { recursive: true });
       writeFileSync7(dest, pub + "\n");
       git(["add", dest], repo);
       published = true;
     }
-    let user = githubUserForKey(key);
+    let user = await spin(`verifying ${i2.id} key on GitHub\u2026`, async () => githubUserForKey(key));
     if (user) state.push(green(`github: ${user}`));
     else if (!checkOnly) {
-      const r2 = await register(i, pub, `cs:${m2.name}:${i.id}`);
+      const r2 = await spin(`registering ${i2.id} key\u2026`, async () => register(i2, pub, `cs:${m.name}:${i2.id}`));
       user = githubUserForKey(key);
       if (user) state.push(green(`github: ${user}`));
       else {
         state.push(yellow(r2.startsWith("registered") ? "registered, not verified yet" : "needs registering"));
-        unregistered.push(i);
+        unregistered.push(i2);
       }
     } else {
       state.push(yellow("not accepted by GitHub yet"));
-      unregistered.push(i);
+      unregistered.push(i2);
     }
-    rows.push([i.id, keyPath(i), state.join("  ")]);
+    rows.push([i2.id, keyPath(i2), state.join("  ")]);
   }
-  if (published) commit(repo, `machines: ${m2.name} ssh public keys`, "cs", `cs@${m2.name}`);
+  if (published) commit(repo, `machines: ${m.name} ssh public keys`, "cs", `cs@${m.name}`);
   if (!checkOnly && writeSshConfig()) step("~/.ssh/config: managed block (IdentitiesOnly, AddKeysToAgent)");
   table(rows, ["identity", "key", "state"]);
-  for (const i of unregistered) {
-    const pubf = expand(keyPath(i)) + ".pub";
+  for (const i2 of unregistered) {
+    const pubf = expand(keyPath(i2)) + ".pub";
     if (!existsSync11(pubf)) continue;
-    const who = i.owner && i.owner.toLowerCase() !== i.id.toLowerCase() ? `the ${i.owner} account` : `your GitHub account that is a member of ${i.owner || "the org"}`;
-    note([`${cyan("https://github.com/settings/ssh/new")}  ${dim(`\u2192 logged in as ${who}`)}`, "", `title  ${bold(`cs:${m2.name}:${i.id}`)}`, `key    ${bold(readFileSync10(pubf, "utf8").trim())}`], `Add the ${i.id} key`);
+    const who = i2.owner && i2.owner.toLowerCase() !== i2.id.toLowerCase() ? `the ${i2.owner} account` : `your GitHub account that is a member of ${i2.owner || "the org"}`;
+    note2([`${cyan("https://github.com/settings/ssh/new")}  ${dim(`\u2192 logged in as ${who}`)}`, "", `title  ${bold(`cs:${m.name}:${i2.id}`)}`, `key    ${bold(readFileSync10(pubf, "utf8").trim())}`], `Add the ${i2.id} key`);
   }
   return unregistered.length ? 1 : 0;
 }
@@ -6764,9 +7533,9 @@ import { chmodSync as chmodSync5, copyFileSync as copyFileSync3, existsSync as e
 import { dirname as dirname6, join as join12, relative as relative3 } from "node:path";
 import { spawnSync as spawnSync5 } from "node:child_process";
 function sops(args, repo, input, check = true) {
-  const p2 = spawnSync5(exe("sops"), args, { cwd: repo, env: env(), encoding: "utf8", input, stdio: ["pipe", "pipe", "pipe"] });
-  if (check && p2.status !== 0) throw new Error(`cs: sops ${args.join(" ")} failed: ${(p2.stderr ?? "").trim()}`);
-  return p2;
+  const p = spawnSync5(exe("sops"), args, { cwd: repo, env: env(), encoding: "utf8", input, stdio: ["pipe", "pipe", "pipe"] });
+  if (check && p.status !== 0) throw new Error(`cs: sops ${args.join(" ")} failed: ${(p.stderr ?? "").trim()}`);
+  return p;
 }
 function publicKey() {
   if (!existsSync12(keyFile())) return "";
@@ -6776,18 +7545,18 @@ function publicKey() {
 }
 function keygen2() {
   mkdirSync8(dirname6(keyFile()), { recursive: true, mode: 448 });
-  const p2 = spawnSync5(exe("age-keygen"), ["-o", keyFile()], { encoding: "utf8" });
-  if (p2.status !== 0) throw new Error(`cs: age-keygen failed: ${p2.stderr}`);
+  const p = spawnSync5(exe("age-keygen"), ["-o", keyFile()], { encoding: "utf8" });
+  if (p.status !== 0) throw new Error(`cs: age-keygen failed: ${p.stderr}`);
   chmodSync5(keyFile(), 384);
 }
 function recipients(repo) {
   const f = join12(repo, ".sops.yaml");
   if (!existsSync12(f)) return [];
-  const t = readFileSync11(f, "utf8");
-  const m2 = t.match(/age:\s*>-?\s*\n((?:\s+.+\n?)+)/);
-  if (m2) return m2[1].replace(/\n/g, " ").split(",").map((x2) => x2.trim()).filter(Boolean);
-  const m22 = t.match(/age:\s*(\S.*)/);
-  return m22 ? m22[1].split(",").map((x2) => x2.trim()).filter(Boolean) : [];
+  const t2 = readFileSync11(f, "utf8");
+  const m = t2.match(/age:\s*>-?\s*\n((?:\s+.+\n?)+)/);
+  if (m) return m[1].replace(/\n/g, " ").split(",").map((x) => x.trim()).filter(Boolean);
+  const m2 = t2.match(/age:\s*(\S.*)/);
+  return m2 ? m2[1].split(",").map((x) => x.trim()).filter(Boolean) : [];
 }
 function writeRecipients(repo, recs) {
   writeFileSync8(join12(repo, ".sops.yaml"), `# sops recipients \u2014 managed by cs secrets init / cs enroll / cs revoke
@@ -6798,23 +7567,23 @@ creation_rules:
 }
 function envFiles(repo) {
   const out2 = [];
-  const rec = (d3) => {
-    if (!existsSync12(d3)) return;
-    for (const e2 of readdirSync4(d3, { withFileTypes: true })) {
-      const f = join12(d3, e2.name);
-      e2.isDirectory() ? rec(f) : f.endsWith(".env") && out2.push(f);
+  const rec = (d) => {
+    if (!existsSync12(d)) return;
+    for (const e of readdirSync4(d, { withFileTypes: true })) {
+      const f = join12(d, e.name);
+      e.isDirectory() ? rec(f) : f.endsWith(".env") && out2.push(f);
     }
   };
   rec(join12(repo, "secrets"));
   return out2.sort();
 }
 function updatekeys(repo) {
-  let n = 0;
+  let n3 = 0;
   for (const f of envFiles(repo)) if (isEncrypted(f)) {
     sops(["updatekeys", "-y", relative3(repo, f)], repo);
-    n++;
+    n3++;
   }
-  return n;
+  return n3;
 }
 var RULE, keyFile, env, exe, machinePubFile, isEncrypted, SopsBackend;
 var init_sops = __esm({
@@ -6828,11 +7597,11 @@ var init_sops = __esm({
     RULE = "^secrets/.*\\.env$";
     keyFile = () => process.env.SOPS_AGE_KEY_FILE || join12(home(), ".config", "sops", "age", "keys.txt");
     env = () => {
-      const e2 = { ...process.env, SOPS_AGE_KEY_FILE: keyFile() };
-      delete e2.SOPS_AGE_RECIPIENTS;
-      return e2;
+      const e = { ...process.env, SOPS_AGE_KEY_FILE: keyFile() };
+      delete e.SOPS_AGE_RECIPIENTS;
+      return e;
     };
-    exe = (n) => which(n) || join12(home(), ".local", "bin", n);
+    exe = (n3) => which(n3) || join12(home(), ".local", "bin", n3);
     machinePubFile = (repo, machine) => join12(repo, "machines", machine, "age.pub");
     isEncrypted = (f) => {
       try {
@@ -6843,26 +7612,26 @@ var init_sops = __esm({
     };
     SopsBackend = {
       name: "sops",
-      async init(repo, m2) {
+      async init(repo, m) {
         if (existsSync12(keyFile())) skip(`age key present at ${contract(keyFile())}`);
         else {
           keygen2();
           ok(`generated age key ${contract(keyFile())} (0600, never synced)`);
         }
         const pub = publicKey();
-        const pf = machinePubFile(repo, m2.name);
+        const pf = machinePubFile(repo, m.name);
         if (!existsSync12(pf) || readFileSync11(pf, "utf8").trim() !== pub) {
           mkdirSync8(dirname6(pf), { recursive: true });
           writeFileSync8(pf, pub + "\n");
           git(["add", relative3(repo, pf)], repo);
-          commit(repo, `machines: ${m2.name} age.pub`, "cs", `cs@${m2.name}`);
+          commit(repo, `machines: ${m.name} age.pub`, "cs", `cs@${m.name}`);
           ok(`published ${contract(pf)}`);
         }
         const recs = recipients(repo);
         if (!recs.length) {
           writeRecipients(repo, [pub]);
           git(["add", ".sops.yaml"], repo);
-          commit(repo, "secrets: first recipient", "cs", `cs@${m2.name}`);
+          commit(repo, "secrets: first recipient", "cs", `cs@${m.name}`);
           ok("this is the first machine: registered as the only recipient");
           const hook = join12(repo, ".git", "hooks", "pre-commit"), src = join12(toolRoot(), "hooks", "pre-commit-secrets-guard.sh");
           if (existsSync12(src) && !existsSync12(hook)) {
@@ -6871,7 +7640,7 @@ var init_sops = __esm({
             ok("installed pre-commit plaintext guard in the config repo");
           }
         } else if (recs.includes(pub)) ok("this machine can decrypt secrets");
-        else warn(`this machine is not a recipient yet \u2014 on a machine that is, run: cs enroll ${m2.name}`);
+        else warn(`this machine is not a recipient yet \u2014 on a machine that is, run: cs enroll ${m.name}`);
         mkdirSync8(join12(repo, "secrets", "projects"), { recursive: true });
       },
       ready: (repo) => existsSync12(keyFile()) && recipients(repo).includes(publicKey()),
@@ -6887,8 +7656,8 @@ var init_sops = __esm({
         const tmp = join12(dirname6(f), `.${name2.replace(/\//g, "_")}.plain.${process.pid}.env`);
         writeFileSync8(tmp, dumpDotenv(values), { mode: 384 });
         try {
-          const p2 = sops(["-e", "--input-type", "dotenv", "--output-type", "dotenv", "--filename-override", rel, relative3(repo, tmp)], repo);
-          writeFileSync8(f, p2.stdout);
+          const p = sops(["-e", "--input-type", "dotenv", "--output-type", "dotenv", "--filename-override", rel, relative3(repo, tmp)], repo);
+          writeFileSync8(f, p.stdout);
         } finally {
           rmSync3(tmp, { force: true });
         }
@@ -6899,15 +7668,15 @@ var init_sops = __esm({
         if (!existsSync12(f)) this.writeEnv(repo, name2, { EXAMPLE_KEY: "value" });
         spawnSync5(exe("sops"), ["--input-type", "dotenv", "--output-type", "dotenv", relative3(repo, f)], { cwd: repo, env: env(), stdio: "inherit" });
       },
-      status(repo, m2) {
+      status(repo, m) {
         const pub = publicKey(), recs = recipients(repo);
         kv("age key", contract(keyFile()) + (existsSync12(keyFile()) ? "" : red("  missing")));
-        kv("recipient", pub && recs.includes(pub) ? green("yes") : red("no \u2014 cs enroll " + m2.name));
+        kv("recipient", pub && recs.includes(pub) ? green("yes") : red("no \u2014 cs enroll " + m.name));
         const names = {};
         const md = join12(repo, "machines");
-        if (existsSync12(md)) for (const d3 of readdirSync4(md)) {
-          const pf = join12(md, d3, "age.pub");
-          if (existsSync12(pf)) names[readFileSync11(pf, "utf8").trim()] = d3;
+        if (existsSync12(md)) for (const d of readdirSync4(md)) {
+          const pf = join12(md, d, "age.pub");
+          if (existsSync12(pf)) names[readFileSync11(pf, "utf8").trim()] = d;
         }
         kv("recipients", recs.map((r2) => names[r2] ?? r2.slice(0, 14) + "\u2026").join(", ") || "-");
         kv("files", envFiles(repo).map((f) => relative3(repo, f)).join(", ") || "-");
@@ -6945,27 +7714,27 @@ var init_none = __esm({
 
 // src/secrets/index.ts
 import { join as join13 } from "node:path";
-async function getBackend(m2) {
-  if (m2.secretsBackend === "sops") return (await Promise.resolve().then(() => (init_sops(), sops_exports))).SopsBackend;
-  if (m2.secretsBackend === "none") return (await Promise.resolve().then(() => (init_none(), none_exports))).NoneBackend;
-  throw new Error(`cs: unknown secrets backend '${m2.secretsBackend}' (sops | none)`);
+async function getBackend(m) {
+  if (m.secretsBackend === "sops") return (await Promise.resolve().then(() => (init_sops(), sops_exports))).SopsBackend;
+  if (m.secretsBackend === "none") return (await Promise.resolve().then(() => (init_none(), none_exports))).NoneBackend;
+  throw new Error(`cs: unknown secrets backend '${m.secretsBackend}' (sops | none)`);
 }
-function parseDotenv(text2) {
+function parseDotenv(text3) {
   const out2 = {};
-  for (let line of text2.split("\n")) {
+  for (let line of text3.split("\n")) {
     line = line.trim();
     if (!line || line.startsWith("#") || !line.includes("=")) continue;
-    let [k3, ...rest] = line.split("=");
-    let v2 = rest.join("=").trim();
-    k3 = k3.trim().replace(/^export\s+/, "");
-    if (v2.length >= 2 && v2[0] === '"' && v2[v2.length - 1] === '"') {
+    let [k, ...rest] = line.split("=");
+    let v = rest.join("=").trim();
+    k = k.trim().replace(/^export\s+/, "");
+    if (v.length >= 2 && v[0] === '"' && v[v.length - 1] === '"') {
       try {
-        v2 = JSON.parse(v2);
+        v = JSON.parse(v);
       } catch {
-        v2 = v2.slice(1, -1);
+        v = v.slice(1, -1);
       }
-    } else if (v2.length >= 2 && v2[0] === "'" && v2[v2.length - 1] === "'") v2 = v2.slice(1, -1);
-    out2[k3] = v2;
+    } else if (v.length >= 2 && v[0] === "'" && v[v.length - 1] === "'") v = v.slice(1, -1);
+    out2[k] = v;
   }
   return out2;
 }
@@ -6974,7 +7743,7 @@ var init_secrets = __esm({
   "src/secrets/index.ts"() {
     "use strict";
     envFile = (repo, name2) => name2 === "global" ? join13(repo, "secrets", "global.env") : join13(repo, "secrets", "projects", `${name2}.env`);
-    dumpDotenv = (v2) => Object.entries(v2).map(([k3, val]) => `${k3}=${/[ #"'\\$`]/.test(val) || val === "" ? JSON.stringify(val) : val}`).join("\n") + (Object.keys(v2).length ? "\n" : "");
+    dumpDotenv = (v) => Object.entries(v).map(([k, val]) => `${k}=${/[ #"'\\$`]/.test(val) || val === "" ? JSON.stringify(val) : val}`).join("\n") + (Object.keys(v).length ? "\n" : "");
   }
 });
 
@@ -6985,7 +7754,7 @@ __export(secretscmd_exports, {
   edit: () => edit,
   enroll: () => enroll,
   environment: () => environment,
-  exec: () => exec,
+  exec: () => exec2,
   get: () => get,
   init: () => init,
   pull: () => pull,
@@ -6999,89 +7768,89 @@ __export(secretscmd_exports, {
 import { chmodSync as chmodSync6, existsSync as existsSync13, mkdirSync as mkdirSync9, readdirSync as readdirSync5, readFileSync as readFileSync12, writeFileSync as writeFileSync9, rmSync as rmSync4 } from "node:fs";
 import { join as join14, relative as relative4 } from "node:path";
 import { spawnSync as spawnSync6 } from "node:child_process";
-async function init(repo, m2, interactive = true) {
-  await (await getBackend(m2)).init(repo, m2, interactive);
+async function init(repo, m, interactive = true) {
+  await (await getBackend(m)).init(repo, m, interactive);
   return 0;
 }
-async function status(repo, m2) {
-  info(bold(`secrets backend: ${m2.secretsBackend}`));
-  (await getBackend(m2)).status(repo, m2);
+async function status(repo, m) {
+  info(bold(`secrets backend: ${m.secretsBackend}`));
+  (await getBackend(m)).status(repo, m);
   return 0;
 }
-async function edit(repo, m2, name2) {
-  (await getBackend(m2)).edit(repo, name2);
-  commitSecrets(repo, m2, `secrets: edit ${name2}`);
+async function edit(repo, m, name2) {
+  (await getBackend(m)).edit(repo, name2);
+  commitSecrets(repo, m, `secrets: edit ${name2}`);
   return 0;
 }
-async function setValues(repo, m2, name2, pairs) {
-  const b3 = await getBackend(m2);
-  const v2 = b3.loadEnv(repo, name2);
-  for (const p2 of pairs) {
-    const i = p2.indexOf("=");
-    if (i < 1) throw new Error(`cs: expected KEY=VALUE, got '${p2}'`);
-    v2[p2.slice(0, i).trim()] = p2.slice(i + 1);
+async function setValues(repo, m, name2, pairs) {
+  const b = await getBackend(m);
+  const v = b.loadEnv(repo, name2);
+  for (const p of pairs) {
+    const i2 = p.indexOf("=");
+    if (i2 < 1) throw new Error(`cs: expected KEY=VALUE, got '${p}'`);
+    v[p.slice(0, i2).trim()] = p.slice(i2 + 1);
   }
-  b3.writeEnv(repo, name2, v2);
-  commitSecrets(repo, m2, `secrets: set ${pairs.length} value(s) in ${name2}`);
-  ok(`${name2}: ${pairs.map((p2) => p2.split("=")[0]).join(", ")} stored (encrypted)`);
+  b.writeEnv(repo, name2, v);
+  commitSecrets(repo, m, `secrets: set ${pairs.length} value(s) in ${name2}`);
+  ok(`${name2}: ${pairs.map((p) => p.split("=")[0]).join(", ")} stored (encrypted)`);
   return 0;
 }
-async function unsetValues(repo, m2, name2, keys) {
-  const b3 = await getBackend(m2);
-  const v2 = b3.loadEnv(repo, name2);
-  for (const k3 of keys) delete v2[k3];
-  b3.writeEnv(repo, name2, v2);
-  commitSecrets(repo, m2, `secrets: unset ${keys.length} value(s) in ${name2}`);
+async function unsetValues(repo, m, name2, keys) {
+  const b = await getBackend(m);
+  const v = b.loadEnv(repo, name2);
+  for (const k of keys) delete v[k];
+  b.writeEnv(repo, name2, v);
+  commitSecrets(repo, m, `secrets: unset ${keys.length} value(s) in ${name2}`);
   return 0;
 }
-async function get(repo, m2, name2, key, show) {
-  const v2 = (await getBackend(m2)).loadEnv(repo, name2);
+async function get(repo, m, name2, key, show) {
+  const v = (await getBackend(m)).loadEnv(repo, name2);
   if (key) {
-    if (!(key in v2)) return 1;
-    console.log(show ? v2[key] : mask(v2[key]));
+    if (!(key in v)) return 1;
+    console.log(show ? v[key] : mask(v[key]));
     return 0;
   }
-  for (const [k3, val] of Object.entries(v2)) console.log(`${k3}=${show ? val : mask(val)}`);
+  for (const [k, val] of Object.entries(v)) console.log(`${k}=${show ? val : mask(val)}`);
   return 0;
 }
-async function pull(repo, m2, man, project, force) {
-  const p2 = man.projects[project];
-  if (!p2) throw new Error(`cs: unknown project '${project}'`);
-  const v2 = (await getBackend(m2)).loadEnv(repo, project);
-  if (!Object.keys(v2).length) {
+async function pull(repo, m, man, project, force) {
+  const p = man.projects[project];
+  if (!p) throw new Error(`cs: unknown project '${project}'`);
+  const v = (await getBackend(m)).loadEnv(repo, project);
+  if (!Object.keys(v).length) {
     warn(`no secrets stored for ${project} (cs secrets push ${project} / cs secrets set ${project} K=V)`);
     return 1;
   }
-  const root = checkoutRoot(p2, workspace(man, m2)), target = join14(root, ".env"), text2 = dumpDotenv(v2);
-  if (existsSync13(target) && readFileSync12(target, "utf8") !== text2 && !force) {
+  const root = checkoutRoot(p, workspace(man, m)), target = join14(root, ".env"), text3 = dumpDotenv(v);
+  if (existsSync13(target) && readFileSync12(target, "utf8") !== text3 && !force) {
     fail(`${contract(target)} exists and differs \u2014 cs secrets diff ${project}; use --force to overwrite`);
     return 1;
   }
-  writeFileSync9(target, text2);
+  writeFileSync9(target, text3);
   chmodSync6(target, 384);
   checkIgnored(root, target);
-  ok(`wrote ${contract(target)} (${Object.keys(v2).length} keys)`);
+  ok(`wrote ${contract(target)} (${Object.keys(v).length} keys)`);
   return 0;
 }
-async function push(repo, m2, man, project) {
-  const p2 = man.projects[project];
-  if (!p2) throw new Error(`cs: unknown project '${project}'`);
-  const root = checkoutRoot(p2, workspace(man, m2)), src = join14(root, ".env");
+async function push(repo, m, man, project) {
+  const p = man.projects[project];
+  if (!p) throw new Error(`cs: unknown project '${project}'`);
+  const root = checkoutRoot(p, workspace(man, m)), src = join14(root, ".env");
   if (!existsSync13(src)) throw new Error(`cs: ${contract(src)} not found`);
-  const v2 = parseDotenv(readFileSync12(src, "utf8"));
-  (await getBackend(m2)).writeEnv(repo, project, v2);
-  commitSecrets(repo, m2, `secrets: ${project} .env`);
+  const v = parseDotenv(readFileSync12(src, "utf8"));
+  (await getBackend(m)).writeEnv(repo, project, v);
+  commitSecrets(repo, m, `secrets: ${project} .env`);
   checkIgnored(root, src);
-  ok(`${project}: ${Object.keys(v2).length} keys encrypted into ${contract(envFile(repo, project))}`);
+  ok(`${project}: ${Object.keys(v).length} keys encrypted into ${contract(envFile(repo, project))}`);
   return 0;
 }
-async function diff(repo, m2, man, project) {
-  const p2 = man.projects[project];
-  if (!p2) throw new Error(`cs: unknown project '${project}'`);
-  const stored = (await getBackend(m2)).loadEnv(repo, project);
-  const lf = join14(checkoutRoot(p2, workspace(man, m2)), ".env");
+async function diff(repo, m, man, project) {
+  const p = man.projects[project];
+  if (!p) throw new Error(`cs: unknown project '${project}'`);
+  const stored = (await getBackend(m)).loadEnv(repo, project);
+  const lf = join14(checkoutRoot(p, workspace(man, m)), ".env");
   const local = existsSync13(lf) ? parseDotenv(readFileSync12(lf, "utf8")) : {};
-  const rows = [.../* @__PURE__ */ new Set([...Object.keys(stored), ...Object.keys(local)])].sort().filter((k3) => stored[k3] !== local[k3]).map((k3) => [k3, k3 in stored ? mask(stored[k3]) : dim("-"), k3 in local ? mask(local[k3]) : dim("-")]);
+  const rows = [.../* @__PURE__ */ new Set([...Object.keys(stored), ...Object.keys(local)])].sort().filter((k) => stored[k] !== local[k]).map((k) => [k, k in stored ? mask(stored[k]) : dim("-"), k in local ? mask(local[k]) : dim("-")]);
   if (rows.length) {
     table(rows, ["key", "stored", "local .env"]);
     return 1;
@@ -7089,27 +7858,27 @@ async function diff(repo, m2, man, project) {
   ok("no differences");
   return 0;
 }
-async function environment(repo, m2, man, project, warnMissing = true) {
+async function environment(repo, m, man, project, warnMissing = true) {
   const env2 = { ...process.env };
   if (env2.CS_SECRETS_LOADED === "1") return env2;
-  const b3 = await getBackend(m2);
-  if (b3.name !== "none" && !b3.ready(repo)) {
+  const b = await getBackend(m);
+  if (b.name !== "none" && !b.ready(repo)) {
     if (warnMissing) warn("secrets not available on this machine (cs secrets init / cs enroll) \u2014 continuing without them");
     return env2;
   }
-  Object.assign(env2, b3.loadEnv(repo, "global"));
-  if (project) Object.assign(env2, b3.loadEnv(repo, project));
+  Object.assign(env2, b.loadEnv(repo, "global"));
+  if (project) Object.assign(env2, b.loadEnv(repo, project));
   env2.CS_SECRETS_LOADED = "1";
   return env2;
 }
-async function exec(repo, m2, man, project, cmd) {
+async function exec2(repo, m, man, project, cmd) {
   if (!cmd.length) throw new Error("cs: secrets exec needs a command after --");
-  project ??= projectForPath(man, m2, process.cwd())?.name;
-  const env2 = await environment(repo, m2, man, project);
-  const p2 = spawnSync6(cmd[0], cmd.slice(1), { stdio: "inherit", env: env2 });
-  return p2.status ?? 1;
+  project ??= projectForPath(man, m, process.cwd())?.name;
+  const env2 = await environment(repo, m, man, project);
+  const p = spawnSync6(cmd[0], cmd.slice(1), { stdio: "inherit", env: env2 });
+  return p.status ?? 1;
 }
-function enroll(repo, m2, machine) {
+function enroll(repo, m, machine) {
   const pf = machinePubFile(repo, machine);
   if (!existsSync13(pf)) throw new Error(`cs: ${contract(pf)} not found \u2014 run cs secrets init on ${machine} and cs sync on both sides first`);
   const pub = readFileSync12(pf, "utf8").trim();
@@ -7119,56 +7888,56 @@ function enroll(repo, m2, machine) {
     return 0;
   }
   writeRecipients(repo, [...recs, pub]);
-  const n = updatekeys(repo);
+  const n3 = updatekeys(repo);
   git(["add", "-A", ".sops.yaml", "secrets"], repo);
-  commit(repo, `secrets: enroll ${machine}`, "cs", `cs@${m2.name}`);
-  ok(`enrolled ${machine}; re-encrypted ${n} file(s). Run cs sync here, then cs sync on ${machine}.`);
+  commit(repo, `secrets: enroll ${machine}`, "cs", `cs@${m.name}`);
+  ok(`enrolled ${machine}; re-encrypted ${n3} file(s). Run cs sync here, then cs sync on ${machine}.`);
   return 0;
 }
-async function revoke(repo, m2, machine) {
+async function revoke(repo, m, machine) {
   const pf = machinePubFile(repo, machine);
   const pub = existsSync13(pf) ? readFileSync12(pf, "utf8").trim() : "";
   const recs = recipients(repo);
   if (pub && recs.includes(pub)) {
     writeRecipients(repo, recs.filter((r2) => r2 !== pub));
-    const n = updatekeys(repo);
+    const n3 = updatekeys(repo);
     rmSync4(join14(repo, "machines", machine), { recursive: true, force: true });
     git(["add", "-A", ".sops.yaml", "secrets", "machines"], repo);
-    commit(repo, `secrets: revoke ${machine}`, "cs", `cs@${m2.name}`);
-    ok(`revoked ${machine}; re-encrypted ${n} file(s)`);
+    commit(repo, `secrets: revoke ${machine}`, "cs", `cs@${m.name}`);
+    ok(`revoked ${machine}; re-encrypted ${n3} file(s)`);
   } else warn(`${machine} was not a recipient`);
-  const b3 = await getBackend(m2);
+  const b = await getBackend(m);
   const keys = /* @__PURE__ */ new Set();
-  for (const name2 of ["global", ...Object.keys(man_projects(repo))]) for (const k3 of Object.keys(b3.loadEnv(repo, name2))) keys.add(k3);
+  for (const name2 of ["global", ...Object.keys(man_projects(repo))]) for (const k of Object.keys(b.loadEnv(repo, name2))) keys.add(k);
   if (keys.size) warn("that machine could read these \u2014 rotate them at the source: " + [...keys].sort().join(", "));
   return 0;
 }
 function man_projects(repo) {
-  const d3 = join14(repo, "secrets", "projects");
+  const d = join14(repo, "secrets", "projects");
   const out2 = {};
-  if (existsSync13(d3)) {
-    for (const f of readdirSync5(d3)) if (f.endsWith(".env")) out2[f.slice(0, -4)] = true;
+  if (existsSync13(d)) {
+    for (const f of readdirSync5(d)) if (f.endsWith(".env")) out2[f.slice(0, -4)] = true;
   }
   return out2;
 }
-function recovery(repo, m2) {
+function recovery(repo, m) {
   const tmp = join14(home(), ".cache", `cs-recovery-${process.pid}.txt`);
   const exe2 = which("age-keygen") || join14(home(), ".local", "bin", "age-keygen");
-  const p2 = spawnSync6(exe2, ["-o", tmp], { encoding: "utf8" });
-  if (p2.status !== 0) throw new Error("cs: age-keygen failed");
-  const text2 = readFileSync12(tmp, "utf8");
+  const p = spawnSync6(exe2, ["-o", tmp], { encoding: "utf8" });
+  if (p.status !== 0) throw new Error("cs: age-keygen failed");
+  const text3 = readFileSync12(tmp, "utf8");
   rmSync4(tmp, { force: true });
-  const pub = text2.split("\n").find((l2) => l2.startsWith("# public key:")).split(":")[1].trim();
-  const priv = text2.split("\n").find((l2) => l2.startsWith("AGE-SECRET-KEY-"));
+  const pub = text3.split("\n").find((l2) => l2.startsWith("# public key:")).split(":")[1].trim();
+  const priv = text3.split("\n").find((l2) => l2.startsWith("AGE-SECRET-KEY-"));
   const pf = machinePubFile(repo, "recovery");
   mkdirSync9(join14(repo, "machines", "recovery"), { recursive: true });
   writeFileSync9(pf, pub + "\n");
   writeRecipients(repo, [...recipients(repo), pub]);
-  const n = updatekeys(repo);
+  const n3 = updatekeys(repo);
   git(["add", "-A", ".sops.yaml", "secrets", "machines/recovery"], repo);
-  commit(repo, "secrets: recovery recipient", "cs", `cs@${m2.name}`);
-  ok(`recovery recipient added; re-encrypted ${n} file(s)`);
-  note([priv, "", dim("On a bare machine: write it to ~/.config/sops/age/keys.txt, run cs secrets init, enroll the machine's own key, delete it.")], "Store this in your password manager now \u2014 it is not saved anywhere else");
+  commit(repo, "secrets: recovery recipient", "cs", `cs@${m.name}`);
+  ok(`recovery recipient added; re-encrypted ${n3} file(s)`);
+  note2([priv, "", dim("On a bare machine: write it to ~/.config/sops/age/keys.txt, run cs secrets init, enroll the machine's own key, delete it.")], "Store this in your password manager now \u2014 it is not saved anywhere else");
   return 0;
 }
 var mask, commitSecrets, checkIgnored;
@@ -7182,11 +7951,11 @@ var init_secretscmd = __esm({
     init_secrets();
     init_sops();
     init_ui();
-    mask = (v2) => v2.length > 8 ? v2.slice(0, 3) + "\u2026" + v2.slice(-2) : "\u2026";
-    commitSecrets = (repo, m2, msg) => {
+    mask = (v) => v.length > 8 ? v.slice(0, 3) + "\u2026" + v.slice(-2) : "\u2026";
+    commitSecrets = (repo, m, msg) => {
       if (isRepo(repo) && isDirty(repo)) {
         git(["add", "-A", "secrets"], repo);
-        commit(repo, msg, "cs", `cs@${m2.name}`);
+        commit(repo, msg, "cs", `cs@${m.name}`);
       }
     };
     checkIgnored = (root, f) => {
@@ -7205,13 +7974,13 @@ __export(hooks_exports, {
 import { existsSync as existsSync14, mkdirSync as mkdirSync10, readFileSync as readFileSync13, unlinkSync as unlinkSync4, writeFileSync as writeFileSync10 } from "node:fs";
 import { join as join15 } from "node:path";
 import { spawnSync as spawnSync7 } from "node:child_process";
-function installHooks(repo, m2, remove = false) {
+function installHooks(repo, m, remove = false) {
   const f = join15(repo, "claude", "settings.base.json");
   const data = existsSync14(f) ? loads(readFileSync13(f, "utf8")) : {};
   data.hooks ??= {};
   let changed = false;
   for (const [ev, es] of Object.entries(entries())) {
-    const cur = (data.hooks[ev] ?? []).filter((e2) => !ours(e2));
+    const cur = (data.hooks[ev] ?? []).filter((e) => !ours(e));
     const next = remove ? cur : [...cur, ...es];
     if (JSON.stringify(next) !== JSON.stringify(data.hooks[ev] ?? [])) {
       data.hooks[ev] = next;
@@ -7223,13 +7992,13 @@ function installHooks(repo, m2, remove = false) {
   if (changed) {
     writeFileSync10(f, dumps(data));
     git(["add", f], repo);
-    commit(repo, `claude: ${remove ? "remove" : "install"} cs sync hooks`, "cs", `cs@${m2.name}`);
+    commit(repo, `claude: ${remove ? "remove" : "install"} cs sync hooks`, "cs", `cs@${m.name}`);
   }
   return changed;
 }
 function installTimer(remove = false) {
   mkdirSync10(stateDir(), { recursive: true });
-  const log = join15(stateDir(), "timer.log");
+  const log2 = join15(stateDir(), "timer.log");
   if (isMac()) {
     const plist = join15(home(), "Library", "LaunchAgents", "dev.claude-share.sync.plist");
     if (remove) {
@@ -7244,38 +8013,38 @@ function installTimer(remove = false) {
 <key>Label</key><string>dev.claude-share.sync</string>
 <key>ProgramArguments</key><array><string>/bin/sh</string><string>-lc</string><string>cs sync --quiet</string></array>
 <key>StartInterval</key><integer>900</integer>
-<key>StandardOutPath</key><string>${log}</string>
-<key>StandardErrorPath</key><string>${log}</string>
+<key>StandardOutPath</key><string>${log2}</string>
+<key>StandardErrorPath</key><string>${log2}</string>
 </dict></plist>
 `);
     spawnSync7("launchctl", ["unload", plist]);
-    const p2 = spawnSync7("launchctl", ["load", plist], { encoding: "utf8" });
-    return "launchd agent every 15 min" + (p2.status === 0 ? "" : ` (load failed: ${p2.stderr?.trim()})`);
+    const p = spawnSync7("launchctl", ["load", plist], { encoding: "utf8" });
+    return "launchd agent every 15 min" + (p.status === 0 ? "" : ` (load failed: ${p.stderr?.trim()})`);
   }
-  const d3 = join15(home(), ".config", "systemd", "user");
-  const svc = join15(d3, "cs-sync.service"), tmr = join15(d3, "cs-sync.timer");
+  const d = join15(home(), ".config", "systemd", "user");
+  const svc = join15(d, "cs-sync.service"), tmr = join15(d, "cs-sync.timer");
   if (remove) {
     spawnSync7("systemctl", ["--user", "disable", "--now", "cs-sync.timer"]);
     for (const f of [svc, tmr]) if (existsSync14(f)) unlinkSync4(f);
     return "systemd timer removed";
   }
-  mkdirSync10(d3, { recursive: true });
+  mkdirSync10(d, { recursive: true });
   writeFileSync10(svc, `[Unit]
 Description=claude-share sync
 
 [Service]
 Type=oneshot
 ExecStart=/bin/sh -lc 'cs sync --quiet'
-StandardOutput=append:${log}
-StandardError=append:${log}
+StandardOutput=append:${log2}
+StandardError=append:${log2}
 `);
   writeFileSync10(tmr, "[Unit]\nDescription=claude-share sync every 15 min\n\n[Timer]\nOnBootSec=2min\nOnUnitActiveSec=15min\nPersistent=true\n\n[Install]\nWantedBy=timers.target\n");
   const r2 = spawnSync7("systemctl", ["--user", "daemon-reload"], { encoding: "utf8" });
   if (r2.status !== 0) return `systemd --user unavailable (${r2.stderr?.trim()}); timer files written, not enabled`;
-  const e2 = spawnSync7("systemctl", ["--user", "enable", "--now", "cs-sync.timer"], { encoding: "utf8" });
-  return "systemd user timer every 15 min" + (e2.status === 0 ? "" : ` (enable failed: ${e2.stderr?.trim()})`);
+  const e = spawnSync7("systemctl", ["--user", "enable", "--now", "cs-sync.timer"], { encoding: "utf8" });
+  return "systemd user timer every 15 min" + (e.status === 0 ? "" : ` (enable failed: ${e.stderr?.trim()})`);
 }
-function runHooks(repo, m2, action, timer = true) {
+function runHooks(repo, m, action, timer = true) {
   if (action === "status") {
     const f = join15(repo, "claude", "settings.base.json");
     const data = existsSync14(f) ? loads(readFileSync13(f, "utf8")) : {};
@@ -7288,7 +8057,7 @@ function runHooks(repo, m2, action, timer = true) {
     return 0;
   }
   const remove = action === "remove";
-  installHooks(repo, m2, remove) ? ok(`${remove ? "removed" : "installed"} Claude Code hooks in claude/settings.base.json (run cs apply)`) : skip(`hooks already ${remove ? "absent" : "present"}`);
+  installHooks(repo, m, remove) ? ok(`${remove ? "removed" : "installed"} Claude Code hooks in claude/settings.base.json (run cs apply)`) : skip(`hooks already ${remove ? "absent" : "present"}`);
   if (timer) ok(installTimer(remove));
   return 0;
 }
@@ -7307,7 +8076,7 @@ var init_hooks = __esm({
       Stop: [{ hooks: [{ type: "command", command: STOP, async: true, timeout: 120 }] }],
       SessionStart: [{ matcher: "startup", hooks: [{ type: "command", command: START, timeout: 15 }] }]
     });
-    ours = (e2) => (e2.hooks ?? []).some((h2) => String(h2.command ?? "").includes("cs sync"));
+    ours = (e) => (e.hooks ?? []).some((h2) => String(h2.command ?? "").includes("cs sync"));
   }
 });
 
@@ -7321,11 +8090,11 @@ __export(projects_exports, {
 import { existsSync as existsSync15, mkdirSync as mkdirSync11, writeFileSync as writeFileSync11 } from "node:fs";
 import { basename as basename2, dirname as dirname7, join as join16, relative as relative5, resolve as resolve5 } from "node:path";
 import { spawnSync as spawnSync8 } from "node:child_process";
-function add2(repo, m2, man, path, o2) {
-  const ws = workspace(man, m2);
+function add2(repo, m, man, path, o) {
+  const ws = workspace(man, m);
   let target = resolve5(path ?? process.cwd());
   let layout = "plain";
-  const top = o2.kind !== "local" ? toplevel(target) : void 0;
+  const top = o.kind !== "local" ? toplevel(target) : void 0;
   if (top) {
     target = top;
     if (basename2(top) === "repo" && dirname7(top) !== ws) {
@@ -7335,112 +8104,131 @@ function add2(repo, m2, man, path, o2) {
   }
   const rel = relative5(ws, target);
   if (!rel || rel.startsWith("..") || rel.includes("/")) throw new Error(`cs: project must be a direct child of the workspace ${contract(ws)} (got ${target})`);
-  const name2 = o2.name ?? rel;
+  const name2 = o.name ?? rel;
   const checkout = layout === "worktrees" ? join16(target, "repo") : target;
-  let kind = o2.kind ?? (isRepo(checkout) && remoteUrl(checkout) ? "git" : isRepo(checkout) ? "git" : "synced");
-  let url = "", branch = "", identity = o2.identity ?? "";
+  let kind = o.kind ?? (isRepo(checkout) && remoteUrl(checkout) ? "git" : isRepo(checkout) ? "git" : "synced");
+  let url = "", branch = "", identity = o.identity ?? "";
   if (kind === "git") {
     url = remoteUrl(checkout);
     if (!url) throw new Error(`cs: ${checkout} has no origin remote; use --kind synced or push it first`);
     if (url.includes("github")) url = canonicalGithub(url);
     branch = currentBranch(checkout);
     if (!identity) {
-      const i = identityForUrl(man, url);
-      if (!i) throw new Error(`cs: no identity matches ${url}; pass --identity or add url_globs in projects.toml`);
-      identity = i.id;
+      const i2 = identityForUrl(man, url);
+      if (!i2) throw new Error(`cs: no identity matches ${url}; pass --identity or add url_globs in projects.toml`);
+      identity = i2.id;
     }
   }
-  const p2 = { name: name2, kind, path: rel !== name2 ? rel : void 0, url, identity, profiles: o2.profiles.length ? o2.profiles : ["all"], machines: [], branch, layout, description: o2.description, handoff: {}, sync: {} };
-  const errs = validate({ ...man, projects: { [name2]: p2 } });
+  const p = { name: name2, kind, path: rel !== name2 ? rel : void 0, url, identity, profiles: o.profiles.length ? o.profiles : ["all"], machines: [], branch, layout, description: o.description, handoff: {}, sync: {} };
+  const errs = validate({ ...man, projects: { [name2]: p } });
   if (errs.length) throw new Error("cs: " + errs.join("; "));
-  appendProject(repo, p2);
-  ok(`registered ${name2} (${kind}${url ? ", " + url : ""}) profiles=${p2.profiles.join(",")}`);
-  if (!o2.noCommit && isRepo(repo)) {
+  appendProject(repo, p);
+  ok(`registered ${name2} (${kind}${url ? ", " + url : ""}) profiles=${p.profiles.join(",")}`);
+  if (!o.noCommit && isRepo(repo)) {
     git(["add", "projects.toml"], repo);
-    commit(repo, `projects: add ${name2}`, "cs", `cs@${m2.name}`);
+    commit(repo, `projects: add ${name2}`, "cs", `cs@${m.name}`);
   }
-  return p2;
+  return p;
 }
-function clone(repo, m2, man, names, dryRun = false) {
-  const ws = workspace(man, m2);
+async function clone(repo, m, man, names, dryRun = false) {
+  const ws = workspace(man, m);
   let rc = 0;
   const cloned = [];
-  for (const p2 of selectedProjects(man, m2)) {
-    if (names.length && !names.includes(p2.name)) continue;
-    const root = checkoutRoot(p2, ws), cont = container(p2, ws);
+  for (const p of selectedProjects(man, m)) {
+    if (names.length && !names.includes(p.name)) continue;
+    const root = checkoutRoot(p, ws), cont = container(p, ws);
     if (existsSync15(root)) {
-      if (p2.kind === "git" && isRepo(root) && p2.url && canonicalGithub(remoteUrl(root)) !== canonicalGithub(p2.url)) {
-        fail(`${p2.name}: exists with a different remote (${remoteUrl(root)}); not touching it`);
+      if (p.kind === "git" && isRepo(root) && p.url && canonicalGithub(remoteUrl(root)) !== canonicalGithub(p.url)) {
+        fail(`${p.name}: exists with a different remote (${remoteUrl(root)}); not touching it`);
         rc = 1;
       }
       continue;
     }
-    if (p2.kind === "local") {
-      info(`${p2.name}: local-only, skipped`);
+    if (p.kind === "local") {
+      info(`${p.name}: local-only, skipped`);
       continue;
     }
-    if (p2.kind === "synced") {
-      step(`${p2.name}: ${p2.url ? "clone " + p2.url : "mkdir"} \u2192 ${contract(root)}`);
-      if (!dryRun) {
-        if (p2.url) git(["clone", "-q", p2.url, root]);
-        else mkdirSync11(root, { recursive: true });
-        cloned.push(p2.name);
+    if (p.kind === "synced") {
+      if (dryRun) {
+        step(`${p.name}: would ${p.url ? "clone" : "create"} ${contract(root)}`);
+        continue;
       }
+      await spin(`${p.name}\u2026`, async () => {
+        if (p.url) git(["clone", "-q", p.url, root]);
+        else mkdirSync11(root, { recursive: true });
+      });
+      step(`${p.name} \u2192 ${contract(root)}`);
+      cloned.push(p.name);
       continue;
     }
-    step(`${p2.name}: git clone ${p2.url} \u2192 ${contract(root)}`);
-    if (dryRun) continue;
+    if (dryRun) {
+      step(`${p.name}: would clone ${p.url} \u2192 ${contract(root)}`);
+      continue;
+    }
     mkdirSync11(cont, { recursive: true });
-    let r2 = git(["clone", "-q", ...p2.branch ? ["-b", p2.branch] : [], p2.url, root], void 0, { check: false });
-    if (r2.code !== 0 && p2.branch && /Remote branch .* not found/.test(r2.err)) {
-      r2 = git(["clone", "-q", p2.url, root], void 0, { check: false });
-      if (r2.code === 0) warn(`${p2.name}: branch '${p2.branch}' does not exist on the remote; cloned its default '${currentBranch(root)}' \u2014 fix projects.toml`);
+    let r2 = await spin(`cloning ${p.name}\u2026`, async () => git(["clone", "-q", ...p.branch ? ["-b", p.branch] : [], p.url, root], void 0, { check: false }));
+    let note3 = "";
+    if (r2.code !== 0 && p.branch && /Remote branch .* not found/.test(r2.err)) {
+      r2 = await spin(`cloning ${p.name} (default branch)\u2026`, async () => git(["clone", "-q", p.url, root], void 0, { check: false }));
+      if (r2.code === 0) {
+        note3 = yellow(` (branch '${p.branch}' not on remote \u2014 got '${currentBranch(root)}', fix projects.toml)`);
+      }
     }
     if (r2.code !== 0) {
-      fail(`${p2.name}: ${r2.err.split("\n").pop()}`);
+      fail(`${p.name}: ${r2.err.split("\n").pop()}`);
       rc = 1;
       continue;
     }
-    const ident2 = p2.identity ? man.identities[p2.identity] : void 0;
+    step(`${p.name} \u2192 ${contract(root)}${p.layout === "worktrees" ? dim(" (worktree layout)") : ""}${note3}`);
+    const ident2 = p.identity ? man.identities[p.identity] : void 0;
     const email2 = configGet(root, "user.email");
     if (ident2 && email2 !== ident2.email) {
-      warn(`${p2.name}: user.email resolved to '${email2 || "UNSET"}' \u2014 setting per-repo identity as fallback`);
+      warn(`${p.name}: user.email resolved to '${email2 || "UNSET"}' \u2014 setting per-repo identity as fallback`);
       git(["config", "user.name", ident2.name], root);
       git(["config", "user.email", ident2.email], root);
     }
-    if (p2.postClone) spawnSync8("bash", ["-lc", p2.postClone], { cwd: cont, stdio: "inherit" });
-    cloned.push(p2.name);
+    if (p.postClone) spawnSync8("bash", ["-lc", p.postClone], { cwd: cont, stdio: "inherit" });
+    cloned.push(p.name);
   }
-  if (cloned.length) runLink(repo, m2, man, cloned);
+  if (cloned.length) {
+    const wasQuiet = isQuiet();
+    setQuiet(true);
+    try {
+      runLink(repo, m, man, cloned);
+    } finally {
+      setQuiet(wasQuiet);
+    }
+    step(`Claude files linked into ${cloned.length} project(s)`);
+  }
   return rc;
 }
-async function create(repo, m2, man, name2, ident2, o2) {
+async function create(repo, m, man, name2, ident2, o) {
   if (!NAME_RE.test(name2)) throw new Error(`cs: '${name2}' is not a valid project name`);
   if (man.projects[name2]) throw new Error(`cs: project '${name2}' is already registered`);
-  const ws = workspace(man, m2), root = join16(ws, name2), branch = man.defaultBranch, owner2 = ident2.owner, kind = o2.kind ?? "git";
-  if (kind === "git" && !owner2 && !o2.noGithub) throw new Error(`cs: identity '${ident2.id}' has no owner in projects.toml`);
+  const ws = workspace(man, m), root = join16(ws, name2), branch = man.defaultBranch, owner2 = ident2.owner, kind = o.kind ?? "git";
+  if (kind === "git" && !owner2 && !o.noGithub) throw new Error(`cs: identity '${ident2.id}' has no owner in projects.toml`);
   const url = owner2 ? `git@github.com:${owner2}/${name2}.git` : "";
-  intro(`new project ${bold(name2)}`);
+  intro2(`new project ${bold(name2)}`);
   kv("identity", `${ident2.id}  ${dim(`${ident2.name} <${ident2.email}>`)}`);
   kv("path", contract(root));
   if (kind === "git") {
     kv("remote", url || dim("(none)"));
     kv("branch", branch);
   }
-  kv("profiles", o2.profiles.join(", "));
+  kv("profiles", o.profiles.join(", "));
   mkdirSync11(root, { recursive: true });
   if (!isRepo(root)) {
     git(["init", "-q", "-b", branch], root);
     step(`git init -b ${branch}`);
   }
-  if (kind === "git" && !o2.noGithub && url) {
+  if (kind === "git" && !o.noGithub && url) {
     try {
       const token2 = await ensureToken(owner2);
-      const created = await spin(`creating ${owner2}/${name2} on GitHub\u2026`, async () => ensureRepo(owner2, name2, token2, o2.priv !== false, o2.description ?? ""));
-      created ? step(`github: created ${owner2}/${name2}  ${dim(o2.priv !== false ? "private" : "public")}`) : skip(`github: ${owner2}/${name2} already exists`);
-    } catch (e2) {
-      fail(e2.message);
-      if (String(e2.message).includes(" 403")) info("fine-grained token needs: Repository access = All repositories, Administration = Read and write (edit the token on GitHub)");
+      const created = await spin(`creating ${owner2}/${name2} on GitHub\u2026`, async () => ensureRepo(owner2, name2, token2, o.priv !== false, o.description ?? ""));
+      created ? step(`github: created ${owner2}/${name2}  ${dim(o.priv !== false ? "private" : "public")}`) : skip(`github: ${owner2}/${name2} already exists`);
+    } catch (e) {
+      fail(e.message);
+      if (String(e.message).includes(" 403")) info("fine-grained token needs: Repository access = All repositories, Administration = Read and write (edit the token on GitHub)");
       return 1;
     }
   }
@@ -7465,13 +8253,13 @@ async function create(repo, m2, man, name2, ident2, o2) {
   if (!out(["rev-parse", "--verify", "-q", "HEAD"], root)) {
     if (!existsSync15(join16(root, "README.md"))) writeFileSync11(join16(root, "README.md"), `# ${name2}
 
-${o2.description ?? ""}`.trimEnd() + "\n");
+${o.description ?? ""}`.trimEnd() + "\n");
     if (!existsSync15(join16(root, ".gitignore"))) writeFileSync11(join16(root, ".gitignore"), ".DS_Store\n*:Zone.Identifier\n.env\n");
     git(["add", "-A"], root);
     commit(root, "init", ident2.name, ident2.email);
     step(`first commit on ${branch}  ${dim(`${ident2.name} <${ident2.email}>`)}`);
   }
-  if (kind === "git" && url && !o2.noGithub && !aheadBehind(root)) {
+  if (kind === "git" && url && !o.noGithub && !aheadBehind(root)) {
     const r2 = await spin("pushing\u2026", async () => git(["push", "-q", "-u", "origin", branch], root, { check: false, timeout: 60 }));
     if (r2.code !== 0) {
       fail(r2.err.split("\n").pop() ?? "push failed");
@@ -7479,18 +8267,18 @@ ${o2.description ?? ""}`.trimEnd() + "\n");
     }
     step(`pushed ${branch} to ${owner2}/${name2}`);
   }
-  const p2 = { name: name2, kind: kind === "git" && !url ? "local" : kind, url: kind === "git" ? url : "", identity: kind === "git" ? ident2.id : "", profiles: o2.profiles, machines: [], branch: kind === "git" ? branch : "", layout: "plain", description: o2.description, handoff: {}, sync: {} };
-  appendProject(repo, p2);
+  const p = { name: name2, kind: kind === "git" && !url ? "local" : kind, url: kind === "git" ? url : "", identity: kind === "git" ? ident2.id : "", profiles: o.profiles, machines: [], branch: kind === "git" ? branch : "", layout: "plain", description: o.description, handoff: {}, sync: {} };
+  appendProject(repo, p);
   if (isRepo(repo)) {
     git(["add", "projects.toml"], repo);
-    commit(repo, `projects: add ${name2}`, "cs", `cs@${m2.name}`);
+    commit(repo, `projects: add ${name2}`, "cs", `cs@${m.name}`);
   }
-  step(`registered in projects.toml  ${dim(`${p2.kind}, profiles ${o2.profiles.join(",")}`)}`);
+  step(`registered in projects.toml  ${dim(`${p.kind}, profiles ${o.profiles.join(",")}`)}`);
   setQuiet(true);
-  runLink(repo, m2, loadManifest(repo), [name2]);
+  runLink(repo, m, loadManifest(repo), [name2]);
   setQuiet(false);
   step("Claude files linked (memory \u2192 config repo)");
-  outro(bold(`cd ${contract(root)} && claude`));
+  outro2(bold(`cd ${contract(root)} && claude`));
   return 0;
 }
 var init_projects = __esm({
@@ -7519,22 +8307,22 @@ import { dirname as dirname8, join as join17, relative as relative6 } from "node
 function newConfigRepo(dest, branch = "master") {
   const src = templatesDir() + "/config-repo";
   mkdirSync12(dest, { recursive: true });
-  const copy = (d3) => {
-    for (const e2 of readdirSync6(d3, { withFileTypes: true })) {
-      const f = join17(d3, e2.name), t = join17(dest, relative6(src, f));
-      if (e2.isDirectory()) {
-        mkdirSync12(t, { recursive: true });
+  const copy = (d) => {
+    for (const e of readdirSync6(d, { withFileTypes: true })) {
+      const f = join17(d, e.name), t2 = join17(dest, relative6(src, f));
+      if (e.isDirectory()) {
+        mkdirSync12(t2, { recursive: true });
         copy(f);
-      } else if (!existsSync16(t)) {
-        mkdirSync12(dirname8(t), { recursive: true });
-        copyFileSync4(f, t);
+      } else if (!existsSync16(t2)) {
+        mkdirSync12(dirname8(t2), { recursive: true });
+        copyFileSync4(f, t2);
       }
     }
   };
   copy(src);
-  for (const d3 of ["plans", "projects", "secrets", "claude/skills", "claude/rules", "claude/agents", "machines"]) {
-    mkdirSync12(join17(dest, d3), { recursive: true });
-    if (!readdirSync6(join17(dest, d3)).length) writeFileSync12(join17(dest, d3, ".gitkeep"), "");
+  for (const d of ["plans", "projects", "secrets", "claude/skills", "claude/rules", "claude/agents", "machines"]) {
+    mkdirSync12(join17(dest, d), { recursive: true });
+    if (!readdirSync6(join17(dest, d)).length) writeFileSync12(join17(dest, d, ".gitkeep"), "");
   }
   if (!isRepo(dest)) git(["init", "-q", "-b", branch], dest);
   git(["add", "-A"], dest);
@@ -7563,7 +8351,7 @@ async function cloneConfig(sshUrl, target) {
 }
 async function askUrl(prompt) {
   for (; ; ) {
-    const raw = await text(prompt, { placeholder: "https://github.com/<owner>/claude-share-config", validate: (v2) => v2.trim() ? void 0 : "a URL is required" });
+    const raw = await text2(prompt, { placeholder: "https://github.com/<owner>/claude-share-config", validate: (v) => v.trim() ? void 0 : "a URL is required" });
     const [sshUrl, gh] = parseRepoUrl(raw);
     if (gh) {
       const vis = await spin("looking up the repository\u2026", async () => isPublic(httpsUrl(...gh)));
@@ -7571,7 +8359,7 @@ async function askUrl(prompt) {
       else if (vis === false) step(`${gh[0]}/${gh[1]} found (private) \u2014 access via the master key`);
       else {
         warn(`${gh[0]}/${gh[1]} not found or unreachable`);
-        if (!await confirm("use this URL anyway?", false)) continue;
+        if (!await confirm2("use this URL anyway?", false)) continue;
       }
     }
     return [sshUrl, gh];
@@ -7588,8 +8376,8 @@ async function join_(target, interactive, machine, repoUrl = "") {
   await cloneConfig(sshUrl, target);
 }
 async function create2(target, interactive, machine) {
-  const n = await text("name for your new config repo", { default: CONFIG_REPO_NAME, validate: name });
-  note([cyan("https://github.com/new"), dim("no README, no .gitignore, no license \u2014 completely empty")], `Create an empty PRIVATE repository named '${n}' on GitHub`);
+  const n3 = await text2("name for your new config repo", { default: CONFIG_REPO_NAME, validate: name });
+  note2([cyan("https://github.com/new"), dim("no README, no .gitignore, no license \u2014 completely empty")], `Create an empty PRIVATE repository named '${n3}' on GitHub`);
   const [sshUrl, gh] = await askUrl("paste the new repo's URL");
   await accessLoop(sshUrl, gh, interactive, machine);
   newConfigRepo(target);
@@ -7603,37 +8391,37 @@ async function machineName(existingName, interactive) {
   if (existingName) return existingName;
   if (!interactive) throw new Error("cs: --name <machine-name> is required");
   const dflt = { wsl2: "desktop", macos: "laptop" }[describe()] ?? "machine";
-  return text("What should this machine be called?", { default: dflt, placeholder: "desktop-work, laptop, \u2026", validate: name });
+  return text2("What should this machine be called?", { default: dflt, placeholder: "desktop-work, laptop, \u2026", validate: name });
 }
 async function machinePhase(repo, nm, profiles, ws, interactive) {
   if (machineExists()) {
-    const m3 = loadMachine();
+    const m2 = loadMachine();
     let changed = false;
-    if (nm && m3.name !== nm) {
-      m3.name = nm;
+    if (nm && m2.name !== nm) {
+      m2.name = nm;
       changed = true;
     }
-    if (profiles.length && JSON.stringify(m3.profiles) !== JSON.stringify(profiles)) {
-      m3.profiles = profiles;
+    if (profiles.length && JSON.stringify(m2.profiles) !== JSON.stringify(profiles)) {
+      m2.profiles = profiles;
       changed = true;
     }
-    if (ws && m3.workspace !== ws) {
-      m3.workspace = ws;
+    if (ws && m2.workspace !== ws) {
+      m2.workspace = ws;
       changed = true;
     }
     if (changed) {
-      saveMachine(m3);
+      saveMachine(m2);
       step("machine settings updated");
-    } else skip(`machine ${m3.name}  ${m3.profiles.join(", ")}`);
-    return m3;
+    } else skip(`machine ${m2.name}  ${m2.profiles.join(", ")}`);
+    return m2;
   }
   const md = join17(repo, "machines");
-  const existing = existsSync16(md) ? readdirSync6(md, { withFileTypes: true }).filter((d3) => d3.isDirectory() && d3.name !== "recovery").map((d3) => d3.name).sort() : [];
-  if (existing.length) step(`machines already in this share: ${existing.map((x2) => bold(x2)).join(", ")}`);
+  const existing = existsSync16(md) ? readdirSync6(md, { withFileTypes: true }).filter((d) => d.isDirectory() && d.name !== "recovery").map((d) => d.name).sort() : [];
+  if (existing.length) step(`machines already in this share: ${existing.map((x) => bold(x)).join(", ")}`);
   while (existing.includes(nm)) {
     if (!interactive) throw new Error(`cs: machine '${nm}' already exists in the share`);
-    if (await confirm(`'${nm}' already exists \u2014 re-use it (its published keys will be replaced)?`, false)) break;
-    nm = await text("name for this machine", { validate: name });
+    if (await confirm2(`'${nm}' already exists \u2014 re-use it (its published keys will be replaced)?`, false)) break;
+    nm = await text2("name for this machine", { validate: name });
   }
   let exclude = [];
   if (!profiles.length) {
@@ -7644,17 +8432,24 @@ async function machinePhase(repo, nm, profiles, ws, interactive) {
     }
     if (interactive && projects.length) {
       const groups = {};
-      for (const p2 of projects) {
-        const g2 = p2.profiles.includes("all") ? "every machine" : p2.profiles.join(", ");
-        (groups[g2] ??= []).push({ value: p2.name, label: p2.name, hint: p2.kind === "git" ? `${p2.identity} \xB7 ${p2.url?.replace(/^git@github\.com:/, "").replace(/\.git$/, "")}` : p2.kind });
+      for (const p of projects) {
+        const g = p.profiles.includes("all") ? "every machine" : p.profiles.join(", ");
+        (groups[g] ??= []).push({ value: p.name, label: p.name, hint: p.kind === "git" ? `${p.identity} \xB7 ${p.url?.replace(/^git@github\.com:/, "").replace(/\.git$/, "")}` : p.kind });
       }
-      const names = new Set(projects.map((p2) => p2.name));
-      const picked = new Set((await groupMultiselect("Which projects should this machine clone and sync?", groups, projects.map((p2) => p2.name))).filter((v2) => names.has(v2)));
-      profiles = [...new Set(projects.filter((p2) => picked.has(p2.name)).flatMap((p2) => p2.profiles).filter((x2) => x2 !== "all"))].sort();
+      const names = new Set(projects.map((p) => p.name));
+      let picked = /* @__PURE__ */ new Set();
+      let initial = projects.map((p) => p.name);
+      for (; ; ) {
+        picked = new Set((await groupMultiselect2("Which projects should this machine clone and sync?", groups, initial)).filter((v) => names.has(v)));
+        const lines = projects.map((p) => picked.has(p.name) ? green("\u2713 ") + p.name : dim("\u25CB " + p.name + "  (not on this machine)"));
+        note2(lines, `${picked.size} of ${projects.length} projects`);
+        if (await proceed("proceed with this selection?", "Yes, continue", "Change selection")) break;
+        initial = [...picked];
+      }
+      profiles = [...new Set(projects.filter((p) => picked.has(p.name)).flatMap((p) => p.profiles).filter((x) => x !== "all"))].sort();
       if (!profiles.length) profiles = ["personal"];
-      exclude = projects.filter((p2) => !picked.has(p2.name) && (p2.profiles.includes("all") || p2.profiles.some((x2) => profiles.includes(x2)))).map((p2) => p2.name);
-      step(`${picked.size} of ${projects.length} projects selected  ${dim("profiles " + profiles.join(", ") + (exclude.length ? " \xB7 not here: " + exclude.join(", ") : ""))}`);
-    } else if (interactive) profiles = (await text("profiles for this machine (comma list \u2014 project groups it should get)", { default: "personal" })).split(",").map((x2) => x2.trim()).filter(Boolean);
+      exclude = projects.filter((p) => !picked.has(p.name) && (p.profiles.includes("all") || p.profiles.some((x) => profiles.includes(x)))).map((p) => p.name);
+    } else if (interactive) profiles = (await text2("profiles for this machine (comma list \u2014 project groups it should get)", { default: "personal" })).split(",").map((x) => x.trim()).filter(Boolean);
     else profiles = ["personal"];
   }
   let workspaceOverride = ws;
@@ -7664,29 +8459,29 @@ async function machinePhase(repo, nm, profiles, ws, interactive) {
       dws = loadManifest(repo).workspaceRoot;
     } catch {
     }
-    const choice = await select("Where should your projects live on this machine?", [
+    const choice = await select2("Where should your projects live on this machine?", [
       { value: "default", label: `${dws}  (recommended)`, hint: existsSync16(expand(dws)) ? "exists" : "will be created" },
       { value: "custom", label: "Somewhere else\u2026", hint: "any absolute path or ~/\u2026" }
     ]);
-    let w2 = dws;
+    let w = dws;
     if (choice === "custom") {
-      w2 = await text("project root", { default: dws, validate: (v2) => v2.startsWith("~") || v2.startsWith("/") ? void 0 : "use an absolute path or ~/\u2026" });
-      if (w2.startsWith(home() + "/")) w2 = "~/" + w2.slice(home().length + 1);
-      if (isWSL() && expand(w2).startsWith("/mnt/")) {
+      w = await text2("project root", { default: dws, validate: (v) => v.startsWith("~") || v.startsWith("/") ? void 0 : "use an absolute path or ~/\u2026" });
+      if (w.startsWith(home() + "/")) w = "~/" + w.slice(home().length + 1);
+      if (isWSL() && expand(w).startsWith("/mnt/")) {
         warn("that is the Windows filesystem \u2014 git and Claude are far slower there; ~/dev inside WSL is recommended");
-        if (!await confirm("use it anyway?", false)) w2 = dws;
+        if (!await confirm2("use it anyway?", false)) w = dws;
       }
     }
-    const existed = existsSync16(expand(w2));
-    mkdirSync12(expand(w2), { recursive: true });
-    step(`projects live in ${bold(w2)}${existed ? "" : dim("  (created)")}`);
-    workspaceOverride = w2 === dws ? void 0 : w2;
+    const existed = existsSync16(expand(w));
+    mkdirSync12(expand(w), { recursive: true });
+    step(`projects live in ${bold(w)}${existed ? "" : dim("  (created)")}`);
+    workspaceOverride = w === dws ? void 0 : w;
   } else if (ws) mkdirSync12(expand(ws), { recursive: true });
-  const m2 = { name: nm, profiles, exclude, workspace: workspaceOverride, secretsBackend: "sops" };
-  saveMachine(m2);
-  return m2;
+  const m = { name: nm, profiles, exclude, workspace: workspaceOverride, secretsBackend: "sops" };
+  saveMachine(m);
+  return m;
 }
-async function firstIdentity(repo, m2, interactive) {
+async function firstIdentity(repo, m, interactive) {
   const man = loadManifest(repo);
   if (Object.keys(man.identities).length) return;
   if (!interactive) {
@@ -7695,40 +8490,40 @@ async function firstIdentity(repo, m2, interactive) {
   }
   section("first identity");
   info("an identity = a GitHub owner (your login or an org) + the name and email you commit with there");
-  const id = await text("identity id", { default: "personal", validate: name });
-  const own = await text("GitHub owner (your login or an org)", { validate: owner });
-  const nm = await text("git user.name", { validate: (v2) => v2 ? void 0 : "required" });
-  const em = await text("git user.email", { validate: email });
-  await add(repo, m2, man, id, { owner: own, name: nm, email: em, noToken: true });
+  const id = await text2("identity id", { default: "personal", validate: name });
+  const own = await text2("GitHub owner (your login or an org)", { validate: owner });
+  const nm = await text2("git user.name", { validate: (v) => v ? void 0 : "required" });
+  const em = await text2("git user.email", { validate: email });
+  await add(repo, m, man, id, { owner: own, name: nm, email: em, noToken: true });
 }
-async function keysAndTokens(repo, m2, interactive, skip2) {
+async function keysAndTokens(repo, m, interactive, skip2) {
   const full = loadManifest(repo);
   if (!Object.keys(full.identities).length) return;
-  const used = new Set(selectedProjects(full, m2).map((p2) => p2.identity).filter(Boolean));
+  const used = new Set(selectedProjects(full, m).map((p) => p.identity).filter(Boolean));
   const man = used.size ? { ...full, identities: Object.fromEntries(Object.entries(full.identities).filter(([id]) => used.has(id))) } : full;
   const skipped = Object.keys(full.identities).filter((id) => !(id in man.identities));
   if (skipped.length) skip(`identities not needed by the selected projects: ${skipped.join(", ")}`);
   if (!skip2.includes("ssh")) {
     section("identity ssh keys");
     const ssh = await Promise.resolve().then(() => (init_ssh(), ssh_exports));
-    let rc = await ssh.setup(repo, m2, man);
+    let rc = await ssh.setup(repo, m, man);
     let tries = 0;
     while (rc !== 0 && interactive && tries++ < 5) {
       if (!await proceed("added the key(s) on GitHub?", "Done \u2014 verify", "Skip for now")) break;
-      rc = await ssh.setup(repo, m2, man, true);
+      rc = await ssh.setup(repo, m, man, true);
     }
   }
   if (interactive) {
-    const missing = Object.values(man.identities).filter((i) => i.owner && !getToken(i.owner));
+    const missing = Object.values(man.identities).filter((i2) => i2.owner && !getToken(i2.owner));
     if (missing.length) {
       section("GitHub tokens");
       info("a token per owner lets cs new --<id> create repos \u2014 optional now, cs token set <owner> later");
-      for (const i of missing) if (await confirm(`store a token for ${i.owner} (identity ${i.id}) now?`, false)) {
+      for (const i2 of missing) if (await confirm2(`store a token for ${i2.owner} (identity ${i2.id}) now?`, false)) {
         try {
-          await ensureToken(i.owner);
-          ok(`token for ${i.owner} stored`);
-        } catch (e2) {
-          warn(e2.message);
+          await ensureToken(i2.owner);
+          ok(`token for ${i2.owner} stored`);
+        } catch (e) {
+          warn(e.message);
         }
       }
     }
@@ -7742,33 +8537,33 @@ function push2(repo) {
     r2.code === 0 ? ok("config repo pushed") : fail(`push failed: ${r2.err}`);
   }
 }
-async function finish(repo, m2, interactive, skip2) {
+async function finish(repo, m, interactive, skip2) {
   const man = loadManifest(repo);
-  if (!skip2.includes("apply")) await group("~/.claude applied", () => runApply(repo, m2, man), { done: "already up to date" });
-  if (!skip2.includes("link")) await group("project files linked", () => runLink(repo, m2, man), { done: "already in sync" });
-  if (!skip2.includes("secrets") && m2.secretsBackend !== "none") await group("secrets", async () => (await Promise.resolve().then(() => (init_secretscmd(), secretscmd_exports))).init(repo, m2, interactive));
+  if (!skip2.includes("apply")) await group("~/.claude applied", () => runApply(repo, m, man), { done: "already up to date" });
+  if (!skip2.includes("link")) await group("project files linked", () => runLink(repo, m, man), { done: "already in sync" });
+  if (!skip2.includes("secrets") && m.secretsBackend !== "none") await group("secrets", async () => (await Promise.resolve().then(() => (init_secretscmd(), secretscmd_exports))).init(repo, m, interactive));
   if (!skip2.includes("hooks")) await group("automatic sync", async () => {
-    (await Promise.resolve().then(() => (init_hooks(), hooks_exports))).runHooks(repo, m2, "install");
-    runApply(repo, m2, loadManifest(repo));
+    (await Promise.resolve().then(() => (init_hooks(), hooks_exports))).runHooks(repo, m, "install");
+    runApply(repo, m, loadManifest(repo));
   });
   await group("config repo", () => push2(repo), { done: "nothing to push" });
   let rc = 0;
-  if (!skip2.includes("doctor")) rc = await group("doctor", () => runDoctor(repo, m2, man, false, true), { done: "all checks passed" });
-  const ws = workspace(man, m2);
-  const missing = selectedProjects(man, m2).filter((p2) => p2.kind !== "local" && !existsSync16(checkoutRoot(p2, ws)));
-  if (missing.length && interactive && await confirm(`clone ${missing.length} project(s) now (${missing.slice(0, 6).map((p2) => p2.name).join(", ")}${missing.length > 6 ? "\u2026" : ""})?`, true)) await group(`${missing.length} project(s) cloned`, async () => (await Promise.resolve().then(() => (init_projects(), projects_exports))).clone(repo, m2, man, []));
-  outro(bold("done") + "  " + dim("open a new terminal (claude() wrapper) \xB7 cs status \xB7 cs new <project> --<identity>"));
+  if (!skip2.includes("doctor")) rc = await group("doctor", () => runDoctor(repo, m, man, false, true), { done: "all checks passed" });
+  const ws = workspace(man, m);
+  const missing = selectedProjects(man, m).filter((p) => p.kind !== "local" && !existsSync16(checkoutRoot(p, ws)));
+  if (missing.length && interactive && await confirm2(`clone ${missing.length} project(s) now (${missing.slice(0, 6).map((p) => p.name).join(", ")}${missing.length > 6 ? "\u2026" : ""})?`, true)) await group(`clone ${missing.length} project(s)`, async () => (await Promise.resolve().then(() => (init_projects(), projects_exports))).clone(repo, m, man, []));
+  outro2(bold("done") + "  " + dim("open a new terminal (claude() wrapper) \xB7 cs status \xB7 cs new <project> --<identity>"));
   return rc;
 }
-async function init2(o2) {
-  const skip2 = o2.skip ?? [];
-  for (const x2 of skip2) if (!PHASES.includes(x2)) throw new Error(`cs: unknown phase '${x2}' (phases: ${PHASES.join(", ")})`);
-  const interactive = o2.interactive ?? (isTTY() || isScripted());
+async function init2(o) {
+  const skip2 = o.skip ?? [];
+  for (const x of skip2) if (!PHASES.includes(x)) throw new Error(`cs: unknown phase '${x}' (phases: ${PHASES.join(", ")})`);
+  const interactive = o.interactive ?? (isTTY() || isScripted());
   const target = repoDirDefault();
-  const localSrc = o2.repo && !/:\/\/|^git@/.test(o2.repo) ? expand(o2.repo) : void 0;
-  intro("claude-share setup");
-  if (!skip2.includes("deps")) await group("prerequisites", () => runDeps(o2.installDeps, true));
-  const nm = await machineName(o2.name ?? "", interactive);
+  const localSrc = o.repo && !/:\/\/|^git@/.test(o.repo) ? expand(o.repo) : void 0;
+  intro2("claude-share setup");
+  if (!skip2.includes("deps")) await group("prerequisites", () => runDeps(o.installDeps, true));
+  const nm = await machineName(o.name ?? "", interactive);
   const already = existsSync16(target) && isRepo(target);
   if (already) {
     skip(`config repo already at ${contract(target)}`);
@@ -7779,39 +8574,39 @@ async function init2(o2) {
       mkdirSync12(dirname8(target), { recursive: true });
       git(["clone", "-q", localSrc, target]);
       ok(`config repo cloned from ${contract(localSrc)}`);
-    } else if (o2.repo) {
-      const [sshUrl, gh] = parseRepoUrl(o2.repo);
-      if (o2.key) {
+    } else if (o.repo) {
+      const [sshUrl, gh] = parseRepoUrl(o.repo);
+      if (o.key) {
         mkdirSync12(dirname8(target), { recursive: true });
-        git(["clone", "-q", sshUrl, target], void 0, { sshKey: expand(o2.key) });
-        git(["config", "core.sshCommand", `ssh -i ${contract(expand(o2.key))} -o IdentitiesOnly=yes`], target);
+        git(["clone", "-q", sshUrl, target], void 0, { sshKey: expand(o.key) });
+        git(["config", "core.sshCommand", `ssh -i ${contract(expand(o.key))} -o IdentitiesOnly=yes`], target);
       } else {
         await accessLoop(sshUrl, gh, interactive, nm);
         await cloneConfig(sshUrl, target);
       }
-    } else if (o2.owner) {
-      const token2 = await ensureToken(o2.owner, interactive);
-      const url = `git@github.com:${o2.owner}/${CONFIG_REPO_NAME}.git`;
-      if (await ensureRepo(o2.owner, CONFIG_REPO_NAME, token2, true, "claude-share config (private)")) {
-        ok(`created private repo ${o2.owner}/${CONFIG_REPO_NAME}`);
+    } else if (o.owner) {
+      const token2 = await ensureToken(o.owner, interactive);
+      const url = `git@github.com:${o.owner}/${CONFIG_REPO_NAME}.git`;
+      if (await ensureRepo(o.owner, CONFIG_REPO_NAME, token2, true, "claude-share config (private)")) {
+        ok(`created private repo ${o.owner}/${CONFIG_REPO_NAME}`);
         newConfigRepo(target);
         git(["remote", "add", "origin", url], target);
-        await accessLoop(url, [o2.owner, CONFIG_REPO_NAME], interactive, nm);
+        await accessLoop(url, [o.owner, CONFIG_REPO_NAME], interactive, nm);
         configureRepo(target);
       } else {
-        await accessLoop(url, [o2.owner, CONFIG_REPO_NAME], interactive, nm);
+        await accessLoop(url, [o.owner, CONFIG_REPO_NAME], interactive, nm);
         await cloneConfig(url, target);
       }
     } else if (interactive) {
-      const choice = await select("What would you like to do?", [{ value: "join", label: "Join an existing share", hint: "you already have a config repo (from another machine)" }, { value: "create", label: "Create a new share", hint: "first machine, no config repo yet" }]);
+      const choice = await select2("What would you like to do?", [{ value: "join", label: "Join an existing share", hint: "you already have a config repo (from another machine)" }, { value: "create", label: "Create a new share", hint: "first machine, no config repo yet" }]);
       if (choice === "create") await create2(target, true, nm);
       else await join_(target, true, nm);
     } else throw new Error("cs: pass --repo <url|path> or --owner <github-owner>, or run cs init in a terminal");
   }
-  const m2 = await machinePhase(target, nm, o2.profiles ?? [], o2.workspace, interactive);
-  await firstIdentity(target, m2, interactive);
-  await keysAndTokens(target, m2, interactive, skip2);
-  return finish(target, m2, interactive, skip2);
+  const m = await machinePhase(target, nm, o.profiles ?? [], o.workspace, interactive);
+  await firstIdentity(target, m, interactive);
+  await keysAndTokens(target, m, interactive, skip2);
+  return finish(target, m, interactive, skip2);
 }
 var CONFIG_REPO_NAME, PHASES, owner, email, name;
 var init_init = __esm({
@@ -7832,9 +8627,9 @@ var init_init = __esm({
     init_ui();
     CONFIG_REPO_NAME = "claude-share-config";
     PHASES = ["deps", "repo", "ssh", "apply", "link", "secrets", "hooks", "doctor"];
-    owner = (v2) => /^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})$/.test(v2) ? void 0 : "a GitHub login, e.g. octocat";
-    email = (v2) => /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(v2) ? void 0 : "not an email address";
-    name = (v2) => NAME_RE.test(v2) ? void 0 : "letters, digits, . _ - only";
+    owner = (v) => /^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})$/.test(v) ? void 0 : "a GitHub login, e.g. octocat";
+    email = (v) => /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(v) ? void 0 : "not an email address";
+    name = (v) => NAME_RE.test(v) ? void 0 : "letters, digits, . _ - only";
   }
 });
 
@@ -7852,28 +8647,28 @@ __export(adopt_exports, {
 });
 import { copyFileSync as copyFileSync5, existsSync as existsSync17, mkdirSync as mkdirSync13, readdirSync as readdirSync7, readFileSync as readFileSync14, writeFileSync as writeFileSync13 } from "node:fs";
 import { basename as basename3, dirname as dirname9, extname, join as join18, relative as relative7 } from "node:path";
-function candidatePaths(p2, ws) {
-  const c = [container(p2, ws), checkoutRoot(p2, ws), ...checkouts(p2, ws)];
-  return [...new Set(c)];
+function candidatePaths(p, ws) {
+  const c2 = [container(p, ws), checkoutRoot(p, ws), ...checkouts(p, ws)];
+  return [...new Set(c2)];
 }
 function walkFiles(dir) {
   const out2 = [];
-  const rec = (d3) => {
-    for (const e2 of readdirSync7(d3, { withFileTypes: true })) {
-      const f = join18(d3, e2.name);
-      e2.isDirectory() ? rec(f) : out2.push(f);
+  const rec = (d) => {
+    for (const e of readdirSync7(d, { withFileTypes: true })) {
+      const f = join18(d, e.name);
+      e.isDirectory() ? rec(f) : out2.push(f);
     }
   };
   if (existsSync17(dir)) rec(dir);
   return out2.sort();
 }
-function adoptMemory(repo, p2, ws, machine, check = false) {
-  const dest = memoryDir(repo, p2);
-  let n = 0;
-  for (const cand of candidatePaths(p2, ws)) {
+function adoptMemory(repo, p, ws, machine, check = false) {
+  const dest = memoryDir(repo, p);
+  let n3 = 0;
+  for (const cand of candidatePaths(p, ws)) {
     const src = join18(claudeDir(), "projects", claudeProjectKey(cand), "memory");
     if (!existsSync17(src)) continue;
-    info(`${p2.name}: adopting memory from ${contract(src)}`);
+    info(`${p.name}: adopting memory from ${contract(src)}`);
     for (const f of walkFiles(src)) {
       const rel = relative7(src, f);
       const target = join18(dest, rel);
@@ -7883,29 +8678,29 @@ function adoptMemory(repo, p2, ws, machine, check = false) {
           mkdirSync13(dirname9(target), { recursive: true });
           copyFileSync5(f, target);
         }
-        n++;
+        n3++;
       } else if (readFileSync14(target).equals(readFileSync14(f))) continue;
       else if (basename3(rel) === "MEMORY.md") {
         step(`~ ${rel} (union)`);
         if (!check) writeFileSync13(target, unionLines(readFileSync14(target, "utf8"), readFileSync14(f, "utf8")));
-        n++;
+        n3++;
       } else {
         const alt = join18(dirname9(target), `${basename3(rel, extname(rel))}.from-${machine}-${(/* @__PURE__ */ new Date()).toISOString().slice(0, 10)}${extname(rel)}`);
         step(`? ${rel} differs \u2192 ${basename3(alt)}`);
         if (!check) copyFileSync5(f, alt);
-        n++;
+        n3++;
       }
     }
     if (!check) writeFileSync13(join18(dirname9(src), "memory.adopted-by-cs"), `adopted into ${contract(dest)} on ${(/* @__PURE__ */ new Date()).toISOString().slice(0, 10)}
 `);
   }
-  if (!n) ok(`${p2.name}: no new memory to adopt`);
-  return n;
+  if (!n3) ok(`${p.name}: no new memory to adopt`);
+  return n3;
 }
-function adoptProjectFiles(repo, p2, ws, check = false) {
-  const ch = syncProject(repo, p2, ws, check);
-  for (const c of ch) step(`${p2.name}: ${c}`);
-  if (!ch.length) ok(`${p2.name}: nothing to adopt`);
+function adoptProjectFiles(repo, p, ws, check = false) {
+  const ch = syncProject(repo, p, ws, check);
+  for (const c2 of ch) step(`${p.name}: ${c2}`);
+  if (!ch.length) ok(`${p.name}: nothing to adopt`);
   return ch.length;
 }
 function envVarName(server, key) {
@@ -7914,44 +8709,44 @@ function envVarName(server, key) {
   if (st.length && kt.length && kt[0] === st[0]) kt = kt.slice(1);
   return [...st, ...kt].join("_");
 }
-function localScope(p2, ws) {
+function localScope(p, ws) {
   if (!existsSync17(claudeJson())) return {};
   const data = JSON.parse(readFileSync14(claudeJson(), "utf8"));
   const found = {};
-  for (const cand of candidatePaths(p2, ws)) for (const [n, cfg] of Object.entries(data.projects?.[cand]?.mcpServers ?? {})) found[n] ??= cfg;
+  for (const cand of candidatePaths(p, ws)) for (const [n3, cfg] of Object.entries(data.projects?.[cand]?.mcpServers ?? {})) found[n3] ??= cfg;
   return found;
 }
-function adoptMcp(repo, p2, ws, check = false, show = false) {
-  const found = localScope(p2, ws);
+function adoptMcp(repo, p, ws, check = false, show = false) {
+  const found = localScope(p, ws);
   if (show) {
-    for (const [n, cfg] of Object.entries(found)) {
-      for (const [k3, v2] of Object.entries(cfg.env ?? {})) console.log(`${envVarName(n, k3)}=${v2}`);
-      for (const [k3, v2] of Object.entries(cfg.headers ?? {})) console.log(`${envVarName(n, k3)}=${v2}`);
+    for (const [n3, cfg] of Object.entries(found)) {
+      for (const [k, v] of Object.entries(cfg.env ?? {})) console.log(`${envVarName(n3, k)}=${v}`);
+      for (const [k, v] of Object.entries(cfg.headers ?? {})) console.log(`${envVarName(n3, k)}=${v}`);
     }
     return Object.keys(found).length;
   }
   if (!Object.keys(found).length) {
-    ok(`${p2.name}: no local-scope MCP servers in ~/.claude.json`);
+    ok(`${p.name}: no local-scope MCP servers in ~/.claude.json`);
     return 0;
   }
-  const side = sideStore(repo, p2);
+  const side = sideStore(repo, p);
   const f = join18(side, ".mcp.json");
   const existing = existsSync17(f) ? loads(readFileSync14(f, "utf8")) : { mcpServers: {} };
   existing.mcpServers ??= {};
   const secrets = {};
   for (const [name2, orig] of Object.entries(found)) {
     const cfg = JSON.parse(JSON.stringify(orig));
-    for (const k3 of Object.keys(cfg.env ?? {})) {
-      secrets[envVarName(name2, k3)] = cfg.env[k3];
-      cfg.env[k3] = "${" + envVarName(name2, k3) + "}";
+    for (const k of Object.keys(cfg.env ?? {})) {
+      secrets[envVarName(name2, k)] = cfg.env[k];
+      cfg.env[k] = "${" + envVarName(name2, k) + "}";
     }
-    for (const k3 of Object.keys(cfg.headers ?? {})) {
-      secrets[envVarName(name2, k3)] = cfg.headers[k3];
-      cfg.headers[k3] = "${" + envVarName(name2, k3) + "}";
+    for (const k of Object.keys(cfg.headers ?? {})) {
+      secrets[envVarName(name2, k)] = cfg.headers[k];
+      cfg.headers[k] = "${" + envVarName(name2, k) + "}";
     }
     delete cfg.oauth;
     if (JSON.stringify(existing.mcpServers[name2]) === JSON.stringify(cfg)) continue;
-    step(`${p2.name}: .mcp.json \u2190 ${name2} (${cfg.type ?? "stdio"})`);
+    step(`${p.name}: .mcp.json \u2190 ${name2} (${cfg.type ?? "stdio"})`);
     existing.mcpServers[name2] = cfg;
   }
   if (!check) {
@@ -7963,19 +8758,19 @@ function adoptMcp(repo, p2, ws, check = false, show = false) {
     writeFileSync13(sl, dumps(sd));
   }
   if (Object.keys(secrets).length) {
-    warn(`${p2.name}: values replaced by \${VAR} placeholders \u2014 store them: cs secrets set global ${Object.keys(secrets).map((k3) => `${k3}=\u2026`).join(" ")}  (full values: cs adopt mcp ${p2.name} --show)`);
+    warn(`${p.name}: values replaced by \${VAR} placeholders \u2014 store them: cs secrets set global ${Object.keys(secrets).map((k) => `${k}=\u2026`).join(" ")}  (full values: cs adopt mcp ${p.name} --show)`);
   }
   return Object.keys(found).length;
 }
-function runAdopt(repo, m2, man, what, names, check, show) {
-  const ws = workspace(man, m2);
+function runAdopt(repo, m, man, what, names, check, show) {
+  const ws = workspace(man, m);
   if (!names.length) throw new Error("cs: adopt needs a project name (or --all)");
-  for (const n of names) {
-    const p2 = man.projects[n];
-    if (!p2) throw new Error(`cs: unknown project '${n}'`);
-    if (what === "memory") adoptMemory(repo, p2, ws, m2.name, check);
-    else if (what === "project") adoptProjectFiles(repo, p2, ws, check);
-    else if (what === "mcp") adoptMcp(repo, p2, ws, check, show);
+  for (const n3 of names) {
+    const p = man.projects[n3];
+    if (!p) throw new Error(`cs: unknown project '${n3}'`);
+    if (what === "memory") adoptMemory(repo, p, ws, m.name, check);
+    else if (what === "project") adoptProjectFiles(repo, p, ws, check);
+    else if (what === "mcp") adoptMcp(repo, p, ws, check, show);
     else throw new Error(`cs: unknown adopt target '${what}'`);
   }
 }
@@ -7988,11 +8783,11 @@ var init_adopt = __esm({
     init_link();
     init_jsonmerge();
     init_ui();
-    claudeProjectKey = (p2) => p2.replace(/[^A-Za-z0-9]/g, "-");
-    unionLines = (a, b3) => {
-      const lines = a.split("\n").filter((x2, i, arr) => !(i === arr.length - 1 && x2 === ""));
+    claudeProjectKey = (p) => p.replace(/[^A-Za-z0-9]/g, "-");
+    unionLines = (a2, b) => {
+      const lines = a2.split("\n").filter((x, i2, arr) => !(i2 === arr.length - 1 && x === ""));
       const seen = new Set(lines);
-      for (const l2 of b3.split("\n")) if (l2 && !seen.has(l2)) {
+      for (const l2 of b.split("\n")) if (l2 && !seen.has(l2)) {
         lines.push(l2);
         seen.add(l2);
       }
@@ -8024,13 +8819,13 @@ function tryLock(label) {
     return void 0;
   }
 }
-function gitSync(repo, label, machine, o2 = {}) {
+function gitSync(repo, label, machine, o = {}) {
   if (!isRepo(repo)) {
     warn(`${label}: not a git repo (${contract(repo)})`);
     return false;
   }
-  const timeout = o2.timeout ?? 20;
-  if (existsSync18(marker(label)) && !o2.resolve) {
+  const timeout = o.timeout ?? 20;
+  if (existsSync18(marker(label)) && !o.resolve) {
     fail(`${label}: sync blocked by an earlier conflict \u2014 ${readFileSync15(marker(label), "utf8").trim()}`);
     return false;
   }
@@ -8040,11 +8835,11 @@ function gitSync(repo, label, machine, o2 = {}) {
     return true;
   }
   try {
-    if (!o2.pullOnly && isDirty(repo)) {
-      const n = dirtyCount(repo);
+    if (!o.pullOnly && isDirty(repo)) {
+      const n3 = dirtyCount(repo);
       git(["add", "-A"], repo);
-      commit(repo, `sync(${machine}): ${n} file(s) ${(/* @__PURE__ */ new Date()).toISOString().slice(0, 16).replace("T", " ")}`, "cs", `cs@${machine}`);
-      step(`${label}: committed ${n} change(s)`);
+      commit(repo, `sync(${machine}): ${n3} file(s) ${(/* @__PURE__ */ new Date()).toISOString().slice(0, 16).replace("T", " ")}`, "cs", `cs@${machine}`);
+      step(`${label}: committed ${n3} change(s)`);
     }
     if (!remoteUrl(repo)) {
       ok(`${label}: no remote configured; local only`);
@@ -8063,19 +8858,19 @@ function gitSync(repo, label, machine, o2 = {}) {
     }
     if (!out(["rev-parse", "--abbrev-ref", "@{upstream}"], repo)) {
       if (out(["rev-parse", "--verify", "-q", `origin/${branch}`], repo)) git(["branch", "-q", `--set-upstream-to=origin/${branch}`, branch], repo);
-      else if (!o2.pullOnly) {
+      else if (!o.pullOnly) {
         git(["push", "-q", "-u", "origin", branch], repo, { timeout });
         ok(`${label}: pushed new branch ${branch}`);
         return true;
       } else return true;
     }
     let [ahead, behind] = aheadBehind(repo) ?? [0, 0];
-    if (behind && !o2.pushOnly) {
+    if (behind && !o.pushOnly) {
       if (!ahead) {
         git(["merge", "-q", "--ff-only", "@{upstream}"], repo);
         step(`${label}: fast-forwarded ${behind} commit(s)`);
       } else {
-        const args = ["rebase", "-q", ...o2.resolve === "ours" ? ["-X", "theirs"] : o2.resolve === "theirs" ? ["-X", "ours"] : [], "@{upstream}"];
+        const args = ["rebase", "-q", ...o.resolve === "ours" ? ["-X", "theirs"] : o.resolve === "theirs" ? ["-X", "ours"] : [], "@{upstream}"];
         const r2 = git(args, repo, { check: false });
         if (r2.code !== 0) {
           const conflicts = out(["diff", "--name-only", "--diff-filter=U"], repo).split("\n").filter(Boolean).join(", ");
@@ -8089,14 +8884,14 @@ function gitSync(repo, label, machine, o2 = {}) {
       }
     }
     if (existsSync18(marker(label))) unlinkSync5(marker(label));
-    if (!o2.pullOnly) {
+    if (!o.pullOnly) {
       const ab = aheadBehind(repo);
       if (ab && ab[0]) {
         const pr = git(["push", "-q", "origin", branch], repo, { check: false, timeout });
         if (pr.code !== 0) {
           warn(`${label}: push rejected, retrying once`);
           unlock(label, fd);
-          return gitSync(repo, label, machine, o2);
+          return gitSync(repo, label, machine, o);
         }
         ok(`${label}: pushed ${ab[0]} commit(s)`);
       }
@@ -8110,28 +8905,28 @@ function gitSync(repo, label, machine, o2 = {}) {
     }
   }
 }
-function runSync(repo, m2, man, o2 = {}) {
-  const ws = workspace(man, m2);
+function runSync(repo, m, man, o = {}) {
+  const ws = workspace(man, m);
   let rc = 0;
-  if (o2.debounce) {
+  if (o.debounce) {
     const last = join19(stateDir(), "last-config");
-    if (existsSync18(last) && Date.now() - statSync5(last).mtimeMs < o2.debounce * 1e3) return 0;
+    if (existsSync18(last) && Date.now() - statSync5(last).mtimeMs < o.debounce * 1e3) return 0;
   }
   const before = out(["rev-parse", "HEAD"], repo);
-  if (!o2.pullOnly) {
-    for (const p2 of selectedProjects(man, m2)) if (checkouts(p2, ws).length) syncProject(repo, p2, ws);
+  if (!o.pullOnly) {
+    for (const p of selectedProjects(man, m)) if (checkouts(p, ws).length) syncProject(repo, p, ws);
   }
-  if (!gitSync(repo, "config", m2.name, o2)) rc = 2;
+  if (!gitSync(repo, "config", m.name, o)) rc = 2;
   const after = out(["rev-parse", "HEAD"], repo);
-  if (after !== before || o2.pullOnly) {
+  if (after !== before || o.pullOnly) {
     const changed = before ? out(["diff", "--name-only", before, after], repo) : "";
-    if (o2.pullOnly || changed.split("\n").some((x2) => x2.startsWith("claude/") || x2.startsWith("projects.toml") || x2.startsWith("plans/"))) runApply(repo, m2, man);
-    runLink(repo, m2, loadManifest(repo));
+    if (o.pullOnly || changed.split("\n").some((x) => x.startsWith("claude/") || x.startsWith("projects.toml") || x.startsWith("plans/"))) runApply(repo, m, man);
+    runLink(repo, m, loadManifest(repo));
   }
-  if (o2.projects !== false && !o2.pullOnly) {
-    for (const p2 of selectedProjects(man, m2)) if (p2.kind === "synced") {
-      const root = checkoutRoot(p2, ws);
-      if (existsSync18(root) && isRepo(root) && !gitSync(root, p2.name, m2.name, { timeout: o2.timeout })) rc = 2;
+  if (o.projects !== false && !o.pullOnly) {
+    for (const p of selectedProjects(man, m)) if (p.kind === "synced") {
+      const root = checkoutRoot(p, ws);
+      if (existsSync18(root) && isRepo(root) && !gitSync(root, p.name, m.name, { timeout: o.timeout })) rc = 2;
     }
   }
   return rc;
@@ -8187,38 +8982,38 @@ function repoState(path, fetch2) {
   if (!bits.length) bits.push(green("clean"));
   return [branch, bits.join("  "), attention];
 }
-function runStatus(repo, m2, man, fetch2 = false, showAll = false) {
-  const ws = workspace(man, m2);
-  info(`${bold(m2.name)}  ${dim("profiles")} ${m2.profiles.join(", ")}  ${dim("workspace")} ${contract(ws)}`);
+function runStatus(repo, m, man, fetch2 = false, showAll = false) {
+  const ws = workspace(man, m);
+  info(`${bold(m.name)}  ${dim("profiles")} ${m.profiles.join(", ")}  ${dim("workspace")} ${contract(ws)}`);
   const [branch, state] = repoState(repo, fetch2);
   const mk = join20(stateDir(), "blocked-config");
   table([[bold("config repo"), branch, state + (existsSync19(mk) ? "  " + red("BLOCKED: " + readFileSync16(mk, "utf8").trim()) : "")]]);
   let rc = 0;
   const rows = [];
   const known = /* @__PURE__ */ new Set();
-  for (const p2 of Object.values(man.projects)) {
-    known.add(p2.path || p2.name);
-    const sel = selected(p2, m2);
+  for (const p of Object.values(man.projects)) {
+    known.add(p.path || p.name);
+    const sel = selected(p, m);
     if (!sel && !showAll) continue;
-    const root = checkoutRoot(p2, ws);
-    const kind = dim(p2.kind + (p2.layout === "worktrees" ? " \u2442" : ""));
+    const root = checkoutRoot(p, ws);
+    const kind = dim(p.kind + (p.layout === "worktrees" ? " \u2442" : ""));
     if (!sel) {
-      rows.push([p2.name, kind, "", dim("skipped (profile)")]);
+      rows.push([p.name, kind, "", dim("skipped (profile)")]);
       continue;
     }
     if (!existsSync19(root)) {
-      rows.push([p2.name, kind, "", red("missing") + dim("  cs clone")]);
+      rows.push([p.name, kind, "", red("missing") + dim("  cs clone")]);
       rc = 1;
       continue;
     }
-    if (p2.kind === "git" && isRepo(root)) {
-      let [b3, s, att] = repoState(root, fetch2);
+    if (p.kind === "git" && isRepo(root)) {
+      let [b, s, att] = repoState(root, fetch2);
       const url = remoteUrl(root);
-      if (p2.url && canonicalGithub(url) !== canonicalGithub(p2.url)) {
+      if (p.url && canonicalGithub(url) !== canonicalGithub(p.url)) {
         s += "  " + red(`remote\u2260manifest (${url})`);
         att = true;
       }
-      const ident2 = p2.identity ? man.identities[p2.identity] : void 0;
+      const ident2 = p.identity ? man.identities[p.identity] : void 0;
       const email2 = configGet(root, "user.email");
       if (ident2 && email2 && email2 !== ident2.email) {
         s += "  " + red(`identity ${email2}`);
@@ -8227,13 +9022,13 @@ function runStatus(repo, m2, man, fetch2 = false, showAll = false) {
         s += "  " + red("identity unset");
         att = true;
       }
-      if (p2.layout === "worktrees") s += "  " + dim(`${worktrees(root).length} worktrees`);
+      if (p.layout === "worktrees") s += "  " + dim(`${worktrees(root).length} worktrees`);
       if (att) rc = 1;
-      rows.push([p2.name, kind, b3, s]);
-    } else rows.push([p2.name, kind, "", green("present")]);
+      rows.push([p.name, kind, b, s]);
+    } else rows.push([p.name, kind, "", green("present")]);
   }
   table(rows, ["project", "kind", "branch", "state"]);
-  const unreg = existsSync19(ws) ? readdirSync8(ws, { withFileTypes: true }).filter((d3) => d3.isDirectory() && !d3.name.startsWith(".") && !known.has(d3.name)).map((d3) => d3.name).sort() : [];
+  const unreg = existsSync19(ws) ? readdirSync8(ws, { withFileTypes: true }).filter((d) => d.isDirectory() && !d.name.startsWith(".") && !known.has(d.name)).map((d) => d.name).sort() : [];
   if (unreg.length) warn("unregistered under workspace: " + unreg.join(", ") + dim("   (cs add <path>)"));
   return rc;
 }
@@ -8274,11 +9069,11 @@ init_git();
 import { existsSync as existsSync20, readdirSync as readdirSync9 } from "node:fs";
 import { join as join21 } from "node:path";
 var pkg = JSON.parse((await import("node:fs")).readFileSync(join21(toolRoot(), "package.json"), "utf8"));
-var csv = (s) => s ? s.split(",").map((x2) => x2.trim()).filter(Boolean) : [];
+var csv = (s) => s ? s.split(",").map((x) => x.trim()).filter(Boolean) : [];
 function ctx() {
-  const m2 = loadMachine();
-  const repo = repoDir(m2);
-  return { repo, m: m2, man: loadManifest(repo) };
+  const m = loadMachine();
+  const repo = repoDir(m);
+  return { repo, m, man: loadManifest(repo) };
 }
 var program2 = new Command("cs").description("claude-share: projects + Claude Code setup in sync across machines").version(pkg.version, "-V, --version").option("-q, --quiet", "only warnings/errors").configureHelp({ sortSubcommands: false }).showSuggestionAfterError(true).enablePositionalOptions().addHelpText("after", `
 examples:
@@ -8289,125 +9084,125 @@ examples:
   cs identity add acme --owner acme-org --name "Me" --email me@acme.com
   cs secrets set global API_TOKEN=\u2026        encrypted, available to Claude's MCP servers as \${API_TOKEN}`);
 program2.hook("preAction", (_root, cmd) => setQuiet(Boolean(program2.opts().quiet || cmd.opts().quiet)));
-program2.command("init").description("set this machine up (wizard) \u2014 or --repo <url> / --owner <owner> for scripts").option("--repo <url>", "existing config repo: git URL or local path").option("--owner <owner>", "GitHub user/org to create claude-share-config under").option("--key <path>", "ssh key for cloning --repo (instead of the master key)").option("--non-interactive").option("--name <name>", "machine name").option("--profiles <list>", "comma list").option("--workspace <path>").option("--skip <phases>", "comma list: deps,repo,ssh,apply,link,secrets,hooks,doctor").option("--install-deps").action(async (o2) => {
+program2.command("init").description("set this machine up (wizard) \u2014 or --repo <url> / --owner <owner> for scripts").option("--repo <url>", "existing config repo: git URL or local path").option("--owner <owner>", "GitHub user/org to create claude-share-config under").option("--key <path>", "ssh key for cloning --repo (instead of the master key)").option("--non-interactive").option("--name <name>", "machine name").option("--profiles <list>", "comma list").option("--workspace <path>").option("--skip <phases>", "comma list: deps,repo,ssh,apply,link,secrets,hooks,doctor").option("--install-deps").action(async (o) => {
   const { init: init3 } = await Promise.resolve().then(() => (init_init(), init_exports));
-  process.exitCode = await init3({ repo: o2.repo, owner: o2.owner, key: o2.key, name: o2.name, profiles: csv(o2.profiles), workspace: o2.workspace, skip: csv(o2.skip), installDeps: o2.installDeps, interactive: !o2.nonInteractive && (isTTY() || isScripted()) });
+  process.exitCode = await init3({ repo: o.repo, owner: o.owner, key: o.key, name: o.name, profiles: csv(o.profiles), workspace: o.workspace, skip: csv(o.skip), installDeps: o.installDeps, interactive: !o.nonInteractive && (isTTY() || isScripted()) });
 });
 var config = program2.command("config").description("manage the config repo");
-config.command("new <path>").description("create a config repo skeleton").action(async (p2) => {
+config.command("new <path>").description("create a config repo skeleton").action(async (p) => {
   const { newConfigRepo: newConfigRepo2 } = await Promise.resolve().then(() => (init_init(), init_exports));
   const { expand: expand2, contract: contract3 } = await Promise.resolve().then(() => (init_paths(), paths_exports));
-  const d3 = newConfigRepo2(expand2(p2));
-  ok(`config repo created at ${contract3(d3)} \u2014 edit projects.toml, then cs init --repo ${contract3(d3)}`);
+  const d = newConfigRepo2(expand2(p));
+  ok(`config repo created at ${contract3(d)} \u2014 edit projects.toml, then cs init --repo ${contract3(d)}`);
 });
 config.command("path").description("print the config repo path").action(() => console.log(repoDir(loadMachine())));
-program2.command("apply").description("render ~/.claude + git identity includes from the config repo").option("--check", "report drift, change nothing").action(async (o2) => {
-  const { repo, m: m2, man } = ctx();
+program2.command("apply").description("render ~/.claude + git identity includes from the config repo").option("--check", "report drift, change nothing").action(async (o) => {
+  const { repo, m, man } = ctx();
   const { runApply: runApply2 } = await Promise.resolve().then(() => (init_apply(), apply_exports));
-  process.exitCode = o2.check && runApply2(repo, m2, man, true).length ? 1 : 0;
+  process.exitCode = o.check && runApply2(repo, m, man, true).length ? 1 : 0;
 });
-program2.command("link [names...]").description("sync Claude files between side-store and project checkouts").option("--check").action(async (names, o2) => {
-  const { repo, m: m2, man } = ctx();
+program2.command("link [names...]").description("sync Claude files between side-store and project checkouts").option("--check").action(async (names, o) => {
+  const { repo, m, man } = ctx();
   const { runLink: runLink2 } = await Promise.resolve().then(() => (init_link(), link_exports));
-  process.exitCode = o2.check && runLink2(repo, m2, man, names, true) ? 1 : 0;
+  process.exitCode = o.check && runLink2(repo, m, man, names, true) ? 1 : 0;
 });
-program2.command("adopt <what> [names...]").description("pull existing local state into the config repo (memory | project | mcp)").option("--all").option("--check").option("--show", "(mcp) print the secret values").action(async (what, names, o2) => {
-  const { repo, m: m2, man } = ctx();
+program2.command("adopt <what> [names...]").description("pull existing local state into the config repo (memory | project | mcp)").option("--all").option("--check").option("--show", "(mcp) print the secret values").action(async (what, names, o) => {
+  const { repo, m, man } = ctx();
   const { runAdopt: runAdopt2 } = await Promise.resolve().then(() => (init_adopt(), adopt_exports));
   const { selectedProjects: selectedProjects2 } = await Promise.resolve().then(() => (init_manifest(), manifest_exports));
-  runAdopt2(repo, m2, man, what, names.length ? names : o2.all ? selectedProjects2(man, m2).map((p2) => p2.name) : [], o2.check, o2.show);
+  runAdopt2(repo, m, man, what, names.length ? names : o.all ? selectedProjects2(man, m).map((p) => p.name) : [], o.check, o.show);
 });
-program2.command("sync").description("commit / pull --rebase / push the config repo (+ synced projects)").option("--pull-only").option("--push-only").option("--timeout <s>", "", "20").option("--resolve <ours|theirs>").option("--no-projects").option("--debounce <s>", "skip if a sync ran less than N seconds ago", "0").option("-q, --quiet").action(async (o2) => {
-  const { repo, m: m2, man } = ctx();
+program2.command("sync").description("commit / pull --rebase / push the config repo (+ synced projects)").option("--pull-only").option("--push-only").option("--timeout <s>", "", "20").option("--resolve <ours|theirs>").option("--no-projects").option("--debounce <s>", "skip if a sync ran less than N seconds ago", "0").option("-q, --quiet").action(async (o) => {
+  const { repo, m, man } = ctx();
   const { runSync: runSync2 } = await Promise.resolve().then(() => (init_sync(), sync_exports));
-  process.exitCode = runSync2(repo, m2, man, { pullOnly: o2.pullOnly, pushOnly: o2.pushOnly, timeout: +o2.timeout, resolve: o2.resolve, projects: o2.projects, debounce: +o2.debounce });
+  process.exitCode = runSync2(repo, m, man, { pullOnly: o.pullOnly, pushOnly: o.pushOnly, timeout: +o.timeout, resolve: o.resolve, projects: o.projects, debounce: +o.debounce });
 });
-program2.command("status").description("config repo + projects overview").option("--fetch").option("--all").action(async (o2) => {
-  const { repo, m: m2, man } = ctx();
+program2.command("status").description("config repo + projects overview").option("--fetch").option("--all").action(async (o) => {
+  const { repo, m, man } = ctx();
   const { runStatus: runStatus2 } = await Promise.resolve().then(() => (init_status(), status_exports));
-  process.exitCode = runStatus2(repo, m2, man, o2.fetch, o2.all);
+  process.exitCode = runStatus2(repo, m, man, o.fetch, o.all);
 });
-program2.command("doctor").description("environment and consistency checks").option("--fix").action(async (o2) => {
-  const { repo, m: m2, man } = ctx();
+program2.command("doctor").description("environment and consistency checks").option("--fix").action(async (o) => {
+  const { repo, m, man } = ctx();
   const { runDoctor: runDoctor2 } = await Promise.resolve().then(() => (init_doctor(), doctor_exports));
-  process.exitCode = runDoctor2(repo, m2, man, o2.fix);
+  process.exitCode = runDoctor2(repo, m, man, o.fix);
 });
-program2.command("add [path]").description("register a project (default: cwd) in projects.toml").option("--kind <kind>").option("--profiles <list>").option("--identity <id>").option("--name <name>").option("--description <text>", "", "").option("--no-commit").action(async (p2, o2) => {
-  const { repo, m: m2, man } = ctx();
+program2.command("add [path]").description("register a project (default: cwd) in projects.toml").option("--kind <kind>").option("--profiles <list>").option("--identity <id>").option("--name <name>").option("--description <text>", "", "").option("--no-commit").action(async (p, o) => {
+  const { repo, m, man } = ctx();
   const { add: add3 } = await Promise.resolve().then(() => (init_projects(), projects_exports));
-  add3(repo, m2, man, p2, { kind: o2.kind, profiles: csv(o2.profiles), identity: o2.identity, name: o2.name, description: o2.description, noCommit: !o2.commit });
+  add3(repo, m, man, p, { kind: o.kind, profiles: csv(o.profiles), identity: o.identity, name: o.name, description: o.description, noCommit: !o.commit });
 });
-program2.command("clone [names...]").description("clone selected projects that are missing on this machine").option("--dry-run").action(async (names, o2) => {
-  const { repo, m: m2, man } = ctx();
+program2.command("clone [names...]").description("clone selected projects that are missing on this machine").option("--dry-run").action(async (names, o) => {
+  const { repo, m, man } = ctx();
   const { clone: clone2 } = await Promise.resolve().then(() => (init_projects(), projects_exports));
-  process.exitCode = clone2(repo, m2, man, names, o2.dryRun);
+  process.exitCode = await clone2(repo, m, man, names, o.dryRun);
 });
-program2.command("new <name>").description("create a brand-new project: dir, git, GitHub repo, first push, register, link").option("--identity <id>", "identity id (or --<id> / --<github-owner>, e.g. --personal)").option("--profiles <list>").option("-d, --description <text>", "", "").option("--public").option("--no-github").option("--synced").action(async (name2, o2) => {
-  const { repo, m: m2, man } = ctx();
-  let id = o2.identity;
-  if (!id) throw new Error(`cs: which identity? use one of ${Object.keys(man.identities).map((i) => "--" + i).join(", ")} (or --identity <id>)`);
+program2.command("new <name>").description("create a brand-new project: dir, git, GitHub repo, first push, register, link").option("--identity <id>", "identity id (or --<id> / --<github-owner>, e.g. --personal)").option("--profiles <list>").option("-d, --description <text>", "", "").option("--public").option("--no-github").option("--synced").action(async (name2, o) => {
+  const { repo, m, man } = ctx();
+  let id = o.identity;
+  if (!id) throw new Error(`cs: which identity? use one of ${Object.keys(man.identities).map((i2) => "--" + i2).join(", ")} (or --identity <id>)`);
   const ident2 = man.identities[id] ?? identityByFlag(man, id);
   if (!ident2) throw new Error(`cs: unknown identity '${id}'`);
-  const profiles = csv(o2.profiles).length ? csv(o2.profiles) : m2.profiles.includes(ident2.id) ? [ident2.id] : [...m2.profiles];
+  const profiles = csv(o.profiles).length ? csv(o.profiles) : m.profiles.includes(ident2.id) ? [ident2.id] : [...m.profiles];
   const { create: create3 } = await Promise.resolve().then(() => (init_projects(), projects_exports));
-  process.exitCode = await create3(repo, m2, man, name2, ident2, { profiles, description: o2.description, priv: !o2.public, noGithub: !o2.github, kind: o2.synced ? "synced" : "git" });
+  process.exitCode = await create3(repo, m, man, name2, ident2, { profiles, description: o.description, priv: !o.public, noGithub: !o.github, kind: o.synced ? "synced" : "git" });
 });
 var token = program2.command("token").description("GitHub API tokens per owner (local, never synced)");
-token.command("set <owner>").action(async (o2) => {
+token.command("set <owner>").action(async (o) => {
   const gh = await Promise.resolve().then(() => (init_github(), github_exports));
-  const f = await gh.setToken(o2);
+  const f = await gh.setToken(o);
   ok(`token stored in ${(await Promise.resolve().then(() => (init_paths(), paths_exports))).contract(f)} (0600, not synced)`);
 });
-token.command("check <owner>").action(async (o2) => {
+token.command("check <owner>").action(async (o) => {
   const gh = await Promise.resolve().then(() => (init_github(), github_exports));
-  const t = gh.getToken(o2);
-  if (!t) {
-    fail(`no token for '${o2}'`);
+  const t2 = gh.getToken(o);
+  if (!t2) {
+    fail(`no token for '${o}'`);
     process.exitCode = 1;
     return;
   }
   try {
-    ok(`token for '${o2}' authenticates as ${await gh.whoami(t)}`);
-  } catch (e2) {
-    fail(e2.message);
+    ok(`token for '${o}' authenticates as ${await gh.whoami(t2)}`);
+  } catch (e) {
+    fail(e.message);
     process.exitCode = 1;
   }
 });
-token.command("rm <owner>").action(async (o2) => {
-  (await Promise.resolve().then(() => (init_github(), github_exports))).rmToken(o2);
+token.command("rm <owner>").action(async (o) => {
+  (await Promise.resolve().then(() => (init_github(), github_exports))).rmToken(o);
   ok("removed");
 });
 token.command("ls").action(() => {
-  const d3 = join21(csConfigDir(), "tokens");
-  if (existsSync20(d3)) for (const f of readdirSync9(d3)) console.log(f);
+  const d = join21(csConfigDir(), "tokens");
+  if (existsSync20(d)) for (const f of readdirSync9(d)) console.log(f);
 });
 var ident = program2.command("identity").description("git identities (who commits, which key, which GitHub owner)");
 ident.command("ls", { isDefault: true }).description("list identities").action(async () => {
   const { man } = ctx();
   (await Promise.resolve().then(() => (init_identity(), identity_exports))).ls(man);
 });
-ident.command("add <id>").requiredOption("--owner <owner>", "GitHub user or org").requiredOption("--name <name>").requiredOption("--email <email>").option("--key <path>").option("--no-token").action(async (id, o2) => {
-  const { repo, m: m2, man } = ctx();
-  process.exitCode = await (await Promise.resolve().then(() => (init_identity(), identity_exports))).add(repo, m2, man, id, { owner: o2.owner, name: o2.name, email: o2.email, key: o2.key, noToken: !o2.token });
+ident.command("add <id>").requiredOption("--owner <owner>", "GitHub user or org").requiredOption("--name <name>").requiredOption("--email <email>").option("--key <path>").option("--no-token").action(async (id, o) => {
+  const { repo, m, man } = ctx();
+  process.exitCode = await (await Promise.resolve().then(() => (init_identity(), identity_exports))).add(repo, m, man, id, { owner: o.owner, name: o.name, email: o.email, key: o.key, noToken: !o.token });
 });
-ident.command("rename <old> <new>").action(async (a, b3) => {
-  const { repo, m: m2, man } = ctx();
-  process.exitCode = (await Promise.resolve().then(() => (init_identity(), identity_exports))).rename(repo, m2, man, a, b3);
+ident.command("rename <old> <new>").action(async (a2, b) => {
+  const { repo, m, man } = ctx();
+  process.exitCode = (await Promise.resolve().then(() => (init_identity(), identity_exports))).rename(repo, m, man, a2, b);
 });
 program2.command("ssh [action]").description("per-machine SSH keys: setup | check | master").action(async (action = "check") => {
-  const { repo, m: m2, man } = ctx();
+  const { repo, m, man } = ctx();
   if (action === "master") {
     process.exitCode = await (await Promise.resolve().then(() => (init_master(), master_exports))).setup(repo, isTTY());
     return;
   }
-  process.exitCode = await (await Promise.resolve().then(() => (init_ssh(), ssh_exports))).setup(repo, m2, man, action === "check");
+  process.exitCode = await (await Promise.resolve().then(() => (init_ssh(), ssh_exports))).setup(repo, m, man, action === "check");
 });
-program2.command("deps").description("check (or install) prerequisites").option("--install").action(async (o2) => {
-  process.exitCode = await (await Promise.resolve().then(() => (init_deps(), deps_exports))).runDeps(o2.install);
+program2.command("deps").description("check (or install) prerequisites").option("--install").action(async (o) => {
+  process.exitCode = await (await Promise.resolve().then(() => (init_deps(), deps_exports))).runDeps(o.install);
 });
-program2.command("hooks [action]").description("automatic sync: install | remove | status").option("--no-timer").action(async (action = "status", o2) => {
-  const { repo, m: m2 } = ctx();
-  process.exitCode = (await Promise.resolve().then(() => (init_hooks(), hooks_exports))).runHooks(repo, m2, action, o2.timer);
+program2.command("hooks [action]").description("automatic sync: install | remove | status").option("--no-timer").action(async (action = "status", o) => {
+  const { repo, m } = ctx();
+  process.exitCode = (await Promise.resolve().then(() => (init_hooks(), hooks_exports))).runHooks(repo, m, action, o.timer);
 });
 program2.command("self-update").description("git pull the cs tool itself").action(() => {
   const root = toolRoot();
@@ -8427,82 +9222,82 @@ program2.command("self-update").description("git pull the cs tool itself").actio
   ok(`cs at ${after}${before === after ? "" : ` (was ${before})`}`);
 });
 var sec = program2.command("secrets").description("encrypted secrets in the config repo (sops + age)").enablePositionalOptions();
-var S3 = () => Promise.resolve().then(() => (init_secretscmd(), secretscmd_exports));
+var S = () => Promise.resolve().then(() => (init_secretscmd(), secretscmd_exports));
 sec.command("init").action(async () => {
-  const { repo, m: m2 } = ctx();
-  await (await S3()).init(repo, m2, isTTY());
+  const { repo, m } = ctx();
+  await (await S()).init(repo, m, isTTY());
 });
 sec.command("status").action(async () => {
-  const { repo, m: m2 } = ctx();
-  await (await S3()).status(repo, m2);
+  const { repo, m } = ctx();
+  await (await S()).status(repo, m);
 });
-sec.command("edit <name>").description("global | <project>").action(async (n) => {
-  const { repo, m: m2 } = ctx();
-  await (await S3()).edit(repo, m2, n);
+sec.command("edit <name>").description("global | <project>").action(async (n3) => {
+  const { repo, m } = ctx();
+  await (await S()).edit(repo, m, n3);
 });
-sec.command("set <name> <pairs...>").description("KEY=VALUE \u2026").action(async (n, pairs) => {
-  const { repo, m: m2 } = ctx();
-  await (await S3()).setValues(repo, m2, n, pairs);
+sec.command("set <name> <pairs...>").description("KEY=VALUE \u2026").action(async (n3, pairs) => {
+  const { repo, m } = ctx();
+  await (await S()).setValues(repo, m, n3, pairs);
 });
-sec.command("unset <name> <keys...>").action(async (n, keys) => {
-  const { repo, m: m2 } = ctx();
-  await (await S3()).unsetValues(repo, m2, n, keys);
+sec.command("unset <name> <keys...>").action(async (n3, keys) => {
+  const { repo, m } = ctx();
+  await (await S()).unsetValues(repo, m, n3, keys);
 });
-sec.command("get <name> [key]").option("--show").action(async (n, k3, o2) => {
-  const { repo, m: m2 } = ctx();
-  process.exitCode = await (await S3()).get(repo, m2, n, k3, o2.show);
+sec.command("get <name> [key]").option("--show").action(async (n3, k, o) => {
+  const { repo, m } = ctx();
+  process.exitCode = await (await S()).get(repo, m, n3, k, o.show);
 });
-sec.command("pull <project>").option("--force").action(async (p2, o2) => {
-  const { repo, m: m2, man } = ctx();
-  process.exitCode = await (await S3()).pull(repo, m2, man, p2, o2.force);
+sec.command("pull <project>").option("--force").action(async (p, o) => {
+  const { repo, m, man } = ctx();
+  process.exitCode = await (await S()).pull(repo, m, man, p, o.force);
 });
-sec.command("push <project>").action(async (p2) => {
-  const { repo, m: m2, man } = ctx();
-  process.exitCode = await (await S3()).push(repo, m2, man, p2);
+sec.command("push <project>").action(async (p) => {
+  const { repo, m, man } = ctx();
+  process.exitCode = await (await S()).push(repo, m, man, p);
 });
-sec.command("diff <project>").action(async (p2) => {
-  const { repo, m: m2, man } = ctx();
-  process.exitCode = await (await S3()).diff(repo, m2, man, p2);
+sec.command("diff <project>").action(async (p) => {
+  const { repo, m, man } = ctx();
+  process.exitCode = await (await S()).diff(repo, m, man, p);
 });
-sec.command("exec [command...]").description("run a command with global + project secrets in its environment").option("-p, --project <name>").passThroughOptions().allowUnknownOption().action(async (command, o2) => {
-  const { repo, m: m2, man } = ctx();
+sec.command("exec [command...]").description("run a command with global + project secrets in its environment").option("-p, --project <name>").passThroughOptions().allowUnknownOption().action(async (command, o) => {
+  const { repo, m, man } = ctx();
   const cmd = command[0] === "--" ? command.slice(1) : command;
-  process.exitCode = await (await S3()).exec(repo, m2, man, o2.project, cmd);
+  process.exitCode = await (await S()).exec(repo, m, man, o.project, cmd);
 });
 sec.command("recovery").action(async () => {
-  const { repo, m: m2 } = ctx();
-  (await S3()).recovery(repo, m2);
+  const { repo, m } = ctx();
+  (await S()).recovery(repo, m);
 });
 program2.command("enroll <machine>").description("grant another machine access to secrets").action(async (mc) => {
-  const { repo, m: m2 } = ctx();
-  (await S3()).enroll(repo, m2, mc);
+  const { repo, m } = ctx();
+  (await S()).enroll(repo, m, mc);
 });
 program2.command("revoke <machine>").description("remove a machine's access to secrets").action(async (mc) => {
-  const { repo, m: m2 } = ctx();
-  await (await S3()).revoke(repo, m2, mc);
+  const { repo, m } = ctx();
+  await (await S()).revoke(repo, m, mc);
 });
 var proj = program2.command("project").description("project helpers");
 proj.command("id").description("print the project name for the cwd").action(() => {
-  const { m: m2, man } = ctx();
-  const p2 = projectForPath(man, m2, process.cwd());
-  if (p2) console.log(p2.name);
+  const { m, man } = ctx();
+  const p = projectForPath(man, m, process.cwd());
+  if (p) console.log(p.name);
   else process.exitCode = 1;
 });
 async function main() {
   refuseUnsupported();
-  process.stdout.on("error", (e2) => {
-    if (e2?.code === "EPIPE") process.exit(0);
-    throw e2;
+  process.stdout.on("error", (e) => {
+    if (e?.code === "EPIPE") process.exit(0);
+    throw e;
   });
   const argv = process.argv.slice(2);
   if (argv[0] === "new" && machineExists()) {
     try {
       const { man } = ctx();
-      for (let i = 1; i < argv.length; i++) {
-        const a = argv[i];
-        if (a.startsWith("--") && !a.includes("=")) {
-          const hit = identityByFlag(man, a.slice(2));
-          if (hit) argv.splice(i, 1, "--identity", hit.id);
+      for (let i2 = 1; i2 < argv.length; i2++) {
+        const a2 = argv[i2];
+        if (a2.startsWith("--") && !a2.includes("=")) {
+          const hit = identityByFlag(man, a2.slice(2));
+          if (hit) argv.splice(i2, 1, "--identity", hit.id);
         }
       }
       process.argv = [...process.argv.slice(0, 2), ...argv];
@@ -8511,9 +9306,9 @@ async function main() {
   }
   if (!argv.length) {
     if (machineExists()) {
-      const { repo, m: m2, man } = ctx();
+      const { repo, m, man } = ctx();
       const { runStatus: runStatus2 } = await Promise.resolve().then(() => (init_status(), status_exports));
-      runStatus2(repo, m2, man);
+      runStatus2(repo, m, man);
       console.log(dim("\ncs --help for commands"));
       return;
     }
@@ -8521,13 +9316,13 @@ async function main() {
   }
   try {
     await program2.parseAsync(process.argv);
-  } catch (e2) {
-    const msg = e2?.message ?? String(e2);
+  } catch (e) {
+    const msg = e?.message ?? String(e);
     if (msg.startsWith("cs: ")) {
       const [what, ...rest] = msg.slice(4).split("\n");
       error(what, rest.join("\n").trim());
       process.exitCode = 1;
-    } else throw e2;
+    } else throw e;
   }
 }
 main();

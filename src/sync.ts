@@ -29,7 +29,7 @@ export function gitSync(repo: string, label: string, machine: string, o: SyncOpt
   try {
     if (!o.pullOnly && git.isDirty(repo)) { const n = git.dirtyCount(repo); git.git(["add", "-A"], repo); git.commit(repo, `sync(${machine}): ${n} file(s) ${new Date().toISOString().slice(0, 16).replace("T", " ")}`, "cs", `cs@${machine}`); ui.step(`${label}: committed ${n} change(s)`); }
     if (!git.remoteUrl(repo)) { ui.ok(`${label}: no remote configured; local only`); return true; }
-    const f = git.git(["fetch", "-q", "--prune", "origin"], repo, { check: false, timeout });
+    const f = git.git(["fetch", "-q", "--prune", "origin"], repo, { check: false, timeout });  // fast; spinner would flicker
     if (f.code !== 0) { ui.warn(`${label}: offline or fetch timed out; will push later`); writeFileSync(join(stateDir(), `last-${label}`), "offline\n"); return true; }
     const branch = git.currentBranch(repo); if (!branch) { ui.fail(`${label}: detached HEAD; refusing to sync`); return false; }
     if (!git.out(["rev-parse", "--abbrev-ref", "@{upstream}"], repo)) {

@@ -92,11 +92,17 @@ async function machinePhase(repo: string, nm: string, profiles: string[], ws: st
       const groups: Record<string, { value: string; label: string; hint?: string }[]> = {};
       for (const p of projects) { const g = p.profiles.includes("all") ? "every machine" : p.profiles.join(", "); (groups[g] ??= []).push({ value: p.name, label: p.name, hint: p.kind === "git" ? `${p.identity} · ${p.url?.replace(/^git@github\.com:/, "").replace(/\.git$/, "")}` : p.kind }); }
       const names = new Set(projects.map((p) => p.name));
-      const picked = new Set((await ui.groupMultiselect("Which projects should this machine clone and sync?", groups, projects.map((p) => p.name))).filter((v) => names.has(v)));
+      let picked = new Set<string>(); let initial = projects.map((p) => p.name);
+      for (;;) {
+        picked = new Set((await ui.groupMultiselect("Which projects should this machine clone and sync?", groups, initial)).filter((v) => names.has(v)));
+        const lines = projects.map((p) => (picked.has(p.name) ? ui.green("✓ ") + p.name : ui.dim("○ " + p.name + "  (not on this machine)")));
+        ui.note(lines, `${picked.size} of ${projects.length} projects`);
+        if (await ui.proceed("proceed with this selection?", "Yes, continue", "Change selection")) break;
+        initial = [...picked];
+      }
       profiles = [...new Set(projects.filter((p) => picked.has(p.name)).flatMap((p) => p.profiles).filter((x) => x !== "all"))].sort();
       if (!profiles.length) profiles = ["personal"];
       exclude = projects.filter((p) => !picked.has(p.name) && (p.profiles.includes("all") || p.profiles.some((x) => profiles.includes(x)))).map((p) => p.name);
-      ui.step(`${picked.size} of ${projects.length} projects selected  ${ui.dim("profiles " + profiles.join(", ") + (exclude.length ? " · not here: " + exclude.join(", ") : ""))}`);
     } else if (interactive) profiles = (await ui.text("profiles for this machine (comma list — project groups it should get)", { default: "personal" })).split(",").map((x) => x.trim()).filter(Boolean);
     else profiles = ["personal"];
   }
@@ -154,7 +160,7 @@ async function finish(repo: string, m: Machine, interactive: boolean, skip: stri
   await ui.group("config repo", () => push(repo), { done: "nothing to push" });
   let rc = 0; if (!skip.includes("doctor")) rc = await ui.group("doctor", () => runDoctor(repo, m, man, false, true), { done: "all checks passed" });
   const ws = workspace(man, m); const missing = selectedProjects(man, m).filter((p) => p.kind !== "local" && !existsSync(checkoutRoot(p, ws)));
-  if (missing.length && interactive && (await ui.confirm(`clone ${missing.length} project(s) now (${missing.slice(0, 6).map((p) => p.name).join(", ")}${missing.length > 6 ? "…" : ""})?`, true))) await ui.group(`${missing.length} project(s) cloned`, async () => (await import("./projects.js")).clone(repo, m, man, []));
+  if (missing.length && interactive && (await ui.confirm(`clone ${missing.length} project(s) now (${missing.slice(0, 6).map((p) => p.name).join(", ")}${missing.length > 6 ? "…" : ""})?`, true))) await ui.group(`clone ${missing.length} project(s)`, async () => (await import("./projects.js")).clone(repo, m, man, []));
   ui.outro(ui.bold("done") + "  " + ui.dim("open a new terminal (claude() wrapper) · cs status · cs new <project> --<identity>"));
   return rc;
 }
