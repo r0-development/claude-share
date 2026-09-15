@@ -161,7 +161,10 @@ async function finish(repo: string, m: Machine, interactive: boolean, skip: stri
   let rc = 0; if (!skip.includes("doctor")) rc = await ui.group("doctor", () => runDoctor(repo, m, man, false, true), { done: "all checks passed" });
   const ws = workspace(man, m); const missing = selectedProjects(man, m).filter((p) => p.kind !== "local" && !existsSync(checkoutRoot(p, ws)));
   if (missing.length && interactive && (await ui.confirm(`clone ${missing.length} project(s) now (${missing.slice(0, 6).map((p) => p.name).join(", ")}${missing.length > 6 ? "…" : ""})?`, true))) await ui.group(`clone ${missing.length} project(s)`, async () => (await import("./projects.js")).clone(repo, m, man, []));
-  ui.outro(ui.bold("done") + "  " + ui.dim("open a new terminal (claude() wrapper) · cs status · cs new <project> --<identity>"));
+  const rc = platform.shellRc().split("/").pop();
+  ui.note([`${ui.bold("open a new terminal")} ${ui.dim(`(or: source ~/${rc})`)} — that gives you ${ui.bold("cs")} on PATH and the ${ui.bold("claude")} wrapper`,
+    `${ui.bold("claude")}  ${ui.dim("log in once on this machine")}`, `${ui.bold("cs status")}  ${ui.dim("dashboard")}`, `${ui.bold("cs new <project> --<identity>")}  ${ui.dim("start something")}`], "next");
+  ui.outro(ui.bold("done"));
   return rc;
 }
 export interface InitOpts { repo?: string; owner?: string; name?: string; profiles?: string[]; skip?: string[]; workspace?: string; interactive?: boolean; key?: string; installDeps?: boolean }

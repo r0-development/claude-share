@@ -52,6 +52,10 @@ if [ -d "$CS_HOME/.git" ]; then git -C "$CS_HOME" pull -q --ff-only || true; els
 mkdir -p "$BIN"; ln -sfn "$CS_HOME/bin/cs" "$BIN/cs"
 case ":$PATH:" in *":$BIN:"*) ;; *) export PATH="$BIN:$PATH";; esac
 say "installed at $CS_HOME  (cs $("$BIN/cs" --version), node $(node --version))"
+# make `cs` (and the user-local node) reachable in future shells even before `cs apply` writes its rc block
+rc="$HOME/.bashrc"; [ "$(uname)" = "Darwin" ] && rc="$HOME/.zshrc"
+grep -q 'claude-share PATH' "$rc" 2>/dev/null || printf '\n# claude-share PATH\ncase ":$PATH:" in *":$HOME/.local/bin:"*) ;; *) export PATH="$HOME/.local/bin:$PATH";; esac\n' >> "$rc"
+say "note: in THIS terminal run  export PATH=\"$BIN:\$PATH\"  — new terminals have it automatically"
 
 if [ -t 0 ]; then exec "$BIN/cs" init --install-deps "$@"
 elif ( : </dev/tty ) 2>/dev/null; then exec "$BIN/cs" init --install-deps "$@" </dev/tty
