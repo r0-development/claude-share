@@ -14,6 +14,7 @@ from contextlib import contextmanager
 from typing import Callable, Iterator, List, Optional, Sequence, Tuple
 
 _QUIET = False
+_RAIL = False          # inside intro()…outro(): every line is drawn on the guide rail
 
 
 def set_quiet(q: bool) -> None:
@@ -52,54 +53,72 @@ def _visible_len(s: str) -> int:
     return len(re.sub(r"\033\[[0-9;]*m", "", s))
 
 
-# ---------------------------------------------------------------- plain messages
+# ---------------------------------------------------------------- messages
+def _line(text: str = "", sym: str = "", file=None) -> None:
+    """Print one line; on the rail the gutter symbol (default │) sits in column 0."""
+    out = file or sys.stdout
+    if _RAIL:
+        print((sym or gray(BAR)) + ("  " + text if text else ""), file=out)
+    else:
+        print(text if not sym else sym + " " + text, file=out)
+
+
 def info(msg: str) -> None:
     if not _QUIET:
-        print(msg)
+        for l in (msg.split("\n") if msg else [""]):
+            _line(l.strip() if _RAIL else l)
 
 
 def act(msg: str) -> None:
     if not _QUIET:
-        print(cyan(ARROW) + " " + msg)
+        _line(msg, gray("◇") if _RAIL else cyan(ARROW))
 
 
 def ok(msg: str) -> None:
     if not _QUIET:
-        print(green(OK) + " " + msg)
+        _line(msg, green("◇") if _RAIL else green(OK))
+
+
+def skip(msg: str) -> None:
+    if not _QUIET:
+        _line(dim(msg), gray("○") if _RAIL else gray("-"))
 
 
 def warn(msg: str) -> None:
-    print(yellow(WARN) + " " + msg, file=sys.stderr)
+    _line(msg, yellow("▲") if _RAIL else yellow(WARN), file=sys.stderr)
 
 
 def fail(msg: str) -> None:
-    print(red(FAIL) + " " + msg, file=sys.stderr)
+    _line(msg, red("■") if _RAIL else red(FAIL), file=sys.stderr)
 
 
 def error(what: str, why: str = "", fix: str = "") -> None:
     """Three-line error: what happened · why · how to fix."""
-    print(red(FAIL) + " " + bold(what), file=sys.stderr)
+    _line(bold(what), red("■") if _RAIL else red(FAIL), file=sys.stderr)
     if why:
-        print("  " + why, file=sys.stderr)
+        _line(why, file=sys.stderr) if _RAIL else print("  " + why, file=sys.stderr)
     if fix:
-        print("  " + cyan(ARROW) + " " + fix, file=sys.stderr)
+        _line(cyan(ARROW) + " " + fix, file=sys.stderr) if _RAIL else print("  " + cyan(ARROW) + " " + fix, file=sys.stderr)
 
 
 def head(msg: str) -> None:
     if not _QUIET:
-        print(bold(msg))
+        _line(bold(msg))
 
 
 def section(msg: str) -> None:
     if not _QUIET:
-        print()
-        print(gray(BAR))
-        print(gray("◆") + "  " + bold(msg))
+        if _RAIL:
+            print(gray(BAR))
+            print(magenta("◆") + "  " + bold(msg))
+        else:
+            print()
+            print(bold(msg))
 
 
 def kv(key: str, value: str, width: int = 14) -> None:
     if not _QUIET:
-        print(f"{gray(BAR)}  {dim(key.ljust(width))} {value}")
+        _line(f"{dim(key.ljust(width))} {value}")
 
 
 def table(rows: Sequence[Sequence[str]], header: Optional[Sequence[str]] = None, indent: int = 2) -> None:
@@ -111,30 +130,34 @@ def table(rows: Sequence[Sequence[str]], header: Optional[Sequence[str]] = None,
     for r in all_rows:
         for i, c in enumerate(r):
             widths[i] = max(widths[i], _visible_len(c))
-    pad = " " * indent
+    pad = "" if _RAIL else " " * indent
 
     def fmt(r: Sequence[str]) -> str:
         cells = [(r[i] if i < len(r) else "") + " " * (widths[i] - _visible_len(r[i] if i < len(r) else "")) for i in range(ncol)]
         return pad + "  ".join(cells).rstrip()
 
     if header:
-        print(dim(fmt(header)))
+        _line(dim(fmt(header)))
     for r in rows:
-        print(fmt(r))
+        _line(fmt(r))
 
 
 # ---------------------------------------------------------------- rails (clack style)
 def intro(title: str) -> None:
+    global _RAIL
+    _RAIL = True
     if not _QUIET:
         print()
         print(gray("┌") + "  " + bold(title))
-        print(gray(BAR))
 
 
 def outro(msg: str) -> None:
+    global _RAIL
     if not _QUIET:
+        print(gray(BAR))
         print(gray("└") + "  " + msg)
         print()
+    _RAIL = False
 
 
 def step(msg: str, state: str = "ok") -> None:
@@ -142,19 +165,19 @@ def step(msg: str, state: str = "ok") -> None:
     if _QUIET:
         return
     sym = {"ok": green("◇"), "warn": yellow("▲"), "fail": red("■"), "info": gray("◇"), "skip": gray("○")}[state]
-    print(f"{sym}  {msg}")
-    print(gray(BAR))
+    _line(msg, sym) if _RAIL else print(f"{sym}  {msg}")
 
 
 def note(title: str, lines: Sequence[str], state: str = "info") -> None:
-    """Bordered box for things the user must read or copy (keys, URLs)."""
+    """Boxed block for things the user must read or copy (keys, URLs)."""
     if _QUIET:
         return
     sym = {"info": cyan("▲"), "warn": yellow("▲")}[state]
+    print(gray(BAR)) if _RAIL else None
     print(f"{sym}  {bold(title)}")
     for l in lines:
         print(f"{gray(BAR)}  {l}")
-    print(gray(BAR))
+    print(gray(BAR)) if _RAIL else None
 
 
 # ---------------------------------------------------------------- raw key input
@@ -230,7 +253,6 @@ def select(message: str, options: Sequence[Tuple[str, str]], default: int = 0) -
     _clear_lines(drawn + 1)
     print(f"{green('◇')}  {message}")
     print(f"{gray(BAR)}  {dim(options[idx][1])}")
-    print(gray(BAR))
     return values[idx]
 
 
@@ -278,7 +300,6 @@ def prompt(message: str, default: str = "", validate: Optional[Callable[[str], O
         if not err:
             print(f"{green('◇')}  {message}")
             print(f"{gray(BAR)}  {dim(v) if v else dim('(empty)')}")
-            print(gray(BAR))
             return v
         err_line = err
 
@@ -291,7 +312,6 @@ def password(message: str) -> str:
         _clear_lines(2)
         print(f"{green('◇')}  {message}")
         print(f"{gray(BAR)}  {dim('••••••••' if v else '(empty)')}")
-        print(gray(BAR))
         return v
     return getpass.getpass(f"? {message}: ")
 
@@ -323,7 +343,7 @@ def spinner(label: str) -> Iterator[Callable[[str], None]]:
     """with ui.spinner("cloning…") as update: ...; update("new label")"""
     if _QUIET or not sys.stdout.isatty():
         if not _QUIET:
-            print(f"{gray(BAR)}  {label}")
+            _line(label)
         yield lambda s: None
         return
     state = {"label": label, "stop": False}

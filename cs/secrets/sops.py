@@ -107,7 +107,7 @@ class SopsBackend:
     def init(self, repo: Path, m: Machine, interactive: bool) -> None:
         kf = key_file()
         if kf.exists():
-            ui.info(f"  [skip] age key present at {paths.contract(kf)}")
+            ui.skip(f"age key present at {paths.contract(kf)}")
         else:
             _age_keygen()
             ui.ok(f"generated age key {paths.contract(kf)} (0600, never synced)")

@@ -6,8 +6,13 @@
 set -euo pipefail
 
 REPO="${CS_REPO:-https://github.com/r0-development/claude-share.git}"
-CS_HOME="${CS_HOME:-$HOME/.local/share/claude-share}"
 BIN="$HOME/.local/bin"
+# Re-use an existing checkout when ~/.local/bin/cs already points into one (developers keep theirs in the workspace).
+if [ -z "${CS_HOME:-}" ] && [ -L "$BIN/cs" ]; then
+  existing="$(cd "$(dirname "$(readlink -f "$BIN/cs")")/.." 2>/dev/null && pwd -P || true)"
+  [ -n "$existing" ] && [ -d "$existing/.git" ] && [ -f "$existing/cs/cli.py" ] && CS_HOME="$existing"
+fi
+CS_HOME="${CS_HOME:-$HOME/.local/share/claude-share}"
 
 need() { command -v "$1" >/dev/null 2>&1; }
 missing=()

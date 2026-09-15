@@ -301,6 +301,7 @@ def wizard(install_deps: bool, skip: List[str], repo_url: str = "") -> int:
     target = paths.repo_dir()
     ui.intro("claude-share setup")
     if "deps" not in skip:
+        ui.section("prerequisites")
         deps.run(install=install_deps)
     already = target.exists() and gitutil.is_repo(target)
     if already:
@@ -340,7 +341,7 @@ def init(repo_url: str = "", owner: str = "", name: str = "", profiles: Optional
         return wizard(install_deps, skip, repo_url)
 
     # flag-driven / scripted path
-    ui.section("machine")
+    ui.intro("claude-share setup")
     if not (target.exists() and gitutil.is_repo(target)) and "repo" not in skip:
         ui.section("config repo")
         if local_src:
@@ -375,6 +376,7 @@ def init(repo_url: str = "", owner: str = "", name: str = "", profiles: Optional
     if "deps" not in skip:
         ui.section("prerequisites")
         deps.run(install=install_deps)
+    ui.section("machine")
     m = _machine(target, name, profiles or [], workspace, interactive)
     _first_identity(target, m, interactive)
     _identities_keys_tokens(target, m, interactive, skip)

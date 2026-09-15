@@ -119,7 +119,7 @@ def run(repo: Path, m: Machine, action: str, timer: bool = True) -> int:
     if install_hooks(repo, m, remove):
         ui.ok(("removed" if remove else "installed") + " Claude Code hooks in claude/settings.base.json (run `cs apply`)")
     else:
-        ui.info("  [skip] hooks already " + ("absent" if remove else "present"))
+        ui.skip(f"hooks already " + ("absent" if remove else "present"))
     if timer:
         ui.ok(install_timer(remove))
     return 0

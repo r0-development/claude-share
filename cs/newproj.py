@@ -37,7 +37,7 @@ def run(repo: Path, m: Machine, man: Manifest, name: str, ident: Identity, *, pr
         kv("remote", url or ui.dim("(none)"))
         kv("branch", branch)
     kv("profiles", ", ".join(profiles))
-    ui.info(ui.gray(ui.BAR))
+    ui.info("")
 
     # 1. directory + git init
     root.mkdir(parents=True, exist_ok=True)

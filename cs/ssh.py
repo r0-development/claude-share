@@ -31,7 +31,8 @@ def _keygen(key: Path, comment: str) -> None:
 
 def _github_user_for_key(key: Path) -> Optional[str]:
     p = subprocess.run(["ssh", "-T", "-i", str(key), "-o", "IdentitiesOnly=yes", "-o", "StrictHostKeyChecking=accept-new",
-                        "-o", "BatchMode=yes", "git@github.com"], capture_output=True, text=True, timeout=20)
+                        "-o", "BatchMode=yes", "git@github.com"], capture_output=True, text=True, timeout=20,
+                       stdin=subprocess.DEVNULL)
     m = re.search(r"Hi ([^!]+)!", p.stdout + p.stderr)
     return m.group(1) if m else None
 

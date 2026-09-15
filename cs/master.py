@@ -54,7 +54,8 @@ def is_public(url: str) -> Optional[bool]:
     if not url.startswith("https://"):
         return None
     env = dict(os.environ, GIT_TERMINAL_PROMPT="0")
-    p = subprocess.run(["git", "ls-remote", "--exit-code", url, "HEAD"], capture_output=True, text=True, env=env, timeout=30)
+    p = subprocess.run(["git", "ls-remote", "--exit-code", url, "HEAD"], capture_output=True, text=True, env=env, timeout=30,
+                       stdin=subprocess.DEVNULL)
     if p.returncode == 0:
         return True
     if "Authentication failed" in p.stderr or "could not read Username" in p.stderr or "Repository not found" in p.stderr:
@@ -64,7 +65,8 @@ def is_public(url: str) -> Optional[bool]:
 
 def can_access(ssh_url: str) -> Tuple[bool, str]:
     env = dict(os.environ, GIT_SSH_COMMAND=f"ssh -i {key_path()} -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=accept-new")
-    p = subprocess.run(["git", "ls-remote", ssh_url, "HEAD"], capture_output=True, text=True, env=env, timeout=30)
+    p = subprocess.run(["git", "ls-remote", ssh_url, "HEAD"], capture_output=True, text=True, env=env, timeout=30,
+                       stdin=subprocess.DEVNULL)
     return p.returncode == 0, p.stderr.strip().splitlines()[-1] if p.stderr.strip() else ""
 
 
