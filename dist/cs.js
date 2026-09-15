@@ -8552,7 +8552,14 @@ async function finish(repo, m, interactive, skip2) {
   const ws = workspace(man, m);
   const missing = selectedProjects(man, m).filter((p) => p.kind !== "local" && !existsSync16(checkoutRoot(p, ws)));
   if (missing.length && interactive && await confirm2(`clone ${missing.length} project(s) now (${missing.slice(0, 6).map((p) => p.name).join(", ")}${missing.length > 6 ? "\u2026" : ""})?`, true)) await group(`clone ${missing.length} project(s)`, async () => (await Promise.resolve().then(() => (init_projects(), projects_exports))).clone(repo, m, man, []));
-  outro2(bold("done") + "  " + dim("open a new terminal (claude() wrapper) \xB7 cs status \xB7 cs new <project> --<identity>"));
+  const rcFile = shellRc().split("/").pop();
+  note2([
+    `${bold("open a new terminal")} ${dim(`(or: source ~/${rcFile})`)} \u2014 that gives you ${bold("cs")} on PATH and the ${bold("claude")} wrapper`,
+    `${bold("claude")}  ${dim("log in once on this machine")}`,
+    `${bold("cs status")}  ${dim("dashboard")}`,
+    `${bold("cs new <project> --<identity>")}  ${dim("start something")}`
+  ], "next");
+  outro2(bold("done"));
   return rc;
 }
 async function init2(o) {
