@@ -5,7 +5,8 @@
 - Runtime deps are bundled; the only runtime prerequisite is Node. Keep dependencies few: `@clack/prompts`, `commander`, `smol-toml`, `picocolors`.
 - One subcommand → one module in `src/`. `src/index.ts` only declares the command tree and dispatches.
 - Every filesystem path comes from `src/paths.ts` (HOME / CLAUDE_CONFIG_DIR / CS_CONFIG_DIR / XDG_STATE_HOME overridable)
-  so `tests/run-local.sh` runs against a throwaway HOME. `CS_ANSWERS` (JSON array) scripts every prompt; `CS_OFFLINE=1` disables network calls.
+  so `tests/run-local.sh` runs against a throwaway HOME. `CS_ANSWERS` (JSON array) scripts every prompt; `CS_OFFLINE=1` disables network calls;
+  `CS_NOTE_TIMEOUT` (seconds) caps headless `claude` when a handoff note is generated (tests put a fake `claude` on PATH).
 - All user interaction goes through `src/ui.ts` (clack). Never `console.log` in command modules except for machine-readable output.
 - Anything under a spinner (`ui.spin`, `ui.group`) must be async: `proc.exec` / `git.gitA`. `spawnSync` blocks the event loop and freezes spinners — only use it for instant local git queries. `cs ui-demo` (hidden) exercises every element.
 - Never write machine-specific values (absolute paths, hostnames) into the config repo; inject them at link/apply time.

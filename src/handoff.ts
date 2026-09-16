@@ -12,10 +12,12 @@ import { contract, handoffStateDir } from "./paths.js";
 import type { Machine } from "./machine.js";
 import { checkoutRoot, container, globMatch, projectForPath, selectedProjects, workspace, type Manifest, type Project } from "./manifest.js";
 import { checkouts, runLink } from "./link.js";
+import { pickNote, type Note, type NoteSource } from "./note.js";
 import * as ui from "./ui.js";
 
 const DENY = ["**/.env", "**/.env.*", "**/*.pem", "**/*.key", "**/*token*", "**/*secret*"];
 const SIDE = ".cs-handoff";
+const NOTE_LABEL: Record<NoteSource, string> = { explicit: " · note", claude: " · note (claude)", git: " · note (git-derived)" };
 /** Remote ref namespace handoffs live under (on-disk name; see the migration notes before changing it). */
 export const REF_NS = "wip";
 
@@ -39,7 +41,7 @@ export function denyHits(unit: string, p: Project, allow: string[]): string[] {
 }
 
 /** Build a commit of the whole working tree (tracked + untracked, .gitignore respected) without touching the user's index. */
-async function buildSnapshot(unit: Unit, p: Project, m: Machine, note: string, extras: string[], excludes: string[]): Promise<{ sha: string; files: number }> {
+async function buildSnapshot(unit: Unit, p: Project, m: Machine, note: string, extras: string[], excludes: string[], noteSource?: NoteSource): Promise<{ sha: string; files: number }> {
   const idx = join(git.commonDir(unit.path), `cs-handoff-index-${process.pid}`);
   const env = { GIT_INDEX_FILE: idx };
   try {
@@ -48,7 +50,7 @@ async function buildSnapshot(unit: Unit, p: Project, m: Machine, note: string, e
     const added: string[] = [];
     for (const g of extras) { const r = git.git(["add", "-f", "--", g], unit.path, { env, check: false }); if (r.code === 0) added.push(g); }
     const putFile = (rel: string, content: string) => { const blob = git.git(["hash-object", "-w", "--stdin"], unit.path, { input: content }).out; git.git(["update-index", "--add", "--cacheinfo", `100644,${blob},${rel}`], unit.path, { env }); };
-    putFile(`${SIDE}/manifest.json`, JSON.stringify({ extras: added, machine: m.name, at: new Date().toISOString() }, null, 2) + "\n");
+    putFile(`${SIDE}/manifest.json`, JSON.stringify({ extras: added, machine: m.name, at: new Date().toISOString(), ...(note ? { noteSource } : {}) }, null, 2) + "\n");
     if (note) putFile(`${SIDE}/NOTE.md`, note.trimEnd() + "\n");
     const tree = git.git(["write-tree"], unit.path, { env }).out;
     const files = git.out(["diff-tree", "-r", "--name-only", "HEAD", tree], unit.path).split("\n").filter((f) => f && !f.startsWith(SIDE)).length;
@@ -97,17 +99,19 @@ export async function handoff(repo: string, m: Machine, man: Manifest, projects:
       if (o.dryRun) { ui.step(`${label}: would push ${git.dirtyCount(u.path)} change(s) on ${u.branch} → ${ref}`); continue; }
       await ui.spin(`${label}: fetching ${ref}…`, () => git.gitA(["fetch", "-q", "--prune", "origin", refspec(user)], u.path, { check: false, timeout: 60 }));
       const lease = git.out(["rev-parse", "--verify", "-q", `refs/remotes/origin/${ref}`], u.path);
-      let note = o.note ?? "";
+      let earlier: (Note & { at: string }) | undefined;   // my own handoff being replaced: its note and where that note came from
       if (lease) { const t = git.trailers(u.path, lease);
         if (t["Cs-Machine"] && t["Cs-Machine"] !== m.name && !o.overwrite) { ui.fail(`${label}: a handoff from ${t["Cs-Machine"]} is waiting on ${ref} — run cs resume there first, or --overwrite`); rc = 1; continue; }
-        if (!note && t["Cs-Machine"] === m.name) note = git.out(["show", `${lease}:${SIDE}/NOTE.md`], u.path); }   // replacing my own earlier handoff: its note stays unless a new one is given
-      const { sha, files } = await ui.spin(`${label}: snapshotting…`, () => buildSnapshot(u, p, m, note, (hoff(p).extra as string[]) ?? [], (hoff(p).exclude as string[]) ?? []));
+        if (t["Cs-Machine"] === m.name) { let mf: any = {}; try { mf = JSON.parse(git.out(["show", `${lease}:${SIDE}/manifest.json`], u.path)); } catch {}
+          earlier = { note: git.out(["show", `${lease}:${SIDE}/NOTE.md`], u.path), source: mf.noteSource ?? "explicit", at: mf.at ?? "" }; } }   // handoffs from before generation: every note was typed
+      const { note, source } = await ui.spin(`${label}: writing the note…`, () => pickNote(u, p, ws, o.note, earlier));
+      const { sha, files } = await ui.spin(`${label}: snapshotting…`, () => buildSnapshot(u, p, m, note, (hoff(p).extra as string[]) ?? [], (hoff(p).exclude as string[]) ?? [], source));
       git.git(["update-ref", `refs/heads/${ref}`, sha], u.path);
       const push = await ui.spin(`${label}: pushing ${ref}…`, () => git.gitA(["push", "-q", `--force-with-lease=refs/heads/${ref}:${lease || ""}`, "origin", `refs/heads/${ref}:refs/heads/${ref}`], u.path, { check: false, timeout: 120 }));
       if (push.code !== 0) { ui.fail(`${label}: push rejected — ${push.err.split("\n").pop()}`); rc = 1; continue; }
       git.git(["update-ref", "-d", `refs/heads/${ref}`], u.path, { check: false });
       results.push({ ref, sha, branch: u.branch, worktree: u.rel, at: new Date().toISOString() }); pushed++; o.onDone?.(p.name, u.branch);
-      ui.step(`${label}: ${u.branch} → ${ref}  ${ui.dim(`${files} file(s)${ab && ab[0] ? ` + ${ab[0]} unpushed commit(s)` : ""}${note ? " · note" : ""}`)}`);
+      ui.step(`${label}: ${u.branch} → ${ref}  ${ui.dim(`${files} file(s)${ab && ab[0] ? ` + ${ab[0]} unpushed commit(s)` : ""}${NOTE_LABEL[source]}`)}`);
     }
     if (results.length) saveState(p, { handedOff: results, machine: m.name });
   }

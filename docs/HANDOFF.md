@@ -8,7 +8,17 @@ never leaves its remote, and the snapshot is a plain git commit anyone can inspe
 for this machine as one to apply — pre-checked on one plan screen with one confirmation. A branch with commits not yet
 on its upstream gets its own row, unchecked: the handoff carries those commits regardless, and pushing the real branch
 stays your decision per branch (nothing else in `cs` pushes one). Re-running `cs sync` on the same machine replaces your
-own earlier handoff and keeps its note unless `-m` gives a new one.
+own earlier handoff.
+
+## The note
+Every handoff carries one. `-m "…"` sets it. Otherwise headless `claude -p` reads a digest of the project's most recent
+session transcript (what was said and which tools ran — never tool output) and writes where this stopped and what is
+next, under a spinner with a time cap (`CS_NOTE_TIMEOUT` seconds, default 60, per handoff). No transcript, no `claude`
+on PATH, offline, a failure or the cap → a git-derived note: branch, changed files, last commit subject, session end
+time, and one line saying why there is no summary. Replacing your own earlier handoff: a note you typed with `-m` stays
+unless `-m` gives a new one or a session newer than that handoff gets summarised by Claude; a generated note is always
+regenerated. A worktree with sessions of its own is summarised from those. The summary run never becomes a session of
+the project (`--no-session-persistence`).
 
 ```sh
 # leaving machine A

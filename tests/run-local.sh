@@ -546,4 +546,65 @@ grep -q "1 of 1 actions" "$HOME6/push3.log" && ! grep -q "push " "$HOME6/push3.l
 grep -q "and dirty" "$ONE6/README" && [ "$(cat "$ONE6/commit.txt")" = "committed on desk" ] || die "desk tree untouched"
 pass real-branch-push
 
+# --- handoff notes (#9): without -m the note comes from headless claude over the latest session transcript; no claude, or one past the cap → git-derived; -m wins
+KEY6="$(echo "$HOME6/dev/one" | sed 's/[^A-Za-z0-9]/-/g')"; mkdir -p "$HOME6/.claude/projects/$KEY6"
+python3 - "$HOME6/.claude/projects/$KEY6/s1.jsonl" <<'PY2'
+import json,sys
+lines=[{"type":"user","message":{"role":"user","content":"implement the widget"}},
+       {"type":"assistant","message":{"role":"assistant","content":[{"type":"thinking","thinking":"secret thoughts"},{"type":"text","text":"Wiring the widget."},{"type":"tool_use","name":"Edit","input":{"file_path":"README"}}]}},
+       {"type":"user","message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"x","content":"tool output nobody should summarise"}]}}]
+open(sys.argv[1],"w").write("".join(json.dumps(l)+"\n" for l in lines))
+PY2
+mkdir -p "$S/fakebin" "$S/hangbin"
+cat > "$S/fakebin/claude" <<'SH'
+#!/usr/bin/env bash
+# fake headless claude: records the call, expects -p and the transcript digest on stdin
+echo "called $*" >> "${CS_TEST_CALLS:?}"
+[ "$1" = "-p" ] || { echo "not headless"; exit 0; }
+IN="$(cat)"; grep -q "USER: implement the widget" <<<"$IN" && grep -q "→ Edit: README" <<<"$IN" && ! grep -q "secret thoughts\|tool output" <<<"$IN" || { echo "digest wrong: $IN"; exit 0; }
+echo "Stopped: widget half wired, README edited."; echo "Next: finish the widget tests, then push."
+SH
+printf '#!/usr/bin/env bash\necho "called $*" >> "${CS_TEST_CALLS:?}"; sleep 30\n' > "$S/hangbin/claude"; chmod +x "$S/fakebin/claude" "$S/hangbin/claude"
+export CS_TEST_CALLS="$S/claude-calls"; : > "$CS_TEST_CALLS"
+NOTE() { git -C "$S/one.git" show "wip/test-user/main:.cs-handoff/NOTE.md"; }
+# claude hangs past the cap (1 s): the run finishes, the note is git-derived (branch, files, last commit, session end, why)
+SECONDS=0
+PATH="$S/hangbin:$PATH" CS_NOTE_TIMEOUT=1 CS_ANSWERS='["<default>","done"]' desk $CS sync > "$HOME6/note1.log" 2>&1 || { cat "$HOME6/note1.log"; die "desk sync with a hanging claude"; }
+[ "$SECONDS" -lt 20 ] || die "the cap did not hold ($SECONDS s)"
+NOTE > "$HOME6/note1.txt"; grep -q '^main · 1 changed file · last commit "local commit" · session ended 20' "$HOME6/note1.txt" && grep -q "^README$" "$HOME6/note1.txt" && grep -q "no summary: claude took longer than 1 s" "$HOME6/note1.txt" || { cat "$HOME6/note1.txt"; die "git-derived note"; }
+grep -q "note (git-derived)" "$HOME6/note1.log" && grep -q "called -p" "$CS_TEST_CALLS" || die "generation attempted and reported"
+# -m wins, and claude is not even started
+: > "$CS_TEST_CALLS"
+PATH="$S/hangbin:$PATH" CS_NOTE_TIMEOUT=1 CS_ANSWERS='["<default>","done"]' desk $CS sync -m "typed by hand" >/dev/null 2>&1 || die "desk sync -m with a hanging claude"
+[ "$(NOTE)" = "typed by hand" ] && [ ! -s "$CS_TEST_CALLS" ] || die "-m wins over generation"
+# no session since the typed note: it stays and claude is not asked; a newer session (transcript touched) → the fake claude's summary
+# replaces it, fed the digest of the transcript
+PATH="$S/fakebin:$PATH" CS_ANSWERS='["<default>","done"]' desk $CS sync >/dev/null 2>&1 || die "desk sync, typed note, no newer session"
+[ "$(NOTE)" = "typed by hand" ] && [ ! -s "$CS_TEST_CALLS" ] || die "a typed note stays while no session is newer than it"
+touch "$HOME6/.claude/projects/$KEY6/s1.jsonl"
+PATH="$S/fakebin:$PATH" CS_ANSWERS='["<default>","done"]' desk $CS sync > "$HOME6/note2.log" 2>&1 || { cat "$HOME6/note2.log"; die "desk sync with a fake claude"; }
+NOTE > "$HOME6/note2.txt"; grep -q "^Stopped: widget half wired, README edited.$" "$HOME6/note2.txt" && grep -q "finish the widget tests" "$HOME6/note2.txt" || { cat "$HOME6/note2.txt"; die "claude's summary is the note"; }
+grep -q "note (claude)" "$HOME6/note2.log" && git -C "$S/one.git" log -1 --format=%B wip/test-user/main | grep -q "Cs-Note: Stopped: widget half wired" || die "reported; first line is the trailer"
+[ ! -f "$HOME6/.claude/projects/$KEY6/s1.jsonl.bak" ] && [ "$(ls "$HOME6/.claude/projects/$KEY6" | wc -l)" = 1 ] || die "the transcript directory is untouched"
+# the note travels: shown on arrival, kept for the session-start hook
+CS_ANSWERS='["<default>","done"]' laptop $CS sync > "$HOME7/note-arrive.log" 2>&1 || { cat "$HOME7/note-arrive.log"; die "laptop sync"; }
+grep -q "widget half wired" "$HOME7/note-arrive.log" && (cd "$ONE7" && laptop $CS note --print | grep -q "finish the widget tests") || die "generated note shown after apply and kept for the hook"
+(cd "$ONE7" && git checkout -q -- . && git clean -qfd)
+# -m wins with a working claude too; then a hanging claude keeps the typed note of the handoff being replaced rather than a git-derived one
+: > "$CS_TEST_CALLS"
+PATH="$S/fakebin:$PATH" CS_ANSWERS='["<default>","done"]' desk $CS sync -m "typed again" >/dev/null 2>&1 || die "desk sync -m with a fake claude"
+[ "$(NOTE)" = "typed again" ] && [ ! -s "$CS_TEST_CALLS" ] || die "-m wins over a working claude"
+touch "$HOME6/.claude/projects/$KEY6/s1.jsonl"; : > "$CS_TEST_CALLS"
+PATH="$S/hangbin:$PATH" CS_NOTE_TIMEOUT=1 CS_ANSWERS='["<default>","done"]' desk $CS sync >/dev/null 2>&1 || die "desk sync, hanging claude, typed note waiting"
+[ "$(NOTE)" = "typed again" ] && [ -s "$CS_TEST_CALLS" ] || { NOTE; die "a typed note outlives a git-derived regeneration"; }
+CS_ANSWERS='["<default>","done"]' laptop $CS sync >/dev/null 2>&1 && (cd "$ONE7" && git checkout -q -- . && git clean -qfd) || die "laptop takes the handoff (nothing waiting any more)"
+# no claude on PATH (every directory holding one dropped): the git-derived note says so; no transcript either: says that, claude never asked
+NOCLAUDE="$(tr ':' '\n' <<<"$PATH" | while read -r d; do [ -n "$d" ] && [ ! -e "$d/claude" ] && printf '%s:' "$d"; done)"; NOCLAUDE="${NOCLAUDE%:}"
+PATH="$NOCLAUDE" CS_ANSWERS='["<default>","done"]' desk $CS sync > "$HOME6/note3.log" 2>&1 || { cat "$HOME6/note3.log"; die "desk sync without claude"; }
+NOTE > "$HOME6/note3.txt"; grep -q "no summary: claude not on PATH" "$HOME6/note3.txt" && grep -q "session ended" "$HOME6/note3.txt" || { cat "$HOME6/note3.txt"; die "no claude → git-derived note saying so"; }
+rm -rf "$HOME6/.claude/projects/$KEY6"; : > "$CS_TEST_CALLS"
+PATH="$S/fakebin:$PATH" CS_ANSWERS='["<default>","done"]' desk $CS sync >/dev/null 2>&1 || die "desk sync without a transcript"
+NOTE > "$HOME6/note4.txt"; grep -q "no summary: no session transcript" "$HOME6/note4.txt" && ! grep -q "session ended" "$HOME6/note4.txt" && [ ! -s "$CS_TEST_CALLS" ] || { cat "$HOME6/note4.txt"; die "no transcript → git-derived note, claude not started"; }
+pass handoff-notes
+
 echo "ALL PASS (HOME=$HOME)"

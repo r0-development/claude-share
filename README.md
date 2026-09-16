@@ -153,6 +153,12 @@ cs secrets recovery                        # print a recovery key once → passw
 cs sync                              # when leaving and when arriving; -m "where I stopped" sets the handoff note
 ```
 
+Every handoff carries a note. Without `-m` it is written by headless `claude` from the project's latest session
+transcript ("where this stopped, what's next" — under a spinner, capped); when there is no transcript, no `claude` on
+PATH, no network, or it fails or runs past the cap, the note is derived from git instead (branch, changed files, last commit,
+session end time, and why there is no summary). The note is shown when the handoff is applied and again at the next
+session start there.
+
 One run: pulls the share and repairs `~/.claude`, project state, hooks and timer without asking; clones projects
 missing here; then shows **one plan screen** — handoffs to send (dirty work here) and handoffs to apply (work waiting
 for this machine), both pre-checked, and branches with unpushed commits, listed **unchecked** (`↑N unpushed` in `cs`) —
