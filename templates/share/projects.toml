@@ -40,3 +40,7 @@ default_branch = "master"     # branch `cs new` creates
 # never   = ["*.sqlite"]          # extends the secret-file deny list
 # exclude = ["vendor/"]           # never snapshot these
 # (or `handoff = false` inside [projects.example] to opt out)
+
+# .env files (cs sync) — gitignored .env, .env.<x> travel with their values, encrypted in the share, merged per key:
+# env = false                     # inside [projects.example]: never carry this project's .env files
+# env.local = [".env.site"]       # extra files that are site-specific, like .env.local (keys only — not carried yet)

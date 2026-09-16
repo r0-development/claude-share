@@ -18,6 +18,12 @@ function sops(args: string[], repo: string, input?: string, check = true) {
   if (check && p.status !== 0) throw new Error(`cs: sops ${args.join(" ")} failed: ${(p.stderr ?? "").trim()}`);
   return p;
 }
+async function sopsA(args: string[], repo: string) {
+  const { exec } = await import("../proc.js");
+  const p = await exec(exe("sops"), args, { cwd: repo, env: env() });
+  if (p.code !== 0) throw new Error(`cs: sops ${args.join(" ")} failed: ${p.err}`);
+  return p;
+}
 export function publicKey(): string {
   if (!existsSync(keyFile())) return "";
   const line = readFileSync(keyFile(), "utf8").split("\n").find((l) => l.startsWith("# public key:")); if (line) return line.split(":")[1].trim();
@@ -58,6 +64,11 @@ export const SopsBackend: Backend = {
   writeEnv(repo, name, values) { const f = envFile(repo, name); mkdirSync(dirname(f), { recursive: true }); const rel = relative(repo, f);
     const tmp = join(dirname(f), `.${name.replace(/\//g, "_")}.plain.${process.pid}.env`); writeFileSync(tmp, dumpDotenv(values), { mode: 0o600 });
     try { const p = sops(["-e", "--input-type", "dotenv", "--output-type", "dotenv", "--filename-override", rel, relative(repo, tmp)], repo); writeFileSync(f, p.stdout); } finally { rmSync(tmp, { force: true }); }
+    return f; },
+  async loadEnvA(repo, name) { const f = envFile(repo, name); if (!existsSync(f)) return {}; return parseDotenv((await sopsA(["-d", "--input-type", "dotenv", "--output-type", "dotenv", relative(repo, f)], repo)).out); },
+  async writeEnvA(repo, name, values) { const f = envFile(repo, name); mkdirSync(dirname(f), { recursive: true }); const rel = relative(repo, f);
+    const tmp = join(dirname(f), `.${name.replace(/\//g, "_")}.plain.${process.pid}.env`); writeFileSync(tmp, dumpDotenv(values), { mode: 0o600 });
+    try { const p = await sopsA(["-e", "--input-type", "dotenv", "--output-type", "dotenv", "--filename-override", rel, relative(repo, tmp)], repo); writeFileSync(f, p.out); } finally { rmSync(tmp, { force: true }); }
     return f; },
   edit(repo, name) { const f = envFile(repo, name); if (!existsSync(f)) this.writeEnv(repo, name, { EXAMPLE_KEY: "value" }); spawnSync(exe("sops"), ["--input-type", "dotenv", "--output-type", "dotenv", relative(repo, f)], { cwd: repo, env: env(), stdio: "inherit" }); },
   status(repo, m) {

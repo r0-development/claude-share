@@ -6904,11 +6904,11 @@ function localize(rel, data, mem) {
   d.autoMemoryDirectory = contract(mem);
   return Buffer.from(dumps(d));
 }
-function write(path, data, mtime) {
+function write(path, data, mtime2) {
   mkdirSync3(dirname3(path), { recursive: true });
   const tmp = path + ".cs-tmp";
   writeFileSync4(tmp, data);
-  if (mtime) utimesSync(tmp, mtime, mtime);
+  if (mtime2) utimesSync(tmp, mtime2, mtime2);
   renameSync2(tmp, path);
 }
 function ensureExclude(checkout, check, changes) {
@@ -7928,8 +7928,8 @@ async function latest(repo) {
 async function download(url, dest) {
   const r2 = await fetch(url, { headers: { "User-Agent": "claude-share" } });
   if (!r2.ok) throw new Error(`download failed: ${url}`);
-  const { writeFileSync: writeFileSync18 } = await import("node:fs");
-  writeFileSync18(dest, Buffer.from(await r2.arrayBuffer()));
+  const { writeFileSync: writeFileSync19 } = await import("node:fs");
+  writeFileSync19(dest, Buffer.from(await r2.arrayBuffer()));
 }
 async function sopsLinux() {
   const t2 = await latest("getsops/sops");
@@ -8030,6 +8030,94 @@ ${(p.err || p.out).split("\n").slice(-5).join("\n")}`);
   }
 });
 
+// src/env.ts
+function classify(name2, git2, extraLocal = []) {
+  if (git2.tracked) return "tracked";
+  if (!git2.ignored) return "unignored";
+  return name2.endsWith(".local") || extraLocal.includes(name2) ? "local" : "values";
+}
+function fileOf(project, entry) {
+  if (entry === project) return ".env";
+  return entry.startsWith(project + ".") && entry.length > project.length + 1 ? ".env." + entry.slice(project.length + 1) : void 0;
+}
+function merge3(base, local, stored, decide2 = {}) {
+  const result = {}, toLocal = [], toStore = [], conflicts = [];
+  const keys = /* @__PURE__ */ new Set([...Object.keys(base ?? {}), ...Object.keys(local), ...Object.keys(stored)]);
+  const put = (k, v) => {
+    if (v !== void 0) result[k] = v;
+    if (v !== local[k]) toLocal.push(k);
+    if (v !== stored[k]) toStore.push(k);
+  };
+  for (const k of keys) {
+    const l2 = local[k], s = stored[k];
+    if (l2 === s) {
+      put(k, l2);
+      continue;
+    }
+    const localChanged = base ? l2 !== base[k] : l2 !== void 0, storedChanged = base ? s !== base[k] : s !== void 0;
+    if (localChanged && storedChanged) {
+      const side = decide2[k];
+      if (side) put(k, side === "local" ? l2 : s);
+      else conflicts.push({ key: k, local: l2, stored: s });
+      continue;
+    }
+    put(k, localChanged ? l2 : s);
+  }
+  return { result, toLocal, toStore, conflicts };
+}
+function patchDotenv(text3, values) {
+  const seen = /* @__PURE__ */ new Set();
+  const out2 = [];
+  const lines = text3.split("\n");
+  if (lines[lines.length - 1] === "") lines.pop();
+  for (const line of lines) {
+    const m = line.match(/^(\s*(?:export\s+)?)([A-Za-z_][A-Za-z0-9_]*)\s*=(.*)$/);
+    if (!m || seen.has(m[2])) {
+      out2.push(line);
+      continue;
+    }
+    const k = m[2];
+    seen.add(k);
+    if (!(k in values)) continue;
+    const cur = parseValue2(m[3]);
+    out2.push(cur === values[k] ? line : `${m[1]}${k}=${quote(values[k])}`);
+  }
+  for (const [k, v] of Object.entries(values)) if (!seen.has(k)) out2.push(`${k}=${quote(v)}`);
+  return out2.length ? out2.join("\n") + "\n" : "";
+}
+function parseValue2(raw) {
+  let v = raw.trim();
+  if (v.length >= 2 && v[0] === '"' && v[v.length - 1] === '"') {
+    try {
+      return JSON.parse(v);
+    } catch {
+      return v.slice(1, -1);
+    }
+  }
+  if (v.length >= 2 && v[0] === "'" && v[v.length - 1] === "'") return v.slice(1, -1);
+  return v;
+}
+function describeMerge(m, from) {
+  const n3 = (c2) => `${c2} key${c2 === 1 ? "" : "s"}`;
+  const put = m.toStore.filter((k) => k in m.result).length, take = m.toLocal.filter((k) => k in m.result).length;
+  return [
+    put ? `store ${n3(put)}` : "",
+    m.toStore.length - put ? `drop ${n3(m.toStore.length - put)} from the share` : "",
+    take ? `take ${n3(take)}${from ? ` from ${from}` : ""}` : "",
+    m.toLocal.length - take ? `drop ${n3(m.toLocal.length - take)} here` : "",
+    m.conflicts.length ? `${n3(m.conflicts.length)} changed on both machines \u2014 asked next` : ""
+  ].filter(Boolean).join(", ");
+}
+var isEnvName, storeName, quote;
+var init_env = __esm({
+  "src/env.ts"() {
+    "use strict";
+    isEnvName = (name2) => /^\.env(\..+)?$/.test(name2);
+    storeName = (project, file) => file === ".env" ? project : `${project}.${file.slice(".env.".length)}`;
+    quote = (v) => /[ #"'\\$`]/.test(v) || v === "" ? JSON.stringify(v) : v;
+  }
+});
+
 // src/plan.ts
 function ago(iso, now = Date.now()) {
   const t2 = Date.parse(iso);
@@ -8040,64 +8128,83 @@ function ago(iso, now = Date.now()) {
 function plan(facts, machine) {
   const actions = [], questions = [], skipped = [];
   for (const f of facts) {
-    if (f.disabled) {
-      skipped.push(`${f.project}: handoff disabled`);
-      continue;
-    }
-    if (f.offline) {
-      skipped.push(`${f.project}: remote unreachable \u2014 nothing sent or applied`);
-      continue;
-    }
-    const handled = /* @__PURE__ */ new Set();
-    for (const w of f.waiting) {
-      const target = f.layout === "plain" ? f.units[0] : f.units.find((u5) => u5.branch === w.branch);
-      if (f.layout === "plain" && !target) continue;
-      if (target && target.dirty) {
-        if (w.machine === machine && target.branch === w.branch) continue;
-        handled.add(w.branch);
-        questions.push({
-          kind: "dirty-vs-waiting",
-          project: f.project,
-          branch: w.branch,
-          machine: w.machine,
-          when: w.when,
-          unit: target.rel,
-          sameBranch: target.branch === w.branch,
-          why: `${f.project}: a handoff from ${w.machine} (${when(w.when)}) is waiting for ${w.branch}, but ${target.rel === "." ? "the checkout" : target.rel}${target.branch === w.branch ? "" : ` (on ${target.branch})`} has ${count(target.dirty, "uncommitted change")}`
-        });
+    handoffs(f, machine, actions, questions, skipped);
+    for (const e of f.env ?? []) {
+      if (e.kind === "unignored") {
+        skipped.push(`${f.project}: ${e.file} is not gitignored \u2014 not carried (add it to .gitignore)`);
         continue;
       }
-      handled.add(w.branch);
-      actions.push({
-        id: `apply:${f.project}:${w.branch}`,
-        kind: "apply",
+      if (!e.merge.toLocal.length && !e.merge.toStore.length && !e.merge.conflicts.length) continue;
+      actions.push({ id: `env:${f.project}:${e.file}`, kind: "env", project: f.project, branch: e.file, label: `${f.project} \xB7 ${e.file}`, hint: describeMerge(e.merge, e.from), checked: true });
+      for (const c2 of e.merge.conflicts) questions.push({
+        kind: "env-key",
         project: f.project,
-        branch: w.branch,
-        label: `${f.project} \xB7 ${w.branch}`,
-        hint: `from ${w.machine}, ${when(w.when)}${w.note ? " \u2014 " + w.note : ""}`,
-        checked: true
+        file: e.file,
+        key: c2.key,
+        from: e.from,
+        why: `${f.project} \xB7 ${e.file}: ${c2.key} changed here and ${e.from ? `on ${e.from}` : "in the share"} since the last sync`
       });
-    }
-    for (const u5 of f.units) {
-      if (u5.skip) {
-        skipped.push(`${f.project}${u5.rel === "." ? "" : "/" + u5.rel}: ${u5.skip}`);
-        continue;
-      }
-      if (!u5.dirty && !u5.unpushed) continue;
-      const label = `${f.project} \xB7 ${u5.branch}`;
-      const push3 = u5.unpushed ? { id: `push:${f.project}:${u5.branch}`, kind: "push", project: f.project, branch: u5.branch, label, hint: `${count(u5.unpushed, "unpushed commit")} \u2192 upstream`, checked: false } : void 0;
-      if (handled.has(u5.branch) || u5.secrets?.length) {
-        if (u5.secrets?.length) skipped.push(`${label}: not sent \u2014 files that look secret: ${u5.secrets.join(", ")}  (cs handoff --allow <glob>)`);
-        if (push3) actions.push(push3);
-        continue;
-      }
-      const own = f.waiting.some((w) => w.branch === u5.branch && w.machine === machine);
-      const bits = [u5.dirty ? count(u5.dirty, "change") : "", u5.unpushed ? count(u5.unpushed, "unpushed commit") : "", own ? "replaces the handoff sent from here earlier" : ""].filter(Boolean);
-      actions.push({ id: `send:${f.project}:${u5.branch}`, kind: "send", project: f.project, branch: u5.branch, label, hint: bits.join(", "), checked: true });
-      if (push3) actions.push(push3);
     }
   }
   return { actions, questions, skipped };
+}
+function handoffs(f, machine, actions, questions, skipped) {
+  if (f.disabled) {
+    skipped.push(`${f.project}: handoff disabled`);
+    return;
+  }
+  if (f.offline) {
+    skipped.push(`${f.project}: remote unreachable \u2014 nothing sent or applied`);
+    return;
+  }
+  const handled = /* @__PURE__ */ new Set();
+  for (const w of f.waiting) {
+    const target = f.layout === "plain" ? f.units[0] : f.units.find((u5) => u5.branch === w.branch);
+    if (f.layout === "plain" && !target) continue;
+    if (target && target.dirty) {
+      if (w.machine === machine && target.branch === w.branch) continue;
+      handled.add(w.branch);
+      questions.push({
+        kind: "dirty-vs-waiting",
+        project: f.project,
+        branch: w.branch,
+        machine: w.machine,
+        when: w.when,
+        unit: target.rel,
+        sameBranch: target.branch === w.branch,
+        why: `${f.project}: a handoff from ${w.machine} (${when(w.when)}) is waiting for ${w.branch}, but ${target.rel === "." ? "the checkout" : target.rel}${target.branch === w.branch ? "" : ` (on ${target.branch})`} has ${count(target.dirty, "uncommitted change")}`
+      });
+      continue;
+    }
+    handled.add(w.branch);
+    actions.push({
+      id: `apply:${f.project}:${w.branch}`,
+      kind: "apply",
+      project: f.project,
+      branch: w.branch,
+      label: `${f.project} \xB7 ${w.branch}`,
+      hint: `from ${w.machine}, ${when(w.when)}${w.note ? " \u2014 " + w.note : ""}`,
+      checked: true
+    });
+  }
+  for (const u5 of f.units) {
+    if (u5.skip) {
+      skipped.push(`${f.project}${u5.rel === "." ? "" : "/" + u5.rel}: ${u5.skip}`);
+      continue;
+    }
+    if (!u5.dirty && !u5.unpushed) continue;
+    const label = `${f.project} \xB7 ${u5.branch}`;
+    const push3 = u5.unpushed ? { id: `push:${f.project}:${u5.branch}`, kind: "push", project: f.project, branch: u5.branch, label, hint: `${count(u5.unpushed, "unpushed commit")} \u2192 upstream`, checked: false } : void 0;
+    if (handled.has(u5.branch) || u5.secrets?.length) {
+      if (u5.secrets?.length) skipped.push(`${label}: not sent \u2014 files that look secret: ${u5.secrets.join(", ")}  (cs handoff --allow <glob>)`);
+      if (push3) actions.push(push3);
+      continue;
+    }
+    const own = f.waiting.some((w) => w.branch === u5.branch && w.machine === machine);
+    const bits = [u5.dirty ? count(u5.dirty, "change") : "", u5.unpushed ? count(u5.unpushed, "unpushed commit") : "", own ? "replaces the handoff sent from here earlier" : ""].filter(Boolean);
+    actions.push({ id: `send:${f.project}:${u5.branch}`, kind: "send", project: f.project, branch: u5.branch, label, hint: bits.join(", "), checked: true });
+    if (push3) actions.push(push3);
+  }
 }
 function status(f, machine) {
   const bits = [];
@@ -8116,6 +8223,13 @@ function status(f, machine) {
       stuck = true;
     }
   }
+  for (const e of f.env ?? []) {
+    if (e.kind === "unignored") bits.push({ kind: "skip", text: `${e.file}: not gitignored \u2014 not carried (add it to .gitignore)` });
+    else {
+      const what = describeMerge(e.merge, e.from);
+      if (what) bits.push({ kind: "env", text: `${e.file}: ${what}` });
+    }
+  }
   const here = f.units[0]?.branch;
   for (const w of f.waiting) bits.push({ kind: "waiting", text: `handoff waiting from ${w.machine}${w.branch === here ? "" : ` for ${w.branch}`} (${when(w.when)})` });
   if (f.offline) bits.push({ kind: "offline", text: "offline" });
@@ -8127,6 +8241,7 @@ var count, when;
 var init_plan = __esm({
   "src/plan.ts"() {
     "use strict";
+    init_env();
     count = (c2, one, many = one + "s") => `${c2} ${c2 === 1 ? one : many}`;
     when = (iso) => iso.slice(0, 16).replace("T", " ");
   }
@@ -8182,8 +8297,8 @@ function latestTranscript(paths) {
     if (!existsSync12(dir)) continue;
     for (const f of readdirSync4(dir)) {
       if (!f.endsWith(".jsonl")) continue;
-      const mtime = statSync6(join13(dir, f)).mtimeMs;
-      if (!best || mtime > best.mtime) best = { file: join13(dir, f), mtime };
+      const mtime2 = statSync6(join13(dir, f)).mtimeMs;
+      if (!best || mtime2 > best.mtime) best = { file: join13(dir, f), mtime: mtime2 };
     }
   }
   return best && { file: best.file, ended: new Date(best.mtime).toISOString() };
@@ -8461,12 +8576,12 @@ async function resume(repo, m, man, projects, o) {
     const root = checkoutRoot(p, ws);
     if (!existsSync13(root) || !remoteUrl(root)) continue;
     const user = userSlug(root);
-    const handoffs2 = o.waiting?.[p.name] ?? await spin(`${p.name}: looking for handoffs\u2026`, () => fetchWaiting(root, user));
-    if (!handoffs2.length) {
+    const handoffs3 = o.waiting?.[p.name] ?? await spin(`${p.name}: looking for handoffs\u2026`, () => fetchWaiting(root, user));
+    if (!handoffs3.length) {
       skip(`${p.name}: nothing to resume`);
       continue;
     }
-    for (const pc2 of handoffs2) {
+    for (const pc2 of handoffs3) {
       if (o.branches && !o.branches.includes(pc2.branch)) continue;
       const label = `${p.name} \xB7 ${pc2.branch}`;
       if (o.dryRun) {
@@ -8542,8 +8657,8 @@ async function waitingList(m, man, projects) {
   for (const p of projects) {
     const root = checkoutRoot(p, ws);
     if (!existsSync13(root) || !remoteUrl(root) || !enabled(p)) continue;
-    const handoffs2 = await spin(`${p.name}: fetching handoffs\u2026`, () => fetchWaiting(root, userSlug(root)));
-    for (const pc2 of handoffs2) all.push({ ...pc2, ref: pc2.ref, worktree: p.name });
+    const handoffs3 = await spin(`${p.name}: fetching handoffs\u2026`, () => fetchWaiting(root, userSlug(root)));
+    for (const pc2 of handoffs3) all.push({ ...pc2, ref: pc2.ref, worktree: p.name });
   }
   return all;
 }
@@ -8633,17 +8748,388 @@ var init_handoff = __esm({
   }
 });
 
+// src/secrets/sops.ts
+var sops_exports = {};
+__export(sops_exports, {
+  SopsBackend: () => SopsBackend,
+  keyFile: () => keyFile,
+  machinePubFile: () => machinePubFile,
+  publicKey: () => publicKey,
+  recipients: () => recipients,
+  updatekeys: () => updatekeys,
+  writeRecipients: () => writeRecipients
+});
+import { chmodSync as chmodSync3, copyFileSync as copyFileSync4, existsSync as existsSync14, mkdirSync as mkdirSync12, readdirSync as readdirSync5, readFileSync as readFileSync12, rmSync as rmSync5, writeFileSync as writeFileSync11 } from "node:fs";
+import { dirname as dirname6, join as join15, relative as relative6 } from "node:path";
+import { spawnSync as spawnSync5 } from "node:child_process";
+function sops(args, repo, input, check = true) {
+  const p = spawnSync5(exe("sops"), args, { cwd: repo, env: env(), encoding: "utf8", input, stdio: ["pipe", "pipe", "pipe"] });
+  if (check && p.status !== 0) throw new Error(`cs: sops ${args.join(" ")} failed: ${(p.stderr ?? "").trim()}`);
+  return p;
+}
+async function sopsA(args, repo) {
+  const { exec: exec4 } = await Promise.resolve().then(() => (init_proc(), proc_exports));
+  const p = await exec4(exe("sops"), args, { cwd: repo, env: env() });
+  if (p.code !== 0) throw new Error(`cs: sops ${args.join(" ")} failed: ${p.err}`);
+  return p;
+}
+function publicKey() {
+  if (!existsSync14(keyFile())) return "";
+  const line = readFileSync12(keyFile(), "utf8").split("\n").find((l2) => l2.startsWith("# public key:"));
+  if (line) return line.split(":")[1].trim();
+  return (spawnSync5(exe("age-keygen"), ["-y", keyFile()], { encoding: "utf8" }).stdout ?? "").trim();
+}
+function keygen() {
+  mkdirSync12(dirname6(keyFile()), { recursive: true, mode: 448 });
+  const p = spawnSync5(exe("age-keygen"), ["-o", keyFile()], { encoding: "utf8" });
+  if (p.status !== 0) throw new Error(`cs: age-keygen failed: ${p.stderr}`);
+  chmodSync3(keyFile(), 384);
+}
+function recipients(repo) {
+  const f = join15(repo, ".sops.yaml");
+  if (!existsSync14(f)) return [];
+  const t2 = readFileSync12(f, "utf8");
+  const m = t2.match(/age:\s*>-?\s*\n((?:\s+.+\n?)+)/);
+  if (m) return m[1].replace(/\n/g, " ").split(",").map((x) => x.trim()).filter(Boolean);
+  const m2 = t2.match(/age:\s*(\S.*)/);
+  return m2 ? m2[1].split(",").map((x) => x.trim()).filter(Boolean) : [];
+}
+function writeRecipients(repo, recs) {
+  writeFileSync11(join15(repo, ".sops.yaml"), `# sops recipients \u2014 managed by cs secrets init / cs trust / cs untrust
+creation_rules:
+  - path_regex: ${RULE}
+    age: >-
+` + recs.map((r2) => `      ${r2}`).join(",\n") + "\n");
+}
+function envFiles(repo) {
+  const out2 = [];
+  const rec = (d) => {
+    if (!existsSync14(d)) return;
+    for (const e of readdirSync5(d, { withFileTypes: true })) {
+      const f = join15(d, e.name);
+      e.isDirectory() ? rec(f) : f.endsWith(".env") && out2.push(f);
+    }
+  };
+  rec(join15(repo, "secrets"));
+  return out2.sort();
+}
+async function updatekeys(repo) {
+  const { exec: exec4 } = await Promise.resolve().then(() => (init_proc(), proc_exports));
+  let n3 = 0;
+  for (const f of envFiles(repo)) if (isEncrypted(f)) {
+    const p = await exec4(exe("sops"), ["updatekeys", "-y", relative6(repo, f)], { cwd: repo, env: env() });
+    if (p.code !== 0) throw new Error(`cs: sops updatekeys failed: ${p.err}`);
+    n3++;
+  }
+  return n3;
+}
+var RULE, keyFile, env, exe, machinePubFile, isEncrypted, SopsBackend;
+var init_sops = __esm({
+  "src/secrets/sops.ts"() {
+    "use strict";
+    init_git();
+    init_paths();
+    init_deps();
+    init_secrets();
+    init_ui();
+    RULE = "^secrets/.*\\.env$";
+    keyFile = () => process.env.SOPS_AGE_KEY_FILE || join15(home(), ".config", "sops", "age", "keys.txt");
+    env = () => {
+      const e = { ...process.env, SOPS_AGE_KEY_FILE: keyFile() };
+      delete e.SOPS_AGE_RECIPIENTS;
+      return e;
+    };
+    exe = (n3) => which(n3) || join15(home(), ".local", "bin", n3);
+    machinePubFile = (repo, machine) => join15(repo, "machines", machine, "age.pub");
+    isEncrypted = (f) => {
+      try {
+        return readFileSync12(f, "utf8").includes("sops_version=");
+      } catch {
+        return false;
+      }
+    };
+    SopsBackend = {
+      name: "sops",
+      async init(repo, m) {
+        if (existsSync14(keyFile())) skip(`age key present at ${contract(keyFile())}`);
+        else {
+          keygen();
+          ok(`generated age key ${contract(keyFile())} (0600, never synced)`);
+        }
+        const pub = publicKey();
+        const pf = machinePubFile(repo, m.name);
+        if (!existsSync14(pf) || readFileSync12(pf, "utf8").trim() !== pub) {
+          mkdirSync12(dirname6(pf), { recursive: true });
+          writeFileSync11(pf, pub + "\n");
+          git(["add", relative6(repo, pf)], repo);
+          commit(repo, `machines: ${m.name} age.pub`, "cs", `cs@${m.name}`);
+          ok(`published ${contract(pf)}`);
+        }
+        const recs = recipients(repo);
+        if (!recs.length) {
+          writeRecipients(repo, [pub]);
+          git(["add", ".sops.yaml"], repo);
+          commit(repo, "secrets: first recipient", "cs", `cs@${m.name}`);
+          ok("this is the first machine: registered as the only recipient");
+          const hook = join15(repo, ".git", "hooks", "pre-commit"), src = join15(toolRoot(), "hooks", "pre-commit-secrets-guard.sh");
+          if (existsSync14(src) && !existsSync14(hook)) {
+            copyFileSync4(src, hook);
+            chmodSync3(hook, 493);
+            ok("installed pre-commit plaintext guard in the share");
+          }
+        } else if (recs.includes(pub)) ok("this machine can decrypt secrets");
+        else step("this machine is not a recipient yet");
+        mkdirSync12(join15(repo, "secrets", "projects"), { recursive: true });
+      },
+      ready: (repo) => existsSync14(keyFile()) && recipients(repo).includes(publicKey()),
+      loadEnv(repo, name2) {
+        const f = envFile(repo, name2);
+        if (!existsSync14(f)) return {};
+        return parseDotenv(sops(["-d", "--input-type", "dotenv", "--output-type", "dotenv", relative6(repo, f)], repo).stdout);
+      },
+      writeEnv(repo, name2, values) {
+        const f = envFile(repo, name2);
+        mkdirSync12(dirname6(f), { recursive: true });
+        const rel = relative6(repo, f);
+        const tmp = join15(dirname6(f), `.${name2.replace(/\//g, "_")}.plain.${process.pid}.env`);
+        writeFileSync11(tmp, dumpDotenv(values), { mode: 384 });
+        try {
+          const p = sops(["-e", "--input-type", "dotenv", "--output-type", "dotenv", "--filename-override", rel, relative6(repo, tmp)], repo);
+          writeFileSync11(f, p.stdout);
+        } finally {
+          rmSync5(tmp, { force: true });
+        }
+        return f;
+      },
+      async loadEnvA(repo, name2) {
+        const f = envFile(repo, name2);
+        if (!existsSync14(f)) return {};
+        return parseDotenv((await sopsA(["-d", "--input-type", "dotenv", "--output-type", "dotenv", relative6(repo, f)], repo)).out);
+      },
+      async writeEnvA(repo, name2, values) {
+        const f = envFile(repo, name2);
+        mkdirSync12(dirname6(f), { recursive: true });
+        const rel = relative6(repo, f);
+        const tmp = join15(dirname6(f), `.${name2.replace(/\//g, "_")}.plain.${process.pid}.env`);
+        writeFileSync11(tmp, dumpDotenv(values), { mode: 384 });
+        try {
+          const p = await sopsA(["-e", "--input-type", "dotenv", "--output-type", "dotenv", "--filename-override", rel, relative6(repo, tmp)], repo);
+          writeFileSync11(f, p.out);
+        } finally {
+          rmSync5(tmp, { force: true });
+        }
+        return f;
+      },
+      edit(repo, name2) {
+        const f = envFile(repo, name2);
+        if (!existsSync14(f)) this.writeEnv(repo, name2, { EXAMPLE_KEY: "value" });
+        spawnSync5(exe("sops"), ["--input-type", "dotenv", "--output-type", "dotenv", relative6(repo, f)], { cwd: repo, env: env(), stdio: "inherit" });
+      },
+      status(repo, m) {
+        const pub = publicKey(), recs = recipients(repo);
+        kv("age key", contract(keyFile()) + (existsSync14(keyFile()) ? "" : red("  missing")));
+        kv("recipient", pub && recs.includes(pub) ? green("yes") : red("no \u2014 cs trust " + m.name));
+        const names = {};
+        const md = join15(repo, "machines");
+        if (existsSync14(md)) for (const d of readdirSync5(md)) {
+          const pf = join15(md, d, "age.pub");
+          if (existsSync14(pf)) names[readFileSync12(pf, "utf8").trim()] = d;
+        }
+        kv("recipients", recs.map((r2) => names[r2] ?? r2.slice(0, 14) + "\u2026").join(", ") || "-");
+        kv("files", envFiles(repo).map((f) => relative6(repo, f)).join(", ") || "-");
+      }
+    };
+  }
+});
+
+// src/secrets/none.ts
+var none_exports = {};
+__export(none_exports, {
+  NoneBackend: () => NoneBackend
+});
+var no, NoneBackend;
+var init_none = __esm({
+  "src/secrets/none.ts"() {
+    "use strict";
+    init_ui();
+    no = () => {
+      throw new Error("cs: secrets backend 'none' cannot store secrets");
+    };
+    NoneBackend = {
+      name: "none",
+      async init() {
+        info(`secrets backend is 'none' \u2014 set [secrets].backend = "sops" in machine.toml to enable`);
+      },
+      ready: () => true,
+      loadEnv: () => ({}),
+      writeEnv: no,
+      loadEnvA: async () => ({}),
+      writeEnvA: no,
+      edit: no,
+      status: () => info("backend none")
+    };
+  }
+});
+
+// src/secrets/index.ts
+import { join as join16 } from "node:path";
+async function getBackend(m) {
+  if (m.secretsBackend === "sops") return (await Promise.resolve().then(() => (init_sops(), sops_exports))).SopsBackend;
+  if (m.secretsBackend === "none") return (await Promise.resolve().then(() => (init_none(), none_exports))).NoneBackend;
+  throw new Error(`cs: unknown secrets backend '${m.secretsBackend}' (sops | none)`);
+}
+function parseDotenv(text3) {
+  const out2 = {};
+  for (let line of text3.split("\n")) {
+    line = line.trim();
+    if (!line || line.startsWith("#") || !line.includes("=")) continue;
+    let [k, ...rest] = line.split("=");
+    let v = rest.join("=").trim();
+    k = k.trim().replace(/^export\s+/, "");
+    if (v.length >= 2 && v[0] === '"' && v[v.length - 1] === '"') {
+      try {
+        v = JSON.parse(v);
+      } catch {
+        v = v.slice(1, -1);
+      }
+    } else if (v.length >= 2 && v[0] === "'" && v[v.length - 1] === "'") v = v.slice(1, -1);
+    out2[k] = v;
+  }
+  return out2;
+}
+var envFile, dumpDotenv;
+var init_secrets = __esm({
+  "src/secrets/index.ts"() {
+    "use strict";
+    envFile = (repo, name2) => name2 === "global" ? join16(repo, "secrets", "global.env") : join16(repo, "secrets", "projects", `${name2}.env`);
+    dumpDotenv = (v) => Object.entries(v).map(([k, val]) => `${k}=${/[ #"'\\$`]/.test(val) || val === "" ? JSON.stringify(val) : val}`).join("\n") + (Object.keys(v).length ? "\n" : "");
+  }
+});
+
+// src/envfiles.ts
+import { chmodSync as chmodSync4, existsSync as existsSync15, mkdirSync as mkdirSync13, readdirSync as readdirSync6, readFileSync as readFileSync13, rmSync as rmSync6, statSync as statSync7, writeFileSync as writeFileSync12 } from "node:fs";
+import { dirname as dirname7, join as join17, relative as relative7 } from "node:path";
+function storedFiles(repo, project, others) {
+  const d = join17(repo, "secrets", "projects");
+  if (!existsSync15(d)) return [];
+  return readdirSync6(d).filter((n3) => n3.endsWith(".env")).map((n3) => n3.slice(0, -4)).filter((e) => !others.has(e) || e === project).map((e) => fileOf(project, e)).filter((f) => !!f);
+}
+function storedStamp(repo, f) {
+  const [when2, subject, email2] = out(["log", "-1", "--format=%cI%n%s%n%ae", "--", relative7(repo, f)], repo).split("\n");
+  if (when2 && git(["diff", "--quiet", "--", relative7(repo, f)], repo, { check: false }).code === 0)
+    return { when: when2, from: subject?.match(/^sync\(([^)]+)\):/)?.[1] ?? (email2?.startsWith("cs@") ? email2.slice(3) : void 0) };
+  return { when: mtime(f) };
+}
+async function observeEnv(repo, b, p, root, others) {
+  const extraLocal = p.env && p.env.local || [];
+  const here = existsSync15(root) ? readdirSync6(root).filter(isEnvName) : [];
+  const files = [.../* @__PURE__ */ new Set([...here, ...storedFiles(repo, p.name, others)])].sort();
+  const out2 = [];
+  for (const file of files) {
+    const tracked = git(["ls-files", "--error-unmatch", "--", file], root, { check: false }).code === 0;
+    const ignored = git(["check-ignore", "-q", "--", file], root, { check: false }).code === 0;
+    const kind = classify(file, { tracked, ignored }, extraLocal);
+    const name2 = storeName(p.name, file), path = join17(root, file), sf = envFile(repo, name2);
+    const st = { project: p.name, file, kind, name: name2, path, localText: "", merge: { result: {}, toLocal: [], toStore: [], conflicts: [] } };
+    if (kind !== "values") {
+      out2.push(st);
+      continue;
+    }
+    if (existsSync15(path)) {
+      st.localText = readFileSync13(path, "utf8");
+      st.local = parseDotenv(st.localText);
+      st.localWhen = mtime(path);
+    }
+    if (existsSync15(sf)) {
+      st.stored = await b.loadEnvA(repo, name2);
+      const s = storedStamp(repo, sf);
+      st.storedWhen = s.when;
+      st.storedFrom = s.from;
+    }
+    if (st.local && st.stored) st.base = readValues(snapshotFile(p.name, file));
+    st.merge = merge3(st.base, st.local ?? {}, st.stored ?? {});
+    out2.push(st);
+  }
+  return out2;
+}
+function writeSnapshot(st, values) {
+  const f = snapshotFile(st.project, st.file);
+  if (!Object.keys(values).length) {
+    rmSync6(f, { force: true });
+    return;
+  }
+  mkdirSync13(dirname7(f), { recursive: true, mode: 448 });
+  writeFileSync12(f, dumpDotenv(values), { mode: 384 });
+}
+async function applyEnv(repo, b, st, decide2) {
+  const m = merge3(st.base, st.local ?? {}, st.stored ?? {}, decide2);
+  if (m.conflicts.length) throw new Error(`cs: ${st.project} ${st.file}: undecided keys ${m.conflicts.map((c2) => c2.key).join(", ")}`);
+  const empty = !Object.keys(m.result).length;
+  if (m.toStore.length) {
+    if (empty) rmSync6(envFile(repo, st.name), { force: true });
+    else await b.writeEnvA(repo, st.name, m.result);
+  }
+  if (m.toLocal.length) {
+    if (st.local) {
+      const prev = snapshotFile(st.project, st.file) + ".prev";
+      mkdirSync13(dirname7(prev), { recursive: true, mode: 448 });
+      writeFileSync12(prev, st.localText, { mode: 384 });
+    }
+    if (empty) rmSync6(st.path, { force: true });
+    else {
+      const fresh = !existsSync15(st.path);
+      writeFileSync12(st.path, patchDotenv(st.localText, m.result));
+      if (fresh) chmodSync4(st.path, 384);
+    }
+  }
+  writeSnapshot(st, m.result);
+  return { stored: m.toStore.length, local: m.toLocal.length };
+}
+function snapshotInSync(st) {
+  if (st.kind !== "values" || !st.local || !st.stored || st.merge.toLocal.length || st.merge.toStore.length || st.merge.conflicts.length) return;
+  writeSnapshot(st, st.merge.result);
+}
+var snapshotFile, readValues, mtime, newestSide;
+var init_envfiles = __esm({
+  "src/envfiles.ts"() {
+    "use strict";
+    init_git();
+    init_paths();
+    init_secrets();
+    init_env();
+    snapshotFile = (project, file) => join17(stateDir(), "env", project, file);
+    readValues = (f) => existsSync15(f) ? parseDotenv(readFileSync13(f, "utf8")) : void 0;
+    mtime = (f) => new Date(statSync7(f).mtimeMs).toISOString();
+    newestSide = (st) => st.storedWhen && st.localWhen && Date.parse(st.storedWhen) > Date.parse(st.localWhen) ? "stored" : "local";
+  }
+});
+
 // src/gather.ts
-import { existsSync as existsSync14 } from "node:fs";
-async function gather(m, man, o) {
+import { existsSync as existsSync16, readdirSync as readdirSync7 } from "node:fs";
+async function gather(repo, m, man, o) {
   const ws = workspace(man, m);
   const facts = [];
-  const handoffs2 = {};
+  const handoffs3 = {};
+  const env2 = {};
+  const backend = await getBackend(m);
+  const canRead = backend.name !== "none" && backend.ready(repo);
+  const envSkipped = [];
+  const names = new Set(Object.keys(man.projects));
   for (const p of selectedProjects(man, m)) {
     const root = checkoutRoot(p, ws);
-    if (!existsSync14(root) || !isRepo(root) || !remoteUrl(root)) continue;
+    if (!existsSync16(root) || !isRepo(root) || !remoteUrl(root)) continue;
     const f = { project: p.name, layout: p.layout, units: [], waiting: [] };
     facts.push(f);
+    if (p.env !== false) {
+      if (canRead) {
+        try {
+          env2[p.name] = await observeEnv(repo, backend, p, root, names);
+          f.env = env2[p.name].filter((s) => s.kind === "values" || s.kind === "unignored").map((s) => ({ file: s.file, kind: s.kind, merge: s.merge, from: s.storedFrom }));
+        } catch (e) {
+          envSkipped.push(`${p.name}: .env files not carried \u2014 ${String(e?.message ?? e).replace(/^cs: /, "").split("\n")[0]}`);
+        }
+      } else if (!envSkipped.length && hasIgnoredEnv(root)) envSkipped.push(backend.name === "none" ? ".env files not carried \u2014 secrets backend is 'none' (machine.toml [secrets].backend)" : `.env files not carried \u2014 this machine cannot read the secrets yet: cs secrets init here, or cs trust ${m.name} on a machine that can`);
+    }
     for (const u5 of units(p, ws)) {
       const dirty = dirtyCount(u5.path);
       const unpushed = aheadBehind(u5.path)?.[0] ?? 0;
@@ -8659,18 +9145,29 @@ async function gather(m, man, o) {
       f.offline = true;
       continue;
     }
-    handoffs2[p.name] = r2.list;
+    handoffs3[p.name] = r2.list;
     f.waiting = r2.list.map((h2) => ({ branch: h2.branch, machine: h2.machine, when: h2.when, note: h2.note, ref: h2.ref }));
   }
-  return { facts, handoffs: handoffs2 };
+  return { facts, handoffs: handoffs3, env: env2, envSkipped };
 }
+var hasIgnoredEnv;
 var init_gather = __esm({
   "src/gather.ts"() {
     "use strict";
     init_git();
     init_manifest();
     init_handoff();
+    init_secrets();
+    init_envfiles();
+    init_env();
     init_ui();
+    hasIgnoredEnv = (root) => {
+      try {
+        return readdirSync7(root).some((n3) => isEnvName(n3) && git(["check-ignore", "-q", "--", n3], root, { check: false }).code === 0);
+      } catch {
+        return false;
+      }
+    };
   }
 });
 
@@ -8679,13 +9176,13 @@ var sync_exports = {};
 __export(sync_exports, {
   runSync: () => runSync
 });
-import { closeSync as closeSync2, existsSync as existsSync15, mkdirSync as mkdirSync12, openSync as openSync2, readFileSync as readFileSync12, unlinkSync as unlinkSync6, writeFileSync as writeFileSync11 } from "node:fs";
-import { join as join15 } from "node:path";
+import { closeSync as closeSync2, existsSync as existsSync17, mkdirSync as mkdirSync14, openSync as openSync2, readFileSync as readFileSync14, unlinkSync as unlinkSync6, writeFileSync as writeFileSync13 } from "node:fs";
+import { join as join18 } from "node:path";
 function lock() {
-  mkdirSync12(stateDir(), { recursive: true });
+  mkdirSync14(stateDir(), { recursive: true });
   const take = () => {
     const fd = openSync2(lockFile2(), "wx");
-    writeFileSync11(fd, String(process.pid));
+    writeFileSync13(fd, String(process.pid));
     closeSync2(fd);
   };
   try {
@@ -8693,7 +9190,7 @@ function lock() {
   } catch {
     let pid = NaN;
     try {
-      pid = parseInt(readFileSync12(lockFile2(), "utf8"), 10);
+      pid = parseInt(readFileSync14(lockFile2(), "utf8"), 10);
     } catch {
     }
     if (pid && alive(pid)) return false;
@@ -8706,7 +9203,7 @@ function lock() {
   }
   const release = () => {
     try {
-      if (parseInt(readFileSync12(lockFile2(), "utf8"), 10) === process.pid) unlinkSync6(lockFile2());
+      if (parseInt(readFileSync14(lockFile2(), "utf8"), 10) === process.pid) unlinkSync6(lockFile2());
     } catch {
     }
   };
@@ -8717,6 +9214,10 @@ function report(facts) {
   for (const f of facts) {
     for (const w of f.waiting) step(`${f.project} \xB7 ${w.branch}  handoff waiting from ${w.machine} (${when(w.when)})`);
     for (const u5 of f.units) if ((u5.dirty || u5.unpushed) && !u5.skip) step(`${f.project} \xB7 ${u5.branch}  ${[u5.dirty ? count(u5.dirty, "change") : "", u5.unpushed ? count(u5.unpushed, "unpushed commit") : ""].filter(Boolean).join(", ")}`);
+    for (const e of f.env ?? []) if (e.kind === "values") {
+      const what = describeMerge(e.merge, e.from);
+      if (what) step(`${f.project} \xB7 ${e.file}  ${what}`);
+    }
   }
 }
 async function planScreen(pl) {
@@ -8775,6 +9276,29 @@ ${cyan("\u2192 ")}kept local, the handoff stays waiting \u2014 run cs sync in a 
   }
   return out2;
 }
+async function askEnvKeys(qs, states) {
+  const out2 = {};
+  for (const q of qs) {
+    const st = states[q.project]?.find((s) => s.file === q.file);
+    if (!st) continue;
+    const c2 = st.merge.conflicts.find((x) => x.key === q.key);
+    if (!c2) continue;
+    const other = q.from ? `${q.from}'s value` : "the share's value";
+    const newest2 = newestSide(st);
+    let side;
+    if (!canAsk()) {
+      side = newest2;
+      warn(`${q.why}
+${cyan("\u2192 ")}newest kept: ${side === "local" ? "this machine's value" : other} \u2014 run cs sync in a terminal to choose`);
+    } else side = await select2(`${q.why} \u2014 keep which value?`, [
+      { value: "local", label: "this machine's value", hint: `${mask(c2.local)}${st.localWhen ? `, changed ${when(st.localWhen)}` : ""}` },
+      { value: "stored", label: other, hint: `${mask(c2.stored)}${st.storedWhen ? `, stored ${when(st.storedWhen)}` : ""}` }
+    ], newest2);
+    step(`${q.project} \xB7 ${q.file}: ${q.key} \u2014 ${side === "local" ? "this machine's value kept" : `${other} taken`}`);
+    (out2[`${q.project}:${q.file}`] ??= {})[q.key] = side;
+  }
+  return out2;
+}
 async function runSync(repo, m, man, o = {}) {
   if (!lock()) throw new Error("cs: another cs sync is running here \u2014 wait for it to finish");
   const timeout = o.timeout ?? 20;
@@ -8802,22 +9326,25 @@ async function runSync(repo, m, man, o = {}) {
     for (const p of selectedProjects(man, m)) if (checkouts(p, ws).length) for (const c2 of syncProject(repo, p, ws)) changes.push(`${p.name}: ${c2}`);
     for (const c2 of changes) step(c2);
   }, { done: "nothing to repair" });
-  const before = new Set(selectedProjects(man, m).filter((p) => existsSync15(checkoutRoot(p, ws))).map((p) => p.name));
+  const before = new Set(selectedProjects(man, m).filter((p) => existsSync17(checkoutRoot(p, ws))).map((p) => p.name));
   if (await group("cloned", () => clone(repo, m, man, []), { done: "nothing missing" })) rc = rc || 1;
-  const cloned = selectedProjects(man, m).filter((p) => !before.has(p.name) && existsSync15(checkoutRoot(p, ws))).length;
-  const { facts, handoffs: handoffs2 } = await group("projects checked", async () => {
-    const g = await gather(m, man, { timeout });
+  const cloned = selectedProjects(man, m).filter((p) => !before.has(p.name) && existsSync17(checkoutRoot(p, ws))).length;
+  const { facts, handoffs: handoffs3, env: env2, envSkipped } = await group("projects checked", async () => {
+    const g = await gather(repo, m, man, { timeout });
     report(g.facts);
     return g;
   }, { done: "all clean, nothing waiting" });
   const pl = plan(facts, m.name);
   for (const s of pl.skipped) skip(s);
+  for (const s of envSkipped) skip(s);
   let chosen = [];
   const unreachable = facts.filter((f) => f.offline).length;
   if (pl.actions.length) chosen = await planScreen(pl);
   else if (!pl.questions.length) info(dim(unreachable ? `nothing moved \u2014 ${unreachable} remote(s) unreachable` : "nothing to move \u2014 no handoffs waiting, nothing stale here"));
-  const answered = await askQuestions(pl.questions);
+  const answered = await askQuestions(pl.questions.filter((q) => q.kind === "dirty-vs-waiting"));
   const kept = answered.filter((a2) => a2.answer === "keep").length;
+  const envRows = chosen.filter((a2) => a2.kind === "env");
+  const decided = await askEnvKeys(pl.questions.filter((q) => q.kind === "env-key" && envRows.some((a2) => a2.project === q.project && a2.branch === q.file)), env2);
   const notes = [];
   let applied = 0, sent = 0;
   const per = (kind) => {
@@ -8830,7 +9357,7 @@ async function runSync(repo, m, man, o = {}) {
   if (sends.size || over.length) await group("handoffs sent", async () => {
     for (const [name2, branches] of sends) await handoff(repo, m, man, [man.projects[name2]], { branches, note: o.note, onDone: () => sent++ });
     for (const { q } of over) {
-      const h2 = handoffs2[q.project]?.find((x) => x.branch === q.branch);
+      const h2 = handoffs3[q.project]?.find((x) => x.branch === q.branch);
       const unit = units(man.projects[q.project], ws).find((u5) => u5.rel === q.unit);
       if (!h2 || !unit) {
         fail(`${q.project} \xB7 ${q.branch}: could not back the waiting handoff up \u2014 not sent`);
@@ -8842,8 +9369,8 @@ async function runSync(repo, m, man, o = {}) {
   });
   if (applies.size || replace.length) await group("handoffs applied", async () => {
     const onNote = (p, from, note3) => notes.push([`${p} \u2014 note from ${from}`, ...note3.trim().split("\n")]);
-    for (const [name2, branches] of applies) await resume(repo, m, man, [man.projects[name2]], { branches, waiting: handoffs2, onDone: () => applied++, onNote });
-    for (const { q } of replace) await resume(repo, m, man, [man.projects[q.project]], { branches: [q.branch], waiting: handoffs2, replace: true, onDone: () => applied++, onNote });
+    for (const [name2, branches] of applies) await resume(repo, m, man, [man.projects[name2]], { branches, waiting: handoffs3, onDone: () => applied++, onNote });
+    for (const { q } of replace) await resume(repo, m, man, [man.projects[q.project]], { branches: [q.branch], waiting: handoffs3, replace: true, onDone: () => applied++, onNote });
   });
   for (const [title, ...lines] of notes) note2(lines, title);
   let pushed = 0;
@@ -8865,15 +9392,34 @@ async function runSync(repo, m, man, o = {}) {
       step(`${a2.label} \u2192 ${up.remote}/${up.ref.replace(/^refs\/heads\//, "")}`);
     }
   });
-  const failed = chosen.length + over.length + replace.length - sent - applied - pushed;
+  let envDone = 0;
+  if (envRows.length) await group(".env files", async () => {
+    const b = await getBackend(m);
+    for (const a2 of envRows) {
+      const st = env2[a2.project]?.find((s) => s.file === a2.branch);
+      if (!st) {
+        fail(`${a2.label}: not observed \u2014 not merged`);
+        continue;
+      }
+      try {
+        const r2 = await applyEnv(repo, b, st, decided[`${a2.project}:${a2.branch}`] ?? {});
+        envDone++;
+        step(`${a2.label}: ${[r2.stored ? `${count(r2.stored, "key")} stored` : "", r2.local ? `${count(r2.local, "key")} taken${st.storedFrom ? ` from ${st.storedFrom}` : ""}` : ""].filter(Boolean).join(", ")}`);
+      } catch (e) {
+        fail(`${a2.label}: ${String(e?.message ?? e).replace(/^cs: /, "")}`);
+      }
+    }
+  });
+  for (const sts of Object.values(env2)) for (const st of sts) snapshotInSync(st);
+  const failed = chosen.length + over.length + replace.length - sent - applied - pushed - envDone;
   if (failed) rc = rc || 1;
   const last = await syncShare(repo, m, "share pushed", first.offline ? "committed locally \u2014 offline, pushed by the next sync" : "already in sync", copyBack, { timeout, commitOnly: first.offline });
   if (!last.ok) rc = 2;
-  const bits = [applied ? `${applied} handoff(s) applied` : "", sent ? `${sent} handoff(s) sent` : "", pushed ? `${pushed} branch(es) pushed` : "", cloned ? `${cloned} project(s) cloned` : "", kept ? yellow(`${kept} handoff(s) left waiting \u2014 see above`) : ""].filter(Boolean);
+  const bits = [applied ? `${applied} handoff(s) applied` : "", sent ? `${sent} handoff(s) sent` : "", pushed ? `${pushed} branch(es) pushed` : "", envDone ? `${envDone} .env file(s) merged` : "", cloned ? `${cloned} project(s) cloned` : "", kept ? yellow(`${kept} handoff(s) left waiting \u2014 see above`) : ""].filter(Boolean);
   const summary = rc === 2 ? red("share not synced \u2014 see above") : failed ? red(`${failed} action(s) failed \u2014 see above`) : bits.length ? bits.join(" \xB7 ") : dim(first.offline || last.offline ? "offline \u2014 local parts done, nothing moved" : "nothing to move");
   return { rc, summary };
 }
-var lockFile2, alive, GROUP;
+var lockFile2, alive, GROUP, mask;
 var init_sync = __esm({
   "src/sync.ts"() {
     "use strict";
@@ -8887,9 +9433,12 @@ var init_sync = __esm({
     init_projects();
     init_handoff();
     init_gather();
+    init_secrets();
+    init_envfiles();
+    init_env();
     init_plan();
     init_ui();
-    lockFile2 = () => join15(stateDir(), "sync.lock");
+    lockFile2 = () => join18(stateDir(), "sync.lock");
     alive = (pid) => {
       try {
         process.kill(pid, 0);
@@ -8898,238 +9447,8 @@ var init_sync = __esm({
         return false;
       }
     };
-    GROUP = { send: "handoffs to send", apply: "handoffs to apply", push: "branches to push" };
-  }
-});
-
-// src/secrets/sops.ts
-var sops_exports = {};
-__export(sops_exports, {
-  SopsBackend: () => SopsBackend,
-  keyFile: () => keyFile,
-  machinePubFile: () => machinePubFile,
-  publicKey: () => publicKey,
-  recipients: () => recipients,
-  updatekeys: () => updatekeys,
-  writeRecipients: () => writeRecipients
-});
-import { chmodSync as chmodSync3, copyFileSync as copyFileSync4, existsSync as existsSync16, mkdirSync as mkdirSync13, readdirSync as readdirSync5, readFileSync as readFileSync13, rmSync as rmSync5, writeFileSync as writeFileSync12 } from "node:fs";
-import { dirname as dirname6, join as join16, relative as relative6 } from "node:path";
-import { spawnSync as spawnSync5 } from "node:child_process";
-function sops(args, repo, input, check = true) {
-  const p = spawnSync5(exe("sops"), args, { cwd: repo, env: env(), encoding: "utf8", input, stdio: ["pipe", "pipe", "pipe"] });
-  if (check && p.status !== 0) throw new Error(`cs: sops ${args.join(" ")} failed: ${(p.stderr ?? "").trim()}`);
-  return p;
-}
-function publicKey() {
-  if (!existsSync16(keyFile())) return "";
-  const line = readFileSync13(keyFile(), "utf8").split("\n").find((l2) => l2.startsWith("# public key:"));
-  if (line) return line.split(":")[1].trim();
-  return (spawnSync5(exe("age-keygen"), ["-y", keyFile()], { encoding: "utf8" }).stdout ?? "").trim();
-}
-function keygen() {
-  mkdirSync13(dirname6(keyFile()), { recursive: true, mode: 448 });
-  const p = spawnSync5(exe("age-keygen"), ["-o", keyFile()], { encoding: "utf8" });
-  if (p.status !== 0) throw new Error(`cs: age-keygen failed: ${p.stderr}`);
-  chmodSync3(keyFile(), 384);
-}
-function recipients(repo) {
-  const f = join16(repo, ".sops.yaml");
-  if (!existsSync16(f)) return [];
-  const t2 = readFileSync13(f, "utf8");
-  const m = t2.match(/age:\s*>-?\s*\n((?:\s+.+\n?)+)/);
-  if (m) return m[1].replace(/\n/g, " ").split(",").map((x) => x.trim()).filter(Boolean);
-  const m2 = t2.match(/age:\s*(\S.*)/);
-  return m2 ? m2[1].split(",").map((x) => x.trim()).filter(Boolean) : [];
-}
-function writeRecipients(repo, recs) {
-  writeFileSync12(join16(repo, ".sops.yaml"), `# sops recipients \u2014 managed by cs secrets init / cs trust / cs untrust
-creation_rules:
-  - path_regex: ${RULE}
-    age: >-
-` + recs.map((r2) => `      ${r2}`).join(",\n") + "\n");
-}
-function envFiles(repo) {
-  const out2 = [];
-  const rec = (d) => {
-    if (!existsSync16(d)) return;
-    for (const e of readdirSync5(d, { withFileTypes: true })) {
-      const f = join16(d, e.name);
-      e.isDirectory() ? rec(f) : f.endsWith(".env") && out2.push(f);
-    }
-  };
-  rec(join16(repo, "secrets"));
-  return out2.sort();
-}
-async function updatekeys(repo) {
-  const { exec: exec4 } = await Promise.resolve().then(() => (init_proc(), proc_exports));
-  let n3 = 0;
-  for (const f of envFiles(repo)) if (isEncrypted(f)) {
-    const p = await exec4(exe("sops"), ["updatekeys", "-y", relative6(repo, f)], { cwd: repo, env: env() });
-    if (p.code !== 0) throw new Error(`cs: sops updatekeys failed: ${p.err}`);
-    n3++;
-  }
-  return n3;
-}
-var RULE, keyFile, env, exe, machinePubFile, isEncrypted, SopsBackend;
-var init_sops = __esm({
-  "src/secrets/sops.ts"() {
-    "use strict";
-    init_git();
-    init_paths();
-    init_deps();
-    init_secrets();
-    init_ui();
-    RULE = "^secrets/.*\\.env$";
-    keyFile = () => process.env.SOPS_AGE_KEY_FILE || join16(home(), ".config", "sops", "age", "keys.txt");
-    env = () => {
-      const e = { ...process.env, SOPS_AGE_KEY_FILE: keyFile() };
-      delete e.SOPS_AGE_RECIPIENTS;
-      return e;
-    };
-    exe = (n3) => which(n3) || join16(home(), ".local", "bin", n3);
-    machinePubFile = (repo, machine) => join16(repo, "machines", machine, "age.pub");
-    isEncrypted = (f) => {
-      try {
-        return readFileSync13(f, "utf8").includes("sops_version=");
-      } catch {
-        return false;
-      }
-    };
-    SopsBackend = {
-      name: "sops",
-      async init(repo, m) {
-        if (existsSync16(keyFile())) skip(`age key present at ${contract(keyFile())}`);
-        else {
-          keygen();
-          ok(`generated age key ${contract(keyFile())} (0600, never synced)`);
-        }
-        const pub = publicKey();
-        const pf = machinePubFile(repo, m.name);
-        if (!existsSync16(pf) || readFileSync13(pf, "utf8").trim() !== pub) {
-          mkdirSync13(dirname6(pf), { recursive: true });
-          writeFileSync12(pf, pub + "\n");
-          git(["add", relative6(repo, pf)], repo);
-          commit(repo, `machines: ${m.name} age.pub`, "cs", `cs@${m.name}`);
-          ok(`published ${contract(pf)}`);
-        }
-        const recs = recipients(repo);
-        if (!recs.length) {
-          writeRecipients(repo, [pub]);
-          git(["add", ".sops.yaml"], repo);
-          commit(repo, "secrets: first recipient", "cs", `cs@${m.name}`);
-          ok("this is the first machine: registered as the only recipient");
-          const hook = join16(repo, ".git", "hooks", "pre-commit"), src = join16(toolRoot(), "hooks", "pre-commit-secrets-guard.sh");
-          if (existsSync16(src) && !existsSync16(hook)) {
-            copyFileSync4(src, hook);
-            chmodSync3(hook, 493);
-            ok("installed pre-commit plaintext guard in the share");
-          }
-        } else if (recs.includes(pub)) ok("this machine can decrypt secrets");
-        else step("this machine is not a recipient yet");
-        mkdirSync13(join16(repo, "secrets", "projects"), { recursive: true });
-      },
-      ready: (repo) => existsSync16(keyFile()) && recipients(repo).includes(publicKey()),
-      loadEnv(repo, name2) {
-        const f = envFile(repo, name2);
-        if (!existsSync16(f)) return {};
-        return parseDotenv(sops(["-d", "--input-type", "dotenv", "--output-type", "dotenv", relative6(repo, f)], repo).stdout);
-      },
-      writeEnv(repo, name2, values) {
-        const f = envFile(repo, name2);
-        mkdirSync13(dirname6(f), { recursive: true });
-        const rel = relative6(repo, f);
-        const tmp = join16(dirname6(f), `.${name2.replace(/\//g, "_")}.plain.${process.pid}.env`);
-        writeFileSync12(tmp, dumpDotenv(values), { mode: 384 });
-        try {
-          const p = sops(["-e", "--input-type", "dotenv", "--output-type", "dotenv", "--filename-override", rel, relative6(repo, tmp)], repo);
-          writeFileSync12(f, p.stdout);
-        } finally {
-          rmSync5(tmp, { force: true });
-        }
-        return f;
-      },
-      edit(repo, name2) {
-        const f = envFile(repo, name2);
-        if (!existsSync16(f)) this.writeEnv(repo, name2, { EXAMPLE_KEY: "value" });
-        spawnSync5(exe("sops"), ["--input-type", "dotenv", "--output-type", "dotenv", relative6(repo, f)], { cwd: repo, env: env(), stdio: "inherit" });
-      },
-      status(repo, m) {
-        const pub = publicKey(), recs = recipients(repo);
-        kv("age key", contract(keyFile()) + (existsSync16(keyFile()) ? "" : red("  missing")));
-        kv("recipient", pub && recs.includes(pub) ? green("yes") : red("no \u2014 cs trust " + m.name));
-        const names = {};
-        const md = join16(repo, "machines");
-        if (existsSync16(md)) for (const d of readdirSync5(md)) {
-          const pf = join16(md, d, "age.pub");
-          if (existsSync16(pf)) names[readFileSync13(pf, "utf8").trim()] = d;
-        }
-        kv("recipients", recs.map((r2) => names[r2] ?? r2.slice(0, 14) + "\u2026").join(", ") || "-");
-        kv("files", envFiles(repo).map((f) => relative6(repo, f)).join(", ") || "-");
-      }
-    };
-  }
-});
-
-// src/secrets/none.ts
-var none_exports = {};
-__export(none_exports, {
-  NoneBackend: () => NoneBackend
-});
-var no, NoneBackend;
-var init_none = __esm({
-  "src/secrets/none.ts"() {
-    "use strict";
-    init_ui();
-    no = () => {
-      throw new Error("cs: secrets backend 'none' cannot store secrets");
-    };
-    NoneBackend = {
-      name: "none",
-      async init() {
-        info(`secrets backend is 'none' \u2014 set [secrets].backend = "sops" in machine.toml to enable`);
-      },
-      ready: () => true,
-      loadEnv: () => ({}),
-      writeEnv: no,
-      edit: no,
-      status: () => info("backend none")
-    };
-  }
-});
-
-// src/secrets/index.ts
-import { join as join17 } from "node:path";
-async function getBackend(m) {
-  if (m.secretsBackend === "sops") return (await Promise.resolve().then(() => (init_sops(), sops_exports))).SopsBackend;
-  if (m.secretsBackend === "none") return (await Promise.resolve().then(() => (init_none(), none_exports))).NoneBackend;
-  throw new Error(`cs: unknown secrets backend '${m.secretsBackend}' (sops | none)`);
-}
-function parseDotenv(text3) {
-  const out2 = {};
-  for (let line of text3.split("\n")) {
-    line = line.trim();
-    if (!line || line.startsWith("#") || !line.includes("=")) continue;
-    let [k, ...rest] = line.split("=");
-    let v = rest.join("=").trim();
-    k = k.trim().replace(/^export\s+/, "");
-    if (v.length >= 2 && v[0] === '"' && v[v.length - 1] === '"') {
-      try {
-        v = JSON.parse(v);
-      } catch {
-        v = v.slice(1, -1);
-      }
-    } else if (v.length >= 2 && v[0] === "'" && v[v.length - 1] === "'") v = v.slice(1, -1);
-    out2[k] = v;
-  }
-  return out2;
-}
-var envFile, dumpDotenv;
-var init_secrets = __esm({
-  "src/secrets/index.ts"() {
-    "use strict";
-    envFile = (repo, name2) => name2 === "global" ? join17(repo, "secrets", "global.env") : join17(repo, "secrets", "projects", `${name2}.env`);
-    dumpDotenv = (v) => Object.entries(v).map(([k, val]) => `${k}=${/[ #"'\\$`]/.test(val) || val === "" ? JSON.stringify(val) : val}`).join("\n") + (Object.keys(v).length ? "\n" : "");
+    GROUP = { send: "handoffs to send", apply: "handoffs to apply", push: "branches to push", env: ".env files to store or update" };
+    mask = (v) => v === void 0 ? "removed" : v.length > 8 ? v.slice(0, 3) + "\u2026" + v.slice(-2) : "\u2026";
   }
 });
 
@@ -9152,8 +9471,8 @@ __export(secretscmd_exports, {
   unsetValues: () => unsetValues,
   untrust: () => untrust
 });
-import { chmodSync as chmodSync4, existsSync as existsSync17, mkdirSync as mkdirSync14, readdirSync as readdirSync6, readFileSync as readFileSync14, writeFileSync as writeFileSync13, rmSync as rmSync6 } from "node:fs";
-import { join as join18, relative as relative7 } from "node:path";
+import { chmodSync as chmodSync5, existsSync as existsSync18, mkdirSync as mkdirSync15, readdirSync as readdirSync8, readFileSync as readFileSync15, writeFileSync as writeFileSync14, rmSync as rmSync7 } from "node:fs";
+import { join as join19, relative as relative8 } from "node:path";
 import { spawnSync as spawnSync6 } from "node:child_process";
 async function init(repo, m, interactive = true) {
   await (await getBackend(m)).init(repo, m, interactive);
@@ -9196,10 +9515,10 @@ async function get(repo, m, name2, key, show) {
   const v = (await getBackend(m)).loadEnv(repo, name2);
   if (key) {
     if (!(key in v)) return 1;
-    console.log(show ? v[key] : mask(v[key]));
+    console.log(show ? v[key] : mask2(v[key]));
     return 0;
   }
-  for (const [k, val] of Object.entries(v)) console.log(`${k}=${show ? val : mask(val)}`);
+  for (const [k, val] of Object.entries(v)) console.log(`${k}=${show ? val : mask2(val)}`);
   return 0;
 }
 async function pull(repo, m, man, project, force) {
@@ -9210,13 +9529,13 @@ async function pull(repo, m, man, project, force) {
     warn(`no secrets stored for ${project} (cs secrets push ${project} / cs secrets set ${project} K=V)`);
     return 1;
   }
-  const root = checkoutRoot(p, workspace(man, m)), target = join18(root, ".env"), text3 = dumpDotenv(v);
-  if (existsSync17(target) && readFileSync14(target, "utf8") !== text3 && !force) {
+  const root = checkoutRoot(p, workspace(man, m)), target = join19(root, ".env"), text3 = dumpDotenv(v);
+  if (existsSync18(target) && readFileSync15(target, "utf8") !== text3 && !force) {
     fail(`${contract(target)} exists and differs \u2014 cs secrets diff ${project}; use --force to overwrite`);
     return 1;
   }
-  writeFileSync13(target, text3);
-  chmodSync4(target, 384);
+  writeFileSync14(target, text3);
+  chmodSync5(target, 384);
   checkIgnored(root, target);
   ok(`wrote ${contract(target)} (${Object.keys(v).length} keys)`);
   return 0;
@@ -9224,9 +9543,9 @@ async function pull(repo, m, man, project, force) {
 async function push(repo, m, man, project) {
   const p = man.projects[project];
   if (!p) throw new Error(`cs: unknown project '${project}'`);
-  const root = checkoutRoot(p, workspace(man, m)), src = join18(root, ".env");
-  if (!existsSync17(src)) throw new Error(`cs: ${contract(src)} not found`);
-  const v = parseDotenv(readFileSync14(src, "utf8"));
+  const root = checkoutRoot(p, workspace(man, m)), src = join19(root, ".env");
+  if (!existsSync18(src)) throw new Error(`cs: ${contract(src)} not found`);
+  const v = parseDotenv(readFileSync15(src, "utf8"));
   (await getBackend(m)).writeEnv(repo, project, v);
   commitSecrets(repo, m, `secrets: ${project} .env`);
   checkIgnored(root, src);
@@ -9237,9 +9556,9 @@ async function diff(repo, m, man, project) {
   const p = man.projects[project];
   if (!p) throw new Error(`cs: unknown project '${project}'`);
   const stored = (await getBackend(m)).loadEnv(repo, project);
-  const lf = join18(checkoutRoot(p, workspace(man, m)), ".env");
-  const local = existsSync17(lf) ? parseDotenv(readFileSync14(lf, "utf8")) : {};
-  const rows = [.../* @__PURE__ */ new Set([...Object.keys(stored), ...Object.keys(local)])].sort().filter((k) => stored[k] !== local[k]).map((k) => [k, k in stored ? mask(stored[k]) : dim("-"), k in local ? mask(local[k]) : dim("-")]);
+  const lf = join19(checkoutRoot(p, workspace(man, m)), ".env");
+  const local = existsSync18(lf) ? parseDotenv(readFileSync15(lf, "utf8")) : {};
+  const rows = [.../* @__PURE__ */ new Set([...Object.keys(stored), ...Object.keys(local)])].sort().filter((k) => stored[k] !== local[k]).map((k) => [k, k in stored ? mask2(stored[k]) : dim("-"), k in local ? mask2(local[k]) : dim("-")]);
   if (rows.length) {
     table(rows, ["key", "stored", "local .env"]);
     return 1;
@@ -9269,8 +9588,8 @@ async function exec3(repo, m, man, project, cmd) {
 }
 async function trust(repo, m, machine) {
   const pf = machinePubFile(repo, machine);
-  if (!existsSync17(pf)) throw new Error(`cs: ${contract(pf)} not found \u2014 run cs secrets init on ${machine} and cs sync on both sides first`);
-  const pub = readFileSync14(pf, "utf8").trim();
+  if (!existsSync18(pf)) throw new Error(`cs: ${contract(pf)} not found \u2014 run cs secrets init on ${machine} and cs sync on both sides first`);
+  const pub = readFileSync15(pf, "utf8").trim();
   const recs = recipients(repo);
   if (recs.includes(pub)) {
     ok(`${machine} is already a recipient`);
@@ -9285,12 +9604,12 @@ async function trust(repo, m, machine) {
 }
 async function untrust(repo, m, machine) {
   const pf = machinePubFile(repo, machine);
-  const pub = existsSync17(pf) ? readFileSync14(pf, "utf8").trim() : "";
+  const pub = existsSync18(pf) ? readFileSync15(pf, "utf8").trim() : "";
   const recs = recipients(repo);
   if (pub && recs.includes(pub)) {
     writeRecipients(repo, recs.filter((r2) => r2 !== pub));
     const n3 = await spin("re-encrypting secrets without that machine\u2026", () => updatekeys(repo));
-    rmSync6(join18(repo, "machines", machine), { recursive: true, force: true });
+    rmSync7(join19(repo, "machines", machine), { recursive: true, force: true });
     git(["add", "-A", ".sops.yaml", "secrets", "machines"], repo);
     commit(repo, `secrets: untrust ${machine}`, "cs", `cs@${m.name}`);
     ok(`untrusted ${machine}; re-encrypted ${n3} file(s)`);
@@ -9302,26 +9621,26 @@ async function untrust(repo, m, machine) {
   return 0;
 }
 function man_projects(repo) {
-  const d = join18(repo, "secrets", "projects");
+  const d = join19(repo, "secrets", "projects");
   const out2 = {};
-  if (existsSync17(d)) {
-    for (const f of readdirSync6(d)) if (f.endsWith(".env")) out2[f.slice(0, -4)] = true;
+  if (existsSync18(d)) {
+    for (const f of readdirSync8(d)) if (f.endsWith(".env")) out2[f.slice(0, -4)] = true;
   }
   return out2;
 }
 async function recovery(repo, m) {
-  const tmp = join18(home(), ".cache", `cs-recovery-${process.pid}.txt`);
-  const exe2 = which("age-keygen") || join18(home(), ".local", "bin", "age-keygen");
-  mkdirSync14(join18(home(), ".cache"), { recursive: true });
+  const tmp = join19(home(), ".cache", `cs-recovery-${process.pid}.txt`);
+  const exe2 = which("age-keygen") || join19(home(), ".local", "bin", "age-keygen");
+  mkdirSync15(join19(home(), ".cache"), { recursive: true });
   const p = spawnSync6(exe2, ["-o", tmp], { encoding: "utf8" });
   if (p.status !== 0) throw new Error(`cs: age-keygen failed: ${(p.stderr || "").trim()}`);
-  const text3 = readFileSync14(tmp, "utf8");
-  rmSync6(tmp, { force: true });
+  const text3 = readFileSync15(tmp, "utf8");
+  rmSync7(tmp, { force: true });
   const pub = text3.split("\n").find((l2) => l2.startsWith("# public key:")).split(":")[1].trim();
   const priv = text3.split("\n").find((l2) => l2.startsWith("AGE-SECRET-KEY-"));
   const pf = machinePubFile(repo, "recovery");
-  mkdirSync14(join18(repo, "machines", "recovery"), { recursive: true });
-  writeFileSync13(pf, pub + "\n");
+  mkdirSync15(join19(repo, "machines", "recovery"), { recursive: true });
+  writeFileSync14(pf, pub + "\n");
   writeRecipients(repo, [...recipients(repo), pub]);
   const n3 = await updatekeys(repo);
   git(["add", "-A", ".sops.yaml", "secrets", "machines/recovery"], repo);
@@ -9334,10 +9653,10 @@ async function ensureRecipient(repo, m, interactive) {
   const b = await getBackend(m);
   if (b.name === "none" || b.ready(repo)) return true;
   const { existsSync: ex, readdirSync: rd } = await import("node:fs");
-  const md = join18(repo, "machines");
+  const md = join19(repo, "machines");
   const others = ex(md) ? rd(md).filter((d) => d !== m.name && d !== "recovery" && recipients(repo).includes((() => {
     try {
-      return readFileSync14(join18(md, d, "age.pub"), "utf8").trim();
+      return readFileSync15(join19(md, d, "age.pub"), "utf8").trim();
     } catch {
       return "";
     }
@@ -9360,14 +9679,14 @@ async function ensureRecipient(repo, m, interactive) {
         warn("that does not look like an age secret key");
         continue;
       }
-      const tmp = join18(home(), ".cache", `cs-recovery-${process.pid}.txt`);
-      (await import("node:fs")).mkdirSync(join18(home(), ".cache"), { recursive: true });
-      writeFileSync13(tmp, priv.trim() + "\n", { mode: 384 });
+      const tmp = join19(home(), ".cache", `cs-recovery-${process.pid}.txt`);
+      (await import("node:fs")).mkdirSync(join19(home(), ".cache"), { recursive: true });
+      writeFileSync14(tmp, priv.trim() + "\n", { mode: 384 });
       const prev = process.env.SOPS_AGE_KEY_FILE;
       process.env.SOPS_AGE_KEY_FILE = tmp;
       try {
         const pub = publicKey.call(null);
-        const own = readFileSync14(machinePubFile(repo, m.name), "utf8").trim();
+        const own = readFileSync15(machinePubFile(repo, m.name), "utf8").trim();
         if (!recipients(repo).includes(own)) writeRecipients(repo, [...recipients(repo), own]);
         const n3 = await spin("re-encrypting secrets for this machine\u2026", () => updatekeys(repo));
         git(["add", "-A", ".sops.yaml", "secrets"], repo);
@@ -9380,7 +9699,7 @@ async function ensureRecipient(repo, m, interactive) {
       } finally {
         if (prev === void 0) delete process.env.SOPS_AGE_KEY_FILE;
         else process.env.SOPS_AGE_KEY_FILE = prev;
-        rmSync6(tmp, { force: true });
+        rmSync7(tmp, { force: true });
       }
       return b.ready(repo);
     }
@@ -9396,7 +9715,7 @@ async function ensureRecipient(repo, m, interactive) {
     warn("still not a recipient \u2014 did the other machine run cs sync after trusting it?");
   }
 }
-var mask, commitSecrets, checkIgnored;
+var mask2, commitSecrets, checkIgnored;
 var init_secretscmd = __esm({
   "src/secretscmd.ts"() {
     "use strict";
@@ -9407,7 +9726,7 @@ var init_secretscmd = __esm({
     init_secrets();
     init_sops();
     init_ui();
-    mask = (v) => v.length > 8 ? v.slice(0, 3) + "\u2026" + v.slice(-2) : "\u2026";
+    mask2 = (v) => v.length > 8 ? v.slice(0, 3) + "\u2026" + v.slice(-2) : "\u2026";
     commitSecrets = (repo, m, msg) => {
       if (isRepo(repo) && isDirty(repo)) {
         git(["add", "-A", "secrets"], repo);
@@ -9415,7 +9734,7 @@ var init_secretscmd = __esm({
       }
     };
     checkIgnored = (root, f) => {
-      if (isRepo(root) && git(["check-ignore", "-q", f], root, { check: false }).code !== 0) warn(`${relative7(root, f)} is NOT gitignored in ${contract(root)} \u2014 add it to .gitignore`);
+      if (isRepo(root) && git(["check-ignore", "-q", f], root, { check: false }).code !== 0) warn(`${relative8(root, f)} is NOT gitignored in ${contract(root)} \u2014 add it to .gitignore`);
     };
   }
 });
@@ -9427,8 +9746,8 @@ __export(identity_exports, {
   ls: () => ls,
   rename: () => rename
 });
-import { existsSync as existsSync18, renameSync as renameSync3, readFileSync as readFileSync15, writeFileSync as writeFileSync14 } from "node:fs";
-import { join as join19 } from "node:path";
+import { existsSync as existsSync19, renameSync as renameSync3, readFileSync as readFileSync16, writeFileSync as writeFileSync15 } from "node:fs";
+import { join as join20 } from "node:path";
 async function add2(repo, m, man, id, o) {
   if (!NAME_RE.test(id)) throw new Error(`cs: '${id}' is not a valid identity id`);
   const ident2 = { id, name: o.name, email: o.email, owner: o.owner, sshKey: o.key };
@@ -9439,7 +9758,7 @@ async function add2(repo, m, man, id, o) {
   const ch = [];
   applyGit(loadManifest(repo), false, ch);
   if (ch.length) step("git identity includes updated");
-  if (!existsSync18(expand(keyPath(ident2)))) info(`no key at ${keyPath(ident2)} yet \u2014 cs ssh setup generates and registers it`);
+  if (!existsSync19(expand(keyPath(ident2)))) info(`no key at ${keyPath(ident2)} yet \u2014 cs ssh setup generates and registers it`);
   if (!o.noToken && !getToken(o.owner)) {
     info(`a GitHub token for ${o.owner} lets cs new --${id} create repos:`);
     try {
@@ -9455,14 +9774,14 @@ function rename(repo, m, man, oldId, newId) {
   if (!man.identities[oldId]) throw new Error(`cs: unknown identity '${oldId}'`);
   if (man.identities[newId] || !NAME_RE.test(newId)) throw new Error(`cs: '${newId}' is taken or invalid`);
   const ident2 = man.identities[oldId];
-  const f = join19(repo, "projects.toml");
-  let t2 = readFileSync15(f, "utf8");
+  const f = join20(repo, "projects.toml");
+  let t2 = readFileSync16(f, "utf8");
   t2 = t2.replace(new RegExp(`^\\[identities\\.${oldId}\\]`, "m"), `[identities.${newId}]`).replace(new RegExp(`^(identity\\s*=\\s*)"${oldId}"`, "mg"), `$1"${newId}"`);
-  writeFileSync14(f, t2);
+  writeFileSync15(f, t2);
   if (!ident2.sshKey) {
     for (const s of ["", ".pub"]) {
       const a2 = expand(`~/.ssh/cs/${oldId}${s}`), b = expand(`~/.ssh/cs/${newId}${s}`);
-      if (existsSync18(a2)) renameSync3(a2, b);
+      if (existsSync19(a2)) renameSync3(a2, b);
     }
     step(`~/.ssh/cs/${oldId} \u2192 ~/.ssh/cs/${newId}`);
   }
@@ -9486,7 +9805,7 @@ function ls(man) {
     ids.map((i2) => {
       const n3 = Object.values(man.projects).filter((p) => p.identity === i2.id).length;
       const key = expand(keyPath(i2));
-      return [bold(i2.id), `${i2.name} <${i2.email}>`, i2.owner || dim("-"), existsSync18(key) ? keyPath(i2) : red(keyPath(i2) + " (missing)"), getToken(i2.owner) ? green("token \u2713") : dim("no token"), dim(`${n3} project${n3 === 1 ? "" : "s"}`)];
+      return [bold(i2.id), `${i2.name} <${i2.email}>`, i2.owner || dim("-"), existsSync19(key) ? keyPath(i2) : red(keyPath(i2) + " (missing)"), getToken(i2.owner) ? green("token \u2713") : dim("no token"), dim(`${n3} project${n3 === 1 ? "" : "s"}`)];
     }),
     ["id", "commits as", "github owner", "ssh key", "", ""]
   );
@@ -9510,12 +9829,12 @@ __export(status_exports, {
   runStatus: () => runStatus,
   unregisteredDirs: () => unregisteredDirs
 });
-import { existsSync as existsSync19, readdirSync as readdirSync7 } from "node:fs";
-import { join as join20 } from "node:path";
+import { existsSync as existsSync20, readdirSync as readdirSync9 } from "node:fs";
+import { join as join21 } from "node:path";
 function unregisteredDirs(ws, known) {
-  if (!existsSync19(ws)) return [];
-  return readdirSync7(ws, { withFileTypes: true }).filter((d) => d.isDirectory() && !d.name.startsWith(".") && !known.has(d.name)).map((d) => d.name).sort().map((name2) => {
-    const root = existsSync19(join20(ws, name2, "repo", ".git")) ? join20(ws, name2, "repo") : join20(ws, name2);
+  if (!existsSync20(ws)) return [];
+  return readdirSync9(ws, { withFileTypes: true }).filter((d) => d.isDirectory() && !d.name.startsWith(".") && !known.has(d.name)).map((d) => d.name).sort().map((name2) => {
+    const root = existsSync20(join21(ws, name2, "repo", ".git")) ? join21(ws, name2, "repo") : join21(ws, name2);
     return { name: name2, remote: isRepo(root) ? remoteUrl(root) : "" };
   });
 }
@@ -9540,7 +9859,7 @@ async function runStatus(repo, m, man, fetch2 = true, showAll = false, timeout =
   const ws = workspace(man, m);
   info(`${dim("profiles")} ${m.profiles.join(", ")}  ${dim("workspace")} ${contract(ws)}${fetch2 ? "" : dim("  (not fetched)")}`);
   const share2 = await shareLine(repo, fetch2, timeout);
-  const { facts } = await spin("fetching projects\u2026", () => gather(m, man, { timeout, fetch: fetch2 }));
+  const { facts, envSkipped } = await spin("fetching projects\u2026", () => gather(repo, m, man, { timeout, fetch: fetch2 }));
   const byName = new Map(facts.map((f) => [f.project, f]));
   let pending = share2.pending, attention = share2.broken, stuck = false;
   const rows = [share2.row];
@@ -9553,7 +9872,7 @@ async function runStatus(repo, m, man, fetch2 = true, showAll = false, timeout =
     const kind = dim(p.layout === "worktrees" ? "\u2442" : "");
     const f = byName.get(p.name);
     if (!sel) rows.push([p.name, kind, "", dim("skipped (profile)")]);
-    else if (!existsSync19(root)) {
+    else if (!existsSync20(root)) {
       rows.push([p.name, kind, "", p.url ? red("missing here") + SYNC : red("no remote, not here") + dim("  cs doctor --fix on the machine that has it")]);
       if (p.url) pending = true;
       else attention = true;
@@ -9571,8 +9890,9 @@ async function runStatus(repo, m, man, fetch2 = true, showAll = false, timeout =
     }
   }
   table(rows, ["project", "", "branch", "state"]);
+  for (const s of envSkipped) warn(s);
   for (const d of unregisteredDirs(ws, known)) {
-    warn(`${d.name}: ${d.remote ? "not registered" : "not registered, no remote"}  ${dim(`cs add ${contract(join20(ws, d.name))}`)}`);
+    warn(`${d.name}: ${d.remote ? "not registered" : "not registered, no remote"}  ${dim(`cs add ${contract(join21(ws, d.name))}`)}`);
     attention = true;
   }
   return { rc: pending || attention || stuck ? 1 : 0, next: pending ? "cs sync" : attention ? "cs doctor --fix" : void 0 };
@@ -9602,13 +9922,13 @@ __export(doctor_exports, {
   remoteless: () => remoteless,
   runDoctor: () => runDoctor
 });
-import { existsSync as existsSync20, lstatSync as lstatSync2, readdirSync as readdirSync8, readFileSync as readFileSync16 } from "node:fs";
-import { join as join21 } from "node:path";
+import { existsSync as existsSync21, lstatSync as lstatSync2, readdirSync as readdirSync10, readFileSync as readFileSync17 } from "node:fs";
+import { join as join22 } from "node:path";
 function remoteless(man, m) {
   const ws = workspace(man, m);
   const projects = selectedProjects(man, m).filter((p) => {
     const root = checkoutRoot(p, ws);
-    return existsSync20(root) && (!p.url || !isRepo(root) || !remoteUrl(root));
+    return existsSync21(root) && (!p.url || !isRepo(root) || !remoteUrl(root));
   });
   return { projects, dirs: unregisteredDirs(ws, new Set(Object.values(man.projects).map((p) => p.path || p.name))) };
 }
@@ -9625,7 +9945,7 @@ async function fix(repo, m, man) {
     }
   }
   for (const d of dirs) {
-    const path = join21(ws, d.name);
+    const path = join22(ws, d.name);
     if (!canAsk()) {
       warn(`${d.name}: not registered \u2014 cs add ${contract(path)}`);
       continue;
@@ -9641,7 +9961,7 @@ async function fix(repo, m, man) {
   }
   for (const p of selectedProjects(man, m)) {
     const root = checkoutRoot(p, ws);
-    if (!existsSync20(root) || !isRepo(root) || !p.url) continue;
+    if (!existsSync21(root) || !isRepo(root) || !p.url) continue;
     const url = remoteUrl(root);
     if (url === p.url) continue;
     const cur = canonicalGithub(url), want = canonicalGithub(p.url);
@@ -9670,7 +9990,7 @@ async function runDoctor(repo, m, man, doFix = false, compact = false) {
   res.push(isWSL() && ws.startsWith("/mnt/") ? ["fail", `workspace ${ws} is on the Windows filesystem; use the WSL home`] : ["ok", `workspace ${contract(ws)}`]);
   const broken = LINKS.filter((i2) => {
     try {
-      return lstatSync2(join21(claudeDir(), i2)).isSymbolicLink() && !existsSync20(join21(claudeDir(), i2));
+      return lstatSync2(join22(claudeDir(), i2)).isSymbolicLink() && !existsSync21(join22(claudeDir(), i2));
     } catch {
       return false;
     }
@@ -9679,9 +9999,9 @@ async function runDoctor(repo, m, man, doFix = false, compact = false) {
   const ch = [];
   applySettings(repo, m, true, ch);
   res.push(ch.length ? ["warn", "settings.json drift: " + ch.join("; ") + "  (cs apply)"] : ["ok", "settings.json rendered"]);
-  if (existsSync20(claudeJson())) {
+  if (existsSync21(claudeJson())) {
     try {
-      const d = JSON.parse(readFileSync16(claudeJson(), "utf8"));
+      const d = JSON.parse(readFileSync17(claudeJson(), "utf8"));
       const hits = [];
       for (const [path, e] of Object.entries(d.projects ?? {})) for (const [n3, c2] of Object.entries(e.mcpServers ?? {})) if (c2.env || c2.headers) hits.push(`${n3}@${contract(path)}`);
       res.push(hits.length ? ["warn", `local-scope MCP servers with secrets in ~/.claude.json (machine-only): ${hits.join(", ")} \u2014 keep until cs secrets provides the \${VAR}s, then \`claude mcp remove <name> -s local\``] : ["ok", "no secret-bearing local-scope MCP servers"]);
@@ -9693,7 +10013,7 @@ async function runDoctor(repo, m, man, doFix = false, compact = false) {
   const idr = [];
   for (const p of selectedProjects(man, m)) {
     const root = checkoutRoot(p, ws);
-    if (!existsSync20(root) || !isRepo(root)) continue;
+    if (!existsSync21(root) || !isRepo(root)) continue;
     const ident2 = p.identity ? man.identities[p.identity] : void 0;
     const email2 = configGet(root, "user.email");
     const url = remoteUrl(root);
@@ -9706,15 +10026,15 @@ async function runDoctor(repo, m, man, doFix = false, compact = false) {
   res.push(hs.complete ? ["ok", "hooks installed (Stop, SessionStart, SessionEnd)"] : ["warn", `hooks ${hs.events.length ? "outdated" : "not installed"}  (cs sync re-installs them)`]);
   res.push(hs.timerActive ? ["ok", "timer active (share sync every 15 min)"] : hs.timerFiles ? ["warn", "timer installed but not active  (cs sync re-installs it)"] : ["warn", "timer not installed  (cs sync installs it)"]);
   res.push(hs.lastSync ? ["ok", `last share sync ${ago(hs.lastSync)}`] : ["warn", "the share has never synced here  (cs sync)"]);
-  if (m.secretsBackend !== "none" && existsSync20(join21(repo, ".sops.yaml"))) {
-    const machines = existsSync20(join21(repo, "machines")) ? readdirSync8(join21(repo, "machines")).filter((d) => existsSync20(join21(repo, "machines", d, "age.pub"))) : [];
+  if (m.secretsBackend !== "none" && existsSync21(join22(repo, ".sops.yaml"))) {
+    const machines = existsSync21(join22(repo, "machines")) ? readdirSync10(join22(repo, "machines")).filter((d) => existsSync21(join22(repo, "machines", d, "age.pub"))) : [];
     if (!machines.includes("recovery")) res.push(["warn", "secrets have no recovery key \u2014 cs secrets recovery (print it once, keep it in your password manager)"]);
     const others = machines.filter((d) => d !== m.name && d !== "recovery");
     if (others.length) res.push(["ok", `machines trusted with the secrets: ${others.join(", ")}  (cs untrust <machine> when one is retired)`]);
   }
   const rl = remoteless(man, m);
   for (const p of rl.projects) res.push(["fail", `${p.name}: no remote  (cs doctor --fix)`]);
-  for (const d of rl.dirs) res.push(["warn", `${contract(join21(ws, d.name))}: not registered${d.remote ? "" : ", no remote"}  (cs add ${contract(join21(ws, d.name))})`]);
+  for (const d of rl.dirs) res.push(["warn", `${contract(join22(ws, d.name))}: not registered${d.remote ? "" : ", no remote"}  (cs add ${contract(join22(ws, d.name))})`]);
   if (!rl.projects.length && !rl.dirs.length) res.push(["ok", "every project has a remote; nothing unregistered under the workspace"]);
   const sym = { ok: green("\u2713"), warn: yellow("!"), fail: red("\u2717") };
   if (compact) {
@@ -9758,17 +10078,17 @@ __export(sharekey_exports, {
   registerDeployKey: () => registerDeployKey,
   setup: () => setup
 });
-import { chmodSync as chmodSync5, existsSync as existsSync21, mkdirSync as mkdirSync15, readFileSync as readFileSync17 } from "node:fs";
-import { dirname as dirname7 } from "node:path";
+import { chmodSync as chmodSync6, existsSync as existsSync22, mkdirSync as mkdirSync16, readFileSync as readFileSync18 } from "node:fs";
+import { dirname as dirname8 } from "node:path";
 import { spawnSync as spawnSync7 } from "node:child_process";
 function ensureKey(machine = "") {
   const key = keyPath2(), pubf = key + ".pub";
-  if (existsSync21(key) && existsSync21(pubf)) return { key, pub: readFileSync17(pubf, "utf8").trim(), created: false };
-  mkdirSync15(dirname7(key), { recursive: true, mode: 448 });
+  if (existsSync22(key) && existsSync22(pubf)) return { key, pub: readFileSync18(pubf, "utf8").trim(), created: false };
+  mkdirSync16(dirname8(key), { recursive: true, mode: 448 });
   const p = spawnSync7("ssh-keygen", ["-q", "-t", "ed25519", "-N", "", "-C", `cs:${machine || nodename()}:master`, "-f", key]);
   if (p.status !== 0) throw new Error("cs: ssh-keygen failed");
-  chmodSync5(key, 384);
-  return { key, pub: readFileSync17(pubf, "utf8").trim(), created: true };
+  chmodSync6(key, 384);
+  return { key, pub: readFileSync18(pubf, "utf8").trim(), created: true };
 }
 function parseRepoUrl(text3) {
   const t2 = text3.trim().replace(/\/+$/, "");
@@ -9847,14 +10167,14 @@ __export(ssh_exports, {
   setup: () => setup2,
   writeSshConfig: () => writeSshConfig
 });
-import { chmodSync as chmodSync6, existsSync as existsSync22, mkdirSync as mkdirSync16, readFileSync as readFileSync18, writeFileSync as writeFileSync15 } from "node:fs";
-import { dirname as dirname8, join as join22 } from "node:path";
+import { chmodSync as chmodSync7, existsSync as existsSync23, mkdirSync as mkdirSync17, readFileSync as readFileSync19, writeFileSync as writeFileSync16 } from "node:fs";
+import { dirname as dirname9, join as join23 } from "node:path";
 import { spawnSync as spawnSync8 } from "node:child_process";
 function keygen2(key, comment) {
-  mkdirSync16(dirname8(key), { recursive: true, mode: 448 });
+  mkdirSync17(dirname9(key), { recursive: true, mode: 448 });
   const p = spawnSync8("ssh-keygen", ["-q", "-t", "ed25519", "-N", "", "-C", comment, "-f", key]);
   if (p.status !== 0) throw new Error("cs: ssh-keygen failed");
-  chmodSync6(key, 384);
+  chmodSync7(key, 384);
 }
 async function githubUserForKey(key) {
   if (process.env.CS_OFFLINE) return void 0;
@@ -9863,14 +10183,14 @@ async function githubUserForKey(key) {
   return (p.out + p.err).match(/Hi ([^!]+)!/)?.[1];
 }
 function writeSshConfig() {
-  const cfg = join22(home(), ".ssh", "config");
-  const text3 = existsSync22(cfg) ? readFileSync18(cfg, "utf8") : "";
+  const cfg = join23(home(), ".ssh", "config");
+  const text3 = existsSync23(cfg) ? readFileSync19(cfg, "utf8") : "";
   const block3 = [MARK, "Host github.com", "    IdentitiesOnly yes", "    AddKeysToAgent yes", ...isMac() ? ["    UseKeychain yes"] : [], END2].join("\n") + "\n";
   const next = text3.includes(MARK) ? text3.slice(0, text3.indexOf(MARK)) + block3 + text3.slice(text3.indexOf(END2) + END2.length + 1) : block3 + (text3 && !text3.startsWith("\n") ? "\n" : "") + text3;
   if (next === text3) return false;
-  mkdirSync16(dirname8(cfg), { recursive: true, mode: 448 });
-  writeFileSync15(cfg, next);
-  chmodSync6(cfg, 384);
+  mkdirSync17(dirname9(cfg), { recursive: true, mode: 448 });
+  writeFileSync16(cfg, next);
+  chmodSync7(cfg, 384);
   return true;
 }
 async function register(i2, pub, title) {
@@ -9900,7 +10220,7 @@ async function setup2(repo, m, man, checkOnly = false) {
   for (const i2 of ids) {
     const key = expand(keyPath(i2)), pubf = key + ".pub";
     const state = [];
-    if (!existsSync22(key)) {
+    if (!existsSync23(key)) {
       if (checkOnly) {
         rows.push([i2.id, keyPath(i2), red("missing")]);
         unregistered.push(i2);
@@ -9909,11 +10229,11 @@ async function setup2(repo, m, man, checkOnly = false) {
       keygen2(key, `cs:${m.name}:${i2.id}`);
       state.push(green("generated"));
     }
-    const pub = readFileSync18(pubf, "utf8").trim();
-    const dest = join22(repo, "machines", m.name, "ssh", `${i2.id}.pub`);
-    if (!checkOnly && (!existsSync22(dest) || readFileSync18(dest, "utf8").trim() !== pub)) {
-      mkdirSync16(dirname8(dest), { recursive: true });
-      writeFileSync15(dest, pub + "\n");
+    const pub = readFileSync19(pubf, "utf8").trim();
+    const dest = join23(repo, "machines", m.name, "ssh", `${i2.id}.pub`);
+    if (!checkOnly && (!existsSync23(dest) || readFileSync19(dest, "utf8").trim() !== pub)) {
+      mkdirSync17(dirname9(dest), { recursive: true });
+      writeFileSync16(dest, pub + "\n");
       git(["add", dest], repo);
       published = true;
     }
@@ -9938,9 +10258,9 @@ async function setup2(repo, m, man, checkOnly = false) {
   table(rows, ["identity", "key", "state"]);
   for (const i2 of unregistered) {
     const pubf = expand(keyPath(i2)) + ".pub";
-    if (!existsSync22(pubf)) continue;
+    if (!existsSync23(pubf)) continue;
     const who = i2.owner && i2.owner.toLowerCase() !== i2.id.toLowerCase() ? `the ${i2.owner} account` : `your GitHub account that is a member of ${i2.owner || "the org"}`;
-    note2([`${cyan("https://github.com/settings/ssh/new")}  ${dim(`\u2192 logged in as ${who}`)}`, "", `title  ${bold(`cs:${m.name}:${i2.id}`)}`, `key    ${bold(readFileSync18(pubf, "utf8").trim())}`], `Add the ${i2.id} key`);
+    note2([`${cyan("https://github.com/settings/ssh/new")}  ${dim(`\u2192 logged in as ${who}`)}`, "", `title  ${bold(`cs:${m.name}:${i2.id}`)}`, `key    ${bold(readFileSync19(pubf, "utf8").trim())}`], `Add the ${i2.id} key`);
   }
   return unregistered.length ? 1 : 0;
 }
@@ -9967,27 +10287,27 @@ __export(init_exports, {
   init: () => init2,
   newShare: () => newShare
 });
-import { copyFileSync as copyFileSync5, existsSync as existsSync23, mkdirSync as mkdirSync17, readdirSync as readdirSync9, writeFileSync as writeFileSync16 } from "node:fs";
-import { dirname as dirname9, join as join23, relative as relative8 } from "node:path";
+import { copyFileSync as copyFileSync5, existsSync as existsSync24, mkdirSync as mkdirSync18, readdirSync as readdirSync11, writeFileSync as writeFileSync17 } from "node:fs";
+import { dirname as dirname10, join as join24, relative as relative9 } from "node:path";
 function newShare(dest, branch = "master") {
   const src = templatesDir() + "/share";
-  mkdirSync17(dest, { recursive: true });
+  mkdirSync18(dest, { recursive: true });
   const copy = (d) => {
-    for (const e of readdirSync9(d, { withFileTypes: true })) {
-      const f = join23(d, e.name), t2 = join23(dest, relative8(src, f));
+    for (const e of readdirSync11(d, { withFileTypes: true })) {
+      const f = join24(d, e.name), t2 = join24(dest, relative9(src, f));
       if (e.isDirectory()) {
-        mkdirSync17(t2, { recursive: true });
+        mkdirSync18(t2, { recursive: true });
         copy(f);
-      } else if (!existsSync23(t2)) {
-        mkdirSync17(dirname9(t2), { recursive: true });
+      } else if (!existsSync24(t2)) {
+        mkdirSync18(dirname10(t2), { recursive: true });
         copyFileSync5(f, t2);
       }
     }
   };
   copy(src);
   for (const d of ["plans", "projects", "secrets", "claude/skills", "claude/rules", "claude/agents", "machines"]) {
-    mkdirSync17(join23(dest, d), { recursive: true });
-    if (!readdirSync9(join23(dest, d)).length) writeFileSync16(join23(dest, d, ".gitkeep"), "");
+    mkdirSync18(join24(dest, d), { recursive: true });
+    if (!readdirSync11(join24(dest, d)).length) writeFileSync17(join24(dest, d, ".gitkeep"), "");
   }
   if (!isRepo(dest)) git(["init", "-q", "-b", branch], dest);
   git(["add", "-A"], dest);
@@ -10009,7 +10329,7 @@ async function accessLoop(sshUrl, gh, interactive, machine) {
   step("share reachable with the share key");
 }
 async function cloneConfig(sshUrl, target) {
-  mkdirSync17(dirname9(target), { recursive: true });
+  mkdirSync18(dirname10(target), { recursive: true });
   await spin("cloning the share\u2026", () => gitA(["clone", "-q", sshUrl, target], void 0, { sshKey: keyPath2() }));
   configureRepo(target);
   step(`share cloned to ${dim(contract(target))}`);
@@ -10031,7 +10351,7 @@ async function askUrl(prompt) {
   }
 }
 async function join_(target, interactive, machine, repoUrl2 = "") {
-  if (existsSync23(target) && isRepo(target)) {
+  if (existsSync24(target) && isRepo(target)) {
     skip(`share already at ${contract(target)}`);
     configureRepo(target);
     return;
@@ -10080,8 +10400,8 @@ async function machinePhase(repo, nm, profiles, ws, interactive) {
     } else skip(`machine ${m2.name}  ${m2.profiles.join(", ")}`);
     return m2;
   }
-  const md = join23(repo, "machines");
-  const existing = existsSync23(md) ? readdirSync9(md, { withFileTypes: true }).filter((d) => d.isDirectory() && d.name !== "recovery").map((d) => d.name).sort() : [];
+  const md = join24(repo, "machines");
+  const existing = existsSync24(md) ? readdirSync11(md, { withFileTypes: true }).filter((d) => d.isDirectory() && d.name !== "recovery").map((d) => d.name).sort() : [];
   if (existing.length) step(`machines already in this share: ${existing.map((x) => bold(x)).join(", ")}`);
   while (existing.includes(nm)) {
     if (!interactive) throw new Error(`cs: machine '${nm}' already exists in the share`);
@@ -10125,7 +10445,7 @@ async function machinePhase(repo, nm, profiles, ws, interactive) {
     } catch {
     }
     const choice = await select2("Where should your projects live on this machine?", [
-      { value: "default", label: `${dws}  (recommended)`, hint: existsSync23(expand(dws)) ? "exists" : "will be created" },
+      { value: "default", label: `${dws}  (recommended)`, hint: existsSync24(expand(dws)) ? "exists" : "will be created" },
       { value: "custom", label: "Somewhere else\u2026", hint: "any absolute path or ~/\u2026" }
     ]);
     let w = dws;
@@ -10137,11 +10457,11 @@ async function machinePhase(repo, nm, profiles, ws, interactive) {
         if (!await confirm2("use it anyway?", false)) w = dws;
       }
     }
-    const existed = existsSync23(expand(w));
-    mkdirSync17(expand(w), { recursive: true });
+    const existed = existsSync24(expand(w));
+    mkdirSync18(expand(w), { recursive: true });
     step(`projects live in ${bold(w)}${existed ? "" : dim("  (created)")}`);
     workspaceOverride = w === dws ? void 0 : w;
-  } else if (ws) mkdirSync17(expand(ws), { recursive: true });
+  } else if (ws) mkdirSync18(expand(ws), { recursive: true });
   const m = { name: nm, profiles, exclude, workspace: workspaceOverride, secretsBackend: "sops" };
   saveMachine(m);
   return m;
@@ -10220,7 +10540,7 @@ async function finish(repo, m, interactive, skip2) {
   let rc = 0;
   if (!skip2.includes("doctor")) rc = await group("doctor", () => runDoctor(repo, m, loadManifest(repo), false, true), { done: "all checks passed" });
   const ws = workspace(man, m);
-  const missing = selectedProjects(man, m).filter((p) => p.url && !existsSync23(checkoutRoot(p, ws)));
+  const missing = selectedProjects(man, m).filter((p) => p.url && !existsSync24(checkoutRoot(p, ws)));
   if (missing.length && interactive && await confirm2(`clone ${missing.length} project(s) now (${missing.slice(0, 6).map((p) => p.name).join(", ")}${missing.length > 6 ? "\u2026" : ""})?`, true)) await group(`clone ${missing.length} project(s)`, async () => (await Promise.resolve().then(() => (init_projects(), projects_exports))).clone(repo, m, man, []));
   const rcFile = shellRc().split("/").pop();
   note2([
@@ -10243,20 +10563,20 @@ async function init2(o) {
   intro2("claude-share setup");
   if (!skip2.includes("deps")) await group("prerequisites", () => runDeps(o.installDeps, true));
   const nm = await machineName(o.name ?? "", interactive);
-  const already = existsSync23(target) && isRepo(target);
+  const already = existsSync24(target) && isRepo(target);
   if (already) {
     skip(`share already at ${contract(target)}`);
     if (remoteUrl(target)) configureRepo(target);
   } else if (!skip2.includes("repo")) {
     if (localSrc) {
       if (!(isRepo(localSrc) || isBare(localSrc))) throw new Error(`cs: ${localSrc} is not a git repo`);
-      mkdirSync17(dirname9(target), { recursive: true });
+      mkdirSync18(dirname10(target), { recursive: true });
       git(["clone", "-q", localSrc, target]);
       ok(`share cloned from ${contract(localSrc)}`);
     } else if (o.repo) {
       const [sshUrl, gh] = parseRepoUrl(o.repo);
       if (o.key) {
-        mkdirSync17(dirname9(target), { recursive: true });
+        mkdirSync18(dirname10(target), { recursive: true });
         git(["clone", "-q", sshUrl, target], void 0, { sshKey: expand(o.key) });
         git(["config", "core.sshCommand", `ssh -i ${contract(expand(o.key))} -o IdentitiesOnly=yes`], target);
       } else {
@@ -10336,9 +10656,9 @@ init_machine();
 init_manifest();
 init_paths();
 init_git();
-import { existsSync as existsSync24, readdirSync as readdirSync10, readFileSync as readFileSync19, writeFileSync as writeFileSync17, mkdirSync as mkdirSync18 } from "node:fs";
-import { join as join24 } from "node:path";
-var pkg = JSON.parse(readFileSync19(join24(toolRoot(), "package.json"), "utf8"));
+import { existsSync as existsSync25, readdirSync as readdirSync12, readFileSync as readFileSync20, writeFileSync as writeFileSync18, mkdirSync as mkdirSync19 } from "node:fs";
+import { join as join25 } from "node:path";
+var pkg = JSON.parse(readFileSync20(join25(toolRoot(), "package.json"), "utf8"));
 var csv = (s) => s ? s.split(",").map((x) => x.trim()).filter(Boolean) : [];
 function ctx() {
   const m = loadMachine();
@@ -10583,8 +10903,8 @@ token.command("rm <owner>").action(async (o) => {
   ok("removed");
 });
 token.command("ls").action(() => {
-  const d = join24(csConfigDir(), "tokens");
-  if (existsSync24(d)) for (const f of readdirSync10(d)) console.log(f);
+  const d = join25(csConfigDir(), "tokens");
+  if (existsSync25(d)) for (const f of readdirSync12(d)) console.log(f);
 });
 program2.command("ssh [action]", HIDDEN).description("per-machine SSH keys: setup | check | share-key").action(async (action = "check") => {
   const { repo, m, man } = ctx();
@@ -10652,8 +10972,8 @@ program2.command("resume [projects...]", HIDDEN).description("apply waiting hand
     { outro: () => process.exitCode ? red("some handoffs not applied \u2014 see above") : dim("carry on: claude") }
   );
 });
-var handoffs = program2.command("handoffs", HIDDEN).description("handoffs waiting on remotes: ls | gc | drop");
-handoffs.command("ls", { isDefault: true }).option("--all").action(async (o) => {
+var handoffs2 = program2.command("handoffs", HIDDEN).description("handoffs waiting on remotes: ls | gc | drop");
+handoffs2.command("ls", { isDefault: true }).option("--all").action(async (o) => {
   const { m, man } = ctx();
   const h2 = await H();
   const projects = h2.projectsFor(man, m, [], o.all ?? true);
@@ -10663,12 +10983,12 @@ handoffs.command("ls", { isDefault: true }).option("--all").action(async (o) => 
   else table(list.map((x) => [x.worktree, x.branch, x.machine, x.when.slice(0, 16), dim(x.note)]), ["project", "branch", "from", "when", "note"]);
   outro2(dim("cs sync \xB7 cs handoffs gc --older-than 14"));
 });
-handoffs.command("gc").option("--older-than <days>", "", "14").option("--all").action(async (o) => {
+handoffs2.command("gc").option("--older-than <days>", "", "14").option("--all").action(async (o) => {
   const { m, man } = ctx();
   const h2 = await H();
   await command("cs handoffs gc", async () => group("dropped", () => h2.handoffGc(m, man, h2.projectsFor(man, m, [], true), +o.olderThan), { done: "nothing older than that" }));
 });
-handoffs.command("drop <branch>").description("delete one waiting handoff (branch name or full ref) for the cwd project").action(async (b) => {
+handoffs2.command("drop <branch>").description("delete one waiting handoff (branch name or full ref) for the cwd project").action(async (b) => {
   const { m, man } = ctx();
   const h2 = await H();
   const [p] = h2.projectsFor(man, m, [], false);
@@ -10702,18 +11022,18 @@ program2.command("ui-demo", HIDDEN).description("show every UI element with fake
     }
   }, { outro: () => dim("demo over") });
 });
-var updateCacheFile = () => join24(stateDir(), "update-check.json");
+var updateCacheFile = () => join25(stateDir(), "update-check.json");
 function readUpdateCache() {
   try {
-    return JSON.parse(readFileSync19(updateCacheFile(), "utf8"));
+    return JSON.parse(readFileSync20(updateCacheFile(), "utf8"));
   } catch {
     return { checkedAt: 0, behind: 0 };
   }
 }
 function writeUpdateCache(c2) {
   try {
-    mkdirSync18(stateDir(), { recursive: true });
-    writeFileSync17(updateCacheFile(), JSON.stringify(c2));
+    mkdirSync19(stateDir(), { recursive: true });
+    writeFileSync18(updateCacheFile(), JSON.stringify(c2));
   } catch {
   }
 }

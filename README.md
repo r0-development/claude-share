@@ -97,7 +97,7 @@ Every project is a `[projects.<name>]` entry in `projects.toml` and a directory 
 | `cs new <name> --<identity>` | brand-new project: `mkdir`, `git init -b master`, private GitHub repo under the identity's owner, first commit + push, register, link Claude files. Re-runnable. `--public`, `--no-github`, `--synced`, `-d "description"` |
 | `cs add [path]` | register an existing directory (default: cwd; infers url, branch, identity, worktree layout) |
 | `cs clone [name…]` | clone the projects this machine's profiles select but that are missing here |
-| `cs` | fetches and shows one line per project — branch, dirty, ↑unpushed, handoff waiting from *machine*, missing here — the share's state and last sync, unregistered dirs; ends with `run: cs sync` when anything is pending (exit 1). `cs --no-fetch` for scripts |
+| `cs` | fetches and shows one line per project — branch, dirty, ↑unpushed, handoff waiting from *machine*, `.env: store N keys`, missing here — the share's state and last sync, unregistered dirs; ends with `run: cs sync` when anything is pending (exit 1). `cs --no-fetch` for scripts |
 
 Project kinds: `git` (normal), `synced` (auto-committed notes; no manual git), `local` (registered so other machines know
 it exists, never cloned). `profiles` decide which machines get a project; `machines = [...]` is a hard allowlist;
@@ -138,7 +138,7 @@ sops + age; every machine has its own key, only public keys are committed. See `
 cs secrets set global COOLIFY_TOKEN=…     # shared across projects
 cs secrets set <project> DB_PASSWORD=…    # project-scoped (overrides global)
 cs secrets get global                      # masked; --show for values
-cs secrets push <project>                  # encrypt the project's .env into the store; pull / diff for the other direction
+cs sync                                    # carries every gitignored .env* of a project, merged per key (see below); push / pull / diff <project> are the manual halves
 cs trust <machine>                        # grant a new machine access (run where you already have it)
 cs secrets recovery                        # print a recovery key once → password manager
 ```
@@ -169,6 +169,14 @@ whichever side loses is kept in `refs/cs/backup/<branch>/<time>` of that checkou
 the project's own remote; the sending machine is never touched (private index), secrets-looking files are refused,
 worktrees are created on demand. The manual halves (`cs handoff`, `cs resume`, `cs handoffs`) stay callable but hidden.
 See `docs/HANDOFF.md`.
+
+**`.env` files** travel with the same run, through the share, never through a handoff: every gitignored `.env`,
+`.env.production`, … at a project's root is one encrypted entry in the share's secrets area, and each file with something
+to move is a row on the plan screen (`one · .env  store 2 keys, take 1 key from laptop`, pre-checked). Values merge per
+key against the last-synced snapshot, so a key changed on the other machine is never lost and the local file is patched in
+place (comments and order kept); only a key changed on both machines since the last sync is asked, per key (no terminal:
+newest wins). Files git tracks (`.env.example`) are git's business; a `.env` git would commit is refused until it is
+gitignored; `env = false` on a project opts it out. See `docs/SECRETS.md`.
 
 ---
 

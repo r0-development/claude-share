@@ -607,4 +607,89 @@ PATH="$S/fakebin:$PATH" CS_ANSWERS='["<default>","done"]' desk $CS sync >/dev/nu
 NOTE > "$HOME6/note4.txt"; grep -q "no summary: no session transcript" "$HOME6/note4.txt" && ! grep -q "session ended" "$HOME6/note4.txt" && [ ! -s "$CS_TEST_CALLS" ] || { cat "$HOME6/note4.txt"; die "no transcript → git-derived note, claude not started"; }
 pass handoff-notes
 
+# --- .env values travel (#10): gitignored .env files merge per key through the share's secrets area (encrypted); tracked files and
+#     env = false projects are never touched; a file git would commit is refused with the fix
+if command -v sops >/dev/null && command -v age-keygen >/dev/null; then
+  ENVDIR6="$HOME6/.config/claude-share/repo/secrets/projects"
+  # both trees clean, nothing waiting: laptop takes desk's last handoff and drops it
+  CS_ANSWERS='["<default>","done"]' laptop $CS sync >/dev/null 2>&1 || die "laptop takes the last handoff"
+  (cd "$ONE7" && git checkout -q -- . && git clean -qfd); (cd "$ONE6" && git checkout -q -- . && git clean -qfd)
+  # secrets by hand (what the wizard walks through): desk's key, laptop's key published, desk trusts laptop, both sync
+  desk $CS secrets init >/dev/null || die "desk secrets init"
+  CS_ANSWERS='[]' desk $CS sync >/dev/null 2>&1 && CS_ANSWERS='[]' laptop $CS sync >/dev/null 2>&1 || die "desk's recipient list reaches laptop"
+  laptop $CS secrets init >/dev/null 2>&1 && CS_ANSWERS='[]' laptop $CS sync >/dev/null 2>&1 || die "laptop publishes its key"
+  CS_ANSWERS='[]' desk $CS sync >/dev/null 2>&1 && desk $CS trust laptop >/dev/null || die "desk trusts laptop"
+  CS_ANSWERS='[]' desk $CS sync >/dev/null 2>&1 && CS_ANSWERS='[]' laptop $CS sync >/dev/null 2>&1 || die "trust reaches laptop"
+  # .env must be gitignored to travel; the tracked .env.example is git's business
+  (cd "$ONE6" && printf '.env*\n!.env.example\n' > .gitignore && echo 'DB=postgres://localhost/db' > .env.example && git add .gitignore .env.example && git -c user.name="Test User" -c user.email=test@example.com commit -qm "env files" && git push -q origin main)
+  (cd "$ONE7" && git pull -q)
+  printf '# database\nDB=pg\nAPI_KEY=s3cret-one\n' > "$ONE6/.env"
+  CS_ANSWERS='["<default>","done"]' desk $CS sync > "$HOME6/env1.log" 2>&1 || { cat "$HOME6/env1.log"; die "desk sync stores .env"; }
+  grep -q "✓ env   one · .env  store 2 keys" "$HOME6/env1.log" && grep -q "2 keys stored" "$HOME6/env1.log" && grep -q "1 .env file(s) merged" "$HOME6/env1.log" || { cat "$HOME6/env1.log"; die "env row on the plan screen, done line, summary"; }
+  grep -q '^API_KEY=ENC\[' "$ENVDIR6/one.env" || die "encrypted entry in the share"
+  ! git -C "$S/share.git" grep -q "s3cret-one" HEAD || die "the value is nowhere in the share in plaintext"
+  [ ! -e "$ENVDIR6/one.example.env" ] || die "a tracked .env.example is never stored"
+  [ -z "$(git -C "$ONE6" status --porcelain)" ] || die "desk tree clean for git"
+  # laptop: the file arrives with its values, private to the user
+  CS_ANSWERS='["<default>","done"]' laptop $CS sync > "$HOME7/env1.log" 2>&1 || { cat "$HOME7/env1.log"; die "laptop sync takes .env"; }
+  grep -q "one · .env  take 2 keys from desk" "$HOME7/env1.log" && grep -q "2 keys taken from desk" "$HOME7/env1.log" || { cat "$HOME7/env1.log"; die "row says where the keys come from"; }
+  grep -q '^DB=pg$' "$ONE7/.env" && grep -q '^API_KEY=s3cret-one$' "$ONE7/.env" && [ "$(stat -c %a "$ONE7/.env")" = "600" ] || die "values arrived on laptop in a private file"
+  [ -z "$(git -C "$ONE7" status --porcelain)" ] || die "laptop tree clean for git"
+  # a different key changed on each side: both changes survive the round trip; comments and order are kept
+  sed -i 's/^DB=pg$/DB=mysql/' "$ONE6/.env"; echo 'NEW=1' >> "$ONE7/.env"
+  CS_ANSWERS='["<default>","done"]' desk $CS sync >/dev/null 2>&1 || die "desk stores DB"
+  CS_ANSWERS='["<default>","done"]' laptop $CS sync > "$HOME7/env2.log" 2>&1 || { cat "$HOME7/env2.log"; die "laptop takes DB, stores NEW"; }
+  grep -q "one · .env  store 1 key, take 1 key from desk" "$HOME7/env2.log" || { cat "$HOME7/env2.log"; die "both directions on one row"; }
+  CS_ANSWERS='["<default>","done"]' desk $CS sync > "$HOME6/env3.log" 2>&1 || die "desk takes NEW"
+  grep -q "take 1 key from laptop" "$HOME6/env3.log" || die "stored side named by machine"
+  for f in "$ONE6/.env" "$ONE7/.env"; do grep -q '^DB=mysql$' "$f" && grep -q '^NEW=1$' "$f" && grep -q '^API_KEY=s3cret-one$' "$f" || die "every key on both machines ($f)"; done
+  [ "$(head -1 "$ONE6/.env")" = "# database" ] && [ "$(sed -n 2p "$ONE6/.env")" = "DB=mysql" ] || die "the local file is patched in place"
+  CS_ANSWERS='[]' desk $CS sync > "$HOME6/env4.log" 2>&1 || die "desk in sync"
+  grep -q "nothing to move" "$HOME6/env4.log" || die "nothing to move once merged"
+  # the same key changed on both sides since the last sync: asked per key, the chosen value wins everywhere
+  sed -i 's/^API_KEY=.*/API_KEY=from-desk/' "$ONE6/.env"; sed -i 's/^API_KEY=.*/API_KEY=from-laptop/' "$ONE7/.env"
+  CS_ANSWERS='["<default>","done"]' desk $CS sync >/dev/null 2>&1 || die "desk stores its value"
+  CS_ANSWERS='["<default>","done","local"]' laptop $CS sync > "$HOME7/env5.log" 2>&1 || { cat "$HOME7/env5.log"; die "laptop is asked"; }
+  grep -q "1 key changed on both machines — asked next" "$HOME7/env5.log" && grep -q "one · .env: API_KEY — this machine's value kept" "$HOME7/env5.log" || { cat "$HOME7/env5.log"; die "conflict on the row, then asked"; }
+  grep -q '^API_KEY=from-laptop$' "$ONE7/.env" || die "laptop kept its value"
+  CS_ANSWERS='["<default>","done"]' desk $CS sync >/dev/null 2>&1 && grep -q '^API_KEY=from-laptop$' "$ONE6/.env" || die "the chosen value reached desk"
+  ! git -C "$S/share.git" grep -q -e "from-laptop" -e "from-desk" -e "mysql" HEAD || die "no value ever in the share in plaintext"
+  [ "$(grep -c '^API_KEY=from-desk$' "$HOME6/.local/state/cs/env/one/.env.prev")" = 1 ] || die "the previous local text is kept before a patch"
+  # a file missing on one side is pulled back, never deleted on the other: laptop loses its .env, the next sync restores it from the share
+  rm "$ONE7/.env"
+  CS_ANSWERS='["<default>","done"]' laptop $CS sync > "$HOME7/env-restore.log" 2>&1 || { cat "$HOME7/env-restore.log"; die "laptop sync without its .env"; }
+  grep -q "one · .env  take 3 keys from laptop" "$HOME7/env-restore.log" && grep -q '^API_KEY=from-laptop$' "$ONE7/.env" && grep -q '^NEW=1$' "$ONE7/.env" || { cat "$HOME7/env-restore.log"; die "missing file pulled, not propagated as a delete"; }
+  [ -f "$ENVDIR6/one.env" ] || die "the share entry survives"
+  # .env.production is its own entry; bare cs shows a pending .env change
+  echo 'PROD=1' > "$ONE6/.env.production"; echo 'LATER=2' >> "$ONE6/.env"
+  (desk $CS > "$HOME6/status-env.log" 2>&1 || true); grep -q "one .*\.env: store 1 key .*\.env\.production: store 1 key.*cs sync" "$HOME6/status-env.log" || { cat "$HOME6/status-env.log"; die "cs shows the .env changes"; }
+  CS_ANSWERS='["<default>","done"]' desk $CS sync > "$HOME6/env6.log" 2>&1 || { cat "$HOME6/env6.log"; die "desk stores both files"; }
+  grep -q "one · .env.production  store 1 key" "$HOME6/env6.log" && grep -q "2 .env file(s) merged" "$HOME6/env6.log" && [ -f "$ENVDIR6/one.production.env" ] || die "own entry per file"
+  CS_ANSWERS='["<default>","done"]' laptop $CS sync >/dev/null 2>&1 && [ "$(cat "$ONE7/.env.production")" = "PROD=1" ] && grep -q '^LATER=2$' "$ONE7/.env" || die "both files arrived"
+  # env = false: the project's .env is never observed, stored or written
+  git init -q -b main "$S/two-src" && (cd "$S/two-src" && echo x > README && echo '.env' > .gitignore && git add . && git commit -qm init) && git clone -q --bare "$S/two-src" "$S/two.git"
+  cat >> "$HOME6/.config/claude-share/repo/projects.toml" <<TOML
+
+[projects.two]
+url = "$S/two.git"
+identity = "test"
+branch = "main"
+profiles = ["all"]
+env = false
+TOML
+  CS_ANSWERS='[]' desk $CS sync >/dev/null 2>&1 && [ -d "$HOME6/dev/two/.git" ] || die "desk registers and clones two"
+  echo 'SECRET=never' > "$HOME6/dev/two/.env"
+  CS_ANSWERS='[]' desk $CS sync > "$HOME6/env7.log" 2>&1 || { cat "$HOME6/env7.log"; die "desk sync with env = false"; }
+  ! grep -q "two · .env" "$HOME6/env7.log" && [ ! -e "$ENVDIR6/two.env" ] || die "env = false: never stored"
+  CS_ANSWERS='[]' laptop $CS sync >/dev/null 2>&1 && [ -d "$HOME7/dev/two/.git" ] && [ ! -e "$HOME7/dev/two/.env" ] || die "env = false: never written"
+  # a .env file git would commit is not carried; the line says what to do
+  printf '!.env.staging\n' >> "$ONE6/.gitignore"; echo 'S=1' > "$ONE6/.env.staging"
+  CS_ANSWERS='[]' desk $CS sync > "$HOME6/env8.log" 2>&1 || { cat "$HOME6/env8.log"; die "desk sync with an unignored file"; }
+  grep -q "one: .env.staging is not gitignored — not carried (add it to .gitignore)" "$HOME6/env8.log" && [ ! -e "$ENVDIR6/one.staging.env" ] || { cat "$HOME6/env8.log"; die "unignored file refused with the fix"; }
+  (cd "$ONE6" && git checkout -q -- .gitignore && rm .env.staging)
+  pass env-values
+else
+  echo "SKIP env-values (sops/age not installed)"
+fi
+
 echo "ALL PASS (HOME=$HOME)"

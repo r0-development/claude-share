@@ -48,7 +48,7 @@ export async function runStatus(repo: string, m: Machine, man: Manifest, fetch =
   const ws = workspace(man, m);
   ui.info(`${ui.dim("profiles")} ${m.profiles.join(", ")}  ${ui.dim("workspace")} ${contract(ws)}${fetch ? "" : ui.dim("  (not fetched)")}`);
   const share = await shareLine(repo, fetch, timeout);
-  const { facts } = await ui.spin("fetching projects…", () => gather(m, man, { timeout, fetch }));
+  const { facts, envSkipped } = await ui.spin("fetching projects…", () => gather(repo, m, man, { timeout, fetch }));
   const byName = new Map(facts.map((f) => [f.project, f]));
   let pending = share.pending, attention = share.broken, stuck = false;
   const rows: string[][] = [share.row]; const known = new Set<string>();
@@ -63,6 +63,7 @@ export async function runStatus(repo: string, m: Machine, man: Manifest, fetch =
     else { const line = projectLine(f, m.name); rows.push([p.name, kind, f.units[0]?.branch || ui.red("DETACHED"), line.state]); pending ||= line.pending; stuck ||= line.stuck; }
   }
   ui.table(rows, ["project", "", "branch", "state"]);
+  for (const s of envSkipped) ui.warn(s);
   for (const d of unregisteredDirs(ws, known)) { ui.warn(`${d.name}: ${d.remote ? "not registered" : "not registered, no remote"}  ${ui.dim(`cs add ${contract(join(ws, d.name))}`)}`); attention = true; }
   return { rc: pending || attention || stuck ? 1 : 0, next: pending ? "cs sync" : attention ? "cs doctor --fix" : undefined };
 }

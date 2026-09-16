@@ -15,7 +15,10 @@ import { describe, newest, shareGitSync, type Side, type SyncOpts as ShareOpts }
 import { clone } from "./projects.js";
 import { backupRef, handoff, resume, units } from "./handoff.js";
 import { gather } from "./gather.js";
-import { count, plan, when, type Action, type Answer, type Facts, type Plan, type Question } from "./plan.js";
+import { getBackend } from "./secrets/index.js";
+import { applyEnv, newestSide, snapshotInSync, type EnvState } from "./envfiles.js";
+import { describeMerge, type Side as EnvSide } from "./env.js";
+import { count, plan, when, type Action, type Answer, type EnvQuestion, type Facts, type HandoffQuestion, type Plan } from "./plan.js";
 import * as ui from "./ui.js";
 
 export interface SyncOpts { note?: string; timeout?: number }
@@ -42,11 +45,12 @@ function report(facts: Facts[]) {
   for (const f of facts) {
     for (const w of f.waiting) ui.step(`${f.project} · ${w.branch}  handoff waiting from ${w.machine} (${when(w.when)})`);
     for (const u of f.units) if ((u.dirty || u.unpushed) && !u.skip) ui.step(`${f.project} · ${u.branch}  ${[u.dirty ? count(u.dirty, "change") : "", u.unpushed ? count(u.unpushed, "unpushed commit") : ""].filter(Boolean).join(", ")}`);
+    for (const e of f.env ?? []) if (e.kind === "values") { const what = describeMerge(e.merge, e.from); if (what) ui.step(`${f.project} · ${e.file}  ${what}`); }
   }
 }
 
 // ---------------------------------------------------------------- plan screen: one multi-select, a summary, one confirmation
-const GROUP: Record<Action["kind"], string> = { send: "handoffs to send", apply: "handoffs to apply", push: "branches to push" };
+const GROUP: Record<Action["kind"], string> = { send: "handoffs to send", apply: "handoffs to apply", push: "branches to push", env: ".env files to store or update" };
 async function planScreen(pl: Plan): Promise<Action[]> {
   const byId = new Map(pl.actions.map((a) => [a.id, a]));
   let picked = new Set(pl.actions.filter((a) => a.checked).map((a) => a.id));
@@ -75,8 +79,8 @@ async function syncShare(repo: string, m: Machine, title: string, done: string, 
 }
 
 // ---------------------------------------------------------------- dirty tree vs waiting handoff: asked per question after the plan screen; nothing is ever destructive
-async function askQuestions(qs: Question[]): Promise<{ q: Question; answer: Answer }[]> {
-  const out: { q: Question; answer: Answer }[] = [];
+async function askQuestions(qs: HandoffQuestion[]): Promise<{ q: HandoffQuestion; answer: Answer }[]> {
+  const out: { q: HandoffQuestion; answer: Answer }[] = [];
   for (const q of qs) {
     if (!ui.canAsk()) { ui.warn(`${q.why}\n${ui.cyan("→ ")}kept local, the handoff stays waiting — run cs sync in a terminal to choose`); out.push({ q, answer: "keep" }); continue; }
     const options: { value: Answer; label: string; hint: string }[] = [
@@ -86,6 +90,25 @@ async function askQuestions(qs: Question[]): Promise<{ q: Question; answer: Answ
     const answer = await ui.select(`${q.why} — what now?`, options, "keep");
     if (answer === "keep") ui.skip(`${q.project} · ${q.branch}: kept local — the handoff from ${q.machine} stays waiting`);
     out.push({ q, answer });
+  }
+  return out;
+}
+
+// ---------------------------------------------------------------- a .env key changed on both machines since the last sync: asked per key (ADR-0003); no terminal → newest wins
+const mask = (v: string | undefined) => (v === undefined ? "removed" : v.length > 8 ? v.slice(0, 3) + "…" + v.slice(-2) : "…");
+async function askEnvKeys(qs: EnvQuestion[], states: Record<string, EnvState[]>): Promise<Record<string, Partial<Record<string, EnvSide>>>> {
+  const out: Record<string, Partial<Record<string, EnvSide>>> = {};
+  for (const q of qs) {
+    const st = states[q.project]?.find((s) => s.file === q.file); if (!st) continue;
+    const c = st.merge.conflicts.find((x) => x.key === q.key); if (!c) continue;
+    const other = q.from ? `${q.from}'s value` : "the share's value"; const newest = newestSide(st);
+    let side: EnvSide;
+    if (!ui.canAsk()) { side = newest; ui.warn(`${q.why}\n${ui.cyan("→ ")}newest kept: ${side === "local" ? "this machine's value" : other} — run cs sync in a terminal to choose`); }
+    else side = await ui.select(`${q.why} — keep which value?`, [
+      { value: "local" as EnvSide, label: "this machine's value", hint: `${mask(c.local)}${st.localWhen ? `, changed ${when(st.localWhen)}` : ""}` },
+      { value: "stored" as EnvSide, label: other, hint: `${mask(c.stored)}${st.storedWhen ? `, stored ${when(st.storedWhen)}` : ""}` }], newest);
+    ui.step(`${q.project} · ${q.file}: ${q.key} — ${side === "local" ? "this machine's value kept" : `${other} taken`}`);
+    (out[`${q.project}:${q.file}`] ??= {})[q.key] = side;
   }
   return out;
 }
@@ -117,14 +140,17 @@ export async function runSync(repo: string, m: Machine, man: Manifest, o: SyncOp
   const cloned = selectedProjects(man, m).filter((p) => !before.has(p.name) && existsSync(checkoutRoot(p, ws))).length;
 
   // 4. gather → 5. plan → 6. plan screen
-  const { facts, handoffs } = await ui.group("projects checked", async () => { const g = await gather(m, man, { timeout }); report(g.facts); return g; }, { done: "all clean, nothing waiting" });
+  const { facts, handoffs, env, envSkipped } = await ui.group("projects checked", async () => { const g = await gather(repo, m, man, { timeout }); report(g.facts); return g; }, { done: "all clean, nothing waiting" });
   const pl = plan(facts, m.name);
   for (const s of pl.skipped) ui.skip(s);
+  for (const s of envSkipped) ui.skip(s);
   let chosen: Action[] = [];
   const unreachable = facts.filter((f) => f.offline).length;
   if (pl.actions.length) chosen = await planScreen(pl); else if (!pl.questions.length) ui.info(ui.dim(unreachable ? `nothing moved — ${unreachable} remote(s) unreachable` : "nothing to move — no handoffs waiting, nothing stale here"));
-  const answered = await askQuestions(pl.questions);
+  const answered = await askQuestions(pl.questions.filter((q): q is HandoffQuestion => q.kind === "dirty-vs-waiting"));
   const kept = answered.filter((a) => a.answer === "keep").length;
+  const envRows = chosen.filter((a) => a.kind === "env");
+  const decided = await askEnvKeys(pl.questions.filter((q): q is EnvQuestion => q.kind === "env-key" && envRows.some((a) => a.project === q.project && a.branch === q.file)), env);
 
   // 7. execute: send what is dirty here, then apply what is waiting (the local tree is clean, the plan checked). Sends go
   //    first because applying may check another branch out in a plain-layout checkout. Counts come from what actually happened.
@@ -160,14 +186,27 @@ export async function runSync(repo: string, m: Machine, man: Manifest, o: SyncOp
       pushed++; ui.step(`${a.label} → ${up.remote}/${up.ref.replace(/^refs\/heads\//, "")}`);
     }
   });
-  const failed = chosen.length + over.length + replace.length - sent - applied - pushed;
+  // .env files: the rows ticked are merged per key with the share (encrypted through the secrets backend) and patched in place here (ADR-0003);
+  // files already the same on both sides get their snapshot so the next change is known to be one-sided
+  let envDone = 0;
+  if (envRows.length) await ui.group(".env files", async () => {
+    const b = await getBackend(m);
+    for (const a of envRows) {
+      const st = env[a.project]?.find((s) => s.file === a.branch); if (!st) { ui.fail(`${a.label}: not observed — not merged`); continue; }
+      try { const r = await applyEnv(repo, b, st, decided[`${a.project}:${a.branch}`] ?? {}); envDone++;
+        ui.step(`${a.label}: ${[r.stored ? `${count(r.stored, "key")} stored` : "", r.local ? `${count(r.local, "key")} taken${st.storedFrom ? ` from ${st.storedFrom}` : ""}` : ""].filter(Boolean).join(", ")}`); }
+      catch (e: any) { ui.fail(`${a.label}: ${String(e?.message ?? e).replace(/^cs: /, "")}`); }
+    }
+  });
+  for (const sts of Object.values(env)) for (const st of sts) snapshotInSync(st);
+  const failed = chosen.length + over.length + replace.length - sent - applied - pushed - envDone;
   if (failed) rc = rc || 1;
 
   // 8. the share again: what the run changed (project state, handoff notes, memory) goes out
   const last = await syncShare(repo, m, "share pushed", first.offline ? "committed locally — offline, pushed by the next sync" : "already in sync", copyBack, { timeout, commitOnly: first.offline });
   if (!last.ok) rc = 2;
 
-  const bits = [applied ? `${applied} handoff(s) applied` : "", sent ? `${sent} handoff(s) sent` : "", pushed ? `${pushed} branch(es) pushed` : "", cloned ? `${cloned} project(s) cloned` : "", kept ? ui.yellow(`${kept} handoff(s) left waiting — see above`) : ""].filter(Boolean);
+  const bits = [applied ? `${applied} handoff(s) applied` : "", sent ? `${sent} handoff(s) sent` : "", pushed ? `${pushed} branch(es) pushed` : "", envDone ? `${envDone} .env file(s) merged` : "", cloned ? `${cloned} project(s) cloned` : "", kept ? ui.yellow(`${kept} handoff(s) left waiting — see above`) : ""].filter(Boolean);
   const summary = rc === 2 ? ui.red("share not synced — see above") : failed ? ui.red(`${failed} action(s) failed — see above`) : bits.length ? bits.join(" · ") : ui.dim(first.offline || last.offline ? "offline — local parts done, nothing moved" : "nothing to move");
   return { rc, summary };
 }
