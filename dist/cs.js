@@ -6405,12 +6405,13 @@ function appendProject(repo, p) {
 }
 function updateProjectText(text3, p) {
   const lines = text3.split("\n");
-  const start = lines.findIndex((l2) => new RegExp(`^\\[projects\\.${p.name.replace(/[.]/g, "\\.")}\\]\\s*$`).test(l2));
+  const start = lines.findIndex((l2) => new RegExp(`^\\[projects\\.${p.name.replace(/[.]/g, "\\.")}\\]\\s*(#.*)?$`).test(l2));
   if (start < 0) throw new Error(`cs: project '${p.name}' not found in projects.toml`);
   let end = start + 1;
   while (end < lines.length && !/^\[/.test(lines[end])) end++;
   while (end > start + 1 && lines[end - 1].trim() === "") end--;
-  return [...lines.slice(0, start), projectBlock(p).trimEnd(), ...lines.slice(end)].join("\n");
+  const body = projectBlock(p).trimEnd().split("\n").slice(1);
+  return [...lines.slice(0, start + 1), ...body, ...lines.slice(end)].join("\n");
 }
 function updateProject(repo, p) {
   const f = join3(repo, "projects.toml");

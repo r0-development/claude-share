@@ -70,6 +70,8 @@ test("manifest: updateProjectText rewrites the main block in place — sub-table
   const text = `[workspace]\nroot = "~/dev"\n\n# ---- Projects\n\n[projects.a]\nprofiles = ["all"]\n\n\n[projects.a.handoff]\nextra = ["dist/"]\n\n[projects.b]\nprofiles = ["work"]\n`;
   assert.equal(updateProjectText(text, p), `[workspace]\nroot = "~/dev"\n\n# ---- Projects\n\n[projects.a]\nurl = "git@github.com:acme/a.git"\nidentity = "work"\nbranch = "main"\nprofiles = [ "all" ]\n\n\n[projects.a.handoff]\nextra = ["dist/"]\n\n[projects.b]\nprofiles = ["work"]\n`);
   assert.throws(() => updateProjectText(text, { ...p, name: "zz" }), { message: "cs: project 'zz' not found in projects.toml" });
+  const commented = `[projects.a]   # first\nprofiles = ["all"]\n`;   // the header line, comment included, is the user's
+  assert.equal(updateProjectText(commented, p), `[projects.a]   # first\nurl = "git@github.com:acme/a.git"\nidentity = "work"\nbranch = "main"\nprofiles = [ "all" ]\n`);
   assert.equal(parseManifest(updateProjectText(text, p)).projects.a.url, "git@github.com:acme/a.git");
 });
 test("manifest: addIdentityText goes before the `# ---- Projects` marker, else at the end; the default key path is not written; a taken id throws", () => {
