@@ -58,7 +58,11 @@ test("plan: table of facts → actions", () => {
   const cases: [string, Facts, { actions: string[]; checked?: boolean[]; questions?: string[]; skipped?: number }][] = [
     ["clean, nothing waiting", facts({}), { actions: [] }],
     ["dirty → send, checked", facts({ units: [{ rel: ".", branch: "main", dirty: 3, unpushed: 0 }] }), { actions: ["send:p:main"], checked: [true] }],
-    ["unpushed commits only → send (the handoff carries them)", facts({ units: [{ rel: ".", branch: "main", dirty: 0, unpushed: 2 }] }), { actions: ["send:p:main"] }],
+    ["unpushed commits only → send (the handoff carries them) + push of the real branch, unchecked", facts({ units: [{ rel: ".", branch: "main", dirty: 0, unpushed: 2 }] }), { actions: ["send:p:main", "push:p:main"], checked: [true, false] }],
+    ["dirty + unpushed → send checked, push unchecked", facts({ units: [{ rel: ".", branch: "main", dirty: 1, unpushed: 1 }] }), { actions: ["send:p:main", "push:p:main"], checked: [true, false] }],
+    ["unpushed + waiting for the same branch → apply, and the push is still offered (never sent)", facts({ units: [{ rel: ".", branch: "main", dirty: 0, unpushed: 1 }], waiting: [w("main", "laptop")] }), { actions: ["apply:p:main", "push:p:main"], checked: [true, false] }],
+    ["unpushed + dirty + waiting → question, push still offered", facts({ units: [{ rel: ".", branch: "main", dirty: 1, unpushed: 1 }], waiting: [w("main", "laptop")] }), { actions: ["push:p:main"], checked: [false], questions: ["dirty-vs-waiting"] }],
+    ["unpushed but files look secret → handoff refused, push still offered", facts({ units: [{ rel: ".", branch: "main", dirty: 1, unpushed: 1, secrets: ["api.key"] }] }), { actions: ["push:p:main"], checked: [false], skipped: 1 }],
     ["clean + waiting from another machine → apply, checked", facts({ waiting: [w("main", "laptop")] }), { actions: ["apply:p:main"], checked: [true] }],
     ["clean + waiting on another branch (plain layout) → apply (checks the branch out)", facts({ waiting: [w("feat", "laptop")] }), { actions: ["apply:p:feat"] }],
     ["dirty + waiting from another machine, same branch → question, no actions", facts({ units: [{ rel: ".", branch: "main", dirty: 1, unpushed: 0 }], waiting: [w("main", "laptop")] }), { actions: [], questions: ["dirty-vs-waiting"] }],
@@ -82,8 +86,8 @@ test("plan: table of facts → actions", () => {
 });
 test("plan: apply and send never both for one branch; two projects keep their order; labels name project and branch", () => {
   const pl = plan([facts({ project: "a", units: [{ rel: ".", branch: "main", dirty: 0, unpushed: 1 }], waiting: [w("main", "laptop")] }), facts({ project: "b", units: [{ rel: ".", branch: "x", dirty: 1, unpushed: 0 }] })], "desk");
-  assert.deepEqual(pl.actions.map((a) => a.id), ["apply:a:main", "send:b:x"]);
-  assert.ok(pl.actions[0].label.includes("a") && pl.actions[0].hint.includes("laptop") && pl.actions[1].hint.includes("1 change"));
+  assert.deepEqual(pl.actions.map((a) => a.id), ["apply:a:main", "push:a:main", "send:b:x"]);
+  assert.ok(pl.actions[0].label.includes("a") && pl.actions[0].hint.includes("laptop") && pl.actions[2].hint.includes("1 change"));
   const q = plan([facts({ units: [{ rel: ".", branch: "main", dirty: 1, unpushed: 0 }], waiting: [w("main", "laptop")] })], "desk").questions[0];
   assert.ok(q.why.includes("laptop") && q.project === "p" && q.branch === "main");
 });
@@ -94,4 +98,13 @@ test("plan: a question names the dirty unit and whether it is on the waiting bra
   assert.deepEqual([other.unit, other.sameBranch], [".", false]);
   const wt = plan([facts({ layout: "worktrees", units: [{ rel: "wt-b", branch: "b", dirty: 2, unpushed: 0 }], waiting: [w("b", "laptop")] })], "desk").questions[0];
   assert.deepEqual([wt.unit, wt.sameBranch], ["wt-b", true]);
+});
+test("plan: a push row names the branch and the count, is never checked, and is not offered for a unit that is skipped or unreachable", () => {
+  const pu = plan([facts({ units: [{ rel: ".", branch: "feat/x", dirty: 0, unpushed: 3 }] })], "desk").actions.find((a) => a.kind === "push")!;
+  assert.deepEqual([pu.id, pu.project, pu.branch, pu.checked], ["push:p:feat/x", "p", "feat/x", false]);
+  assert.ok(pu.label.includes("feat/x") && pu.hint.includes("3 unpushed commits"));
+  const wt = plan([facts({ layout: "worktrees", units: [{ rel: ".", branch: "main", dirty: 0, unpushed: 0 }, { rel: "wt-a", branch: "a", dirty: 0, unpushed: 1 }] })], "desk");
+  assert.deepEqual(wt.actions.map((a) => a.id), ["send:p:a", "push:p:a"]);
+  assert.equal(plan([facts({ units: [{ rel: ".", branch: "", dirty: 0, unpushed: 2, skip: "detached HEAD" }] })], "desk").actions.length, 0);
+  assert.equal(plan([facts({ offline: true, units: [{ rel: ".", branch: "main", dirty: 0, unpushed: 2 }] })], "desk").actions.length, 0);
 });

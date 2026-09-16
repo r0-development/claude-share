@@ -5,8 +5,10 @@ project's own remote; on another machine it turns back into uncommitted changes 
 never leaves its remote, and the snapshot is a plain git commit anyone can inspect.
 
 `cs sync` does both directions in one run: every dirty project here is offered as a handoff to send, every handoff waiting
-for this machine as one to apply — pre-checked on one plan screen with one confirmation. Re-running `cs sync` on the
-same machine replaces your own earlier handoff and keeps its note unless `-m` gives a new one.
+for this machine as one to apply — pre-checked on one plan screen with one confirmation. A branch with commits not yet
+on its upstream gets its own row, unchecked: the handoff carries those commits regardless, and pushing the real branch
+stays your decision per branch (nothing else in `cs` pushes one). Re-running `cs sync` on the same machine replaces your
+own earlier handoff and keeps its note unless `-m` gives a new one.
 
 ```sh
 # leaving machine A

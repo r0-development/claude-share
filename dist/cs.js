@@ -6508,6 +6508,10 @@ function aheadBehind(p) {
   const [behind, ahead] = s.split(/\s+/).map((x) => parseInt(x, 10));
   return [ahead, behind];
 }
+function upstream(p, branch) {
+  const remote = configGet(p, `branch.${branch}.remote`), ref = configGet(p, `branch.${branch}.merge`);
+  return remote && ref ? { remote, ref } : void 0;
+}
 function commonDir(p) {
   const c2 = out(["rev-parse", "--git-common-dir"], p);
   return isAbsolute3(c2) ? c2 : resolve3(p, c2);
@@ -7050,9 +7054,9 @@ function tryLock(label) {
     return void 0;
   }
 }
-function conflictsOf(repo, local, upstream) {
+function conflictsOf(repo, local, upstream2) {
   const change = (tip, file) => ({ when: out(["log", "-1", "--format=%cI", tip, "--", file], repo), deleted: !out(["ls-tree", tip, "--", file], repo) });
-  return out(["diff", "--name-only", "--diff-filter=U"], repo).split("\n").filter(Boolean).map((file) => ({ file, ours: change(local, file), theirs: change(upstream, file) }));
+  return out(["diff", "--name-only", "--diff-filter=U"], repo).split("\n").filter(Boolean).map((file) => ({ file, ours: change(local, file), theirs: change(upstream2, file) }));
 }
 function takeSide(repo, file, side) {
   const stages = out(["ls-files", "-u", "--", file], repo).split("\n").filter(Boolean).map((l2) => l2.split(/\s+/)[2]);
@@ -7064,7 +7068,7 @@ function takeSide(repo, file, side) {
   git(["checkout", side === "ours" ? "--theirs" : "--ours", "--", file], repo);
   git(["add", "--", file], repo);
 }
-function settleRebase(repo, label, local, upstream, o) {
+function settleRebase(repo, label, local, upstream2, o) {
   const env2 = { GIT_EDITOR: "true" };
   const ident2 = identityArgs(repo);
   const settled = [];
@@ -7073,7 +7077,7 @@ function settleRebase(repo, label, local, upstream, o) {
   const abort = () => git(["rebase", "--abort"], repo, { check: false });
   try {
     while (rebaseInProgress(repo)) {
-      const stops = conflictsOf(repo, local, upstream);
+      const stops = conflictsOf(repo, local, upstream2);
       const step2 = rebaseStep(repo);
       if (!stops.length) throw new Error(`cs: share rebase stopped without a conflict \u2014 cd ${contract(repo)} && git rebase origin/${currentBranch(repo)}`);
       if (step2 === last) throw new Error(`cs: share rebase keeps stopping on ${stops.map((c2) => c2.file).join(", ")} \u2014 cd ${contract(repo)} && git rebase origin/${currentBranch(repo)}`);
@@ -7155,12 +7159,12 @@ async function shareGitSync(repo, label, machine, o = {}) {
         git(["merge", "-q", "--ff-only", "@{upstream}"], repo);
         step(`${label}: fast-forwarded ${behind} commit(s)`);
       } else {
-        const local = out(["rev-parse", "HEAD"], repo), upstream = out(["rev-parse", "@{upstream}"], repo);
+        const local = out(["rev-parse", "HEAD"], repo), upstream2 = out(["rev-parse", "@{upstream}"], repo);
         const r2 = git([...identityArgs(repo), "rebase", "-q", "@{upstream}"], repo, { check: false, env: { GIT_EDITOR: "true" } });
         if (r2.code !== 0) {
           let open;
           try {
-            open = settleRebase(repo, label, local, upstream, o);
+            open = settleRebase(repo, label, local, upstream2, o);
           } catch (e) {
             error(`${label}: could not settle the rebase`, e.message.replace(/^cs: /, ""));
             return { ok: false };
@@ -8184,14 +8188,17 @@ function plan(facts, machine) {
         continue;
       }
       if (!u5.dirty && !u5.unpushed) continue;
-      if (handled.has(u5.branch)) continue;
-      if (u5.secrets?.length) {
-        skipped.push(`${f.project} \xB7 ${u5.branch}: not sent \u2014 files that look secret: ${u5.secrets.join(", ")}  (cs handoff --allow <glob>)`);
+      const label = `${f.project} \xB7 ${u5.branch}`;
+      const push3 = u5.unpushed ? { id: `push:${f.project}:${u5.branch}`, kind: "push", project: f.project, branch: u5.branch, label, hint: `${count(u5.unpushed, "unpushed commit")} \u2192 upstream`, checked: false } : void 0;
+      if (handled.has(u5.branch) || u5.secrets?.length) {
+        if (u5.secrets?.length) skipped.push(`${label}: not sent \u2014 files that look secret: ${u5.secrets.join(", ")}  (cs handoff --allow <glob>)`);
+        if (push3) actions.push(push3);
         continue;
       }
       const own = f.waiting.some((w) => w.branch === u5.branch && w.machine === machine);
       const bits = [u5.dirty ? count(u5.dirty, "change") : "", u5.unpushed ? count(u5.unpushed, "unpushed commit") : "", own ? "replaces the handoff sent from here earlier" : ""].filter(Boolean);
-      actions.push({ id: `send:${f.project}:${u5.branch}`, kind: "send", project: f.project, branch: u5.branch, label: `${f.project} \xB7 ${u5.branch}`, hint: bits.join(", "), checked: true });
+      actions.push({ id: `send:${f.project}:${u5.branch}`, kind: "send", project: f.project, branch: u5.branch, label, hint: bits.join(", "), checked: true });
+      if (push3) actions.push(push3);
     }
   }
   return { actions, questions, skipped };
@@ -8398,11 +8405,30 @@ async function runSync(repo, m, man, o = {}) {
     for (const { q } of replace) await resume(repo, m, man, [man.projects[q.project]], { branches: [q.branch], waiting: handoffs2, replace: true, onDone: () => applied++, onNote });
   });
   for (const [title, ...lines] of notes) note2(lines, title);
-  const failed = chosen.length + over.length + replace.length - sent - applied;
+  let pushed = 0;
+  const pushes = chosen.filter((a2) => a2.kind === "push");
+  if (pushes.length) await group("branches pushed", async () => {
+    for (const a2 of pushes) {
+      const unit = units(man.projects[a2.project], ws).find((u5) => u5.branch === a2.branch) ?? units(man.projects[a2.project], ws)[0];
+      const up = unit && upstream(unit.path, a2.branch);
+      if (!unit || !up) {
+        fail(`${a2.label}: no upstream configured \u2014 not pushed`);
+        continue;
+      }
+      const r2 = await spin(`${a2.label}: pushing\u2026`, () => gitA(["push", "-q", up.remote, `refs/heads/${a2.branch}:${up.ref}`], unit.path, { check: false, timeout: 120 }));
+      if (r2.code !== 0) {
+        fail(`${a2.label}: push rejected \u2014 ${r2.err.split("\n").pop()}`);
+        continue;
+      }
+      pushed++;
+      step(`${a2.label} \u2192 ${up.remote}/${up.ref.replace(/^refs\/heads\//, "")}`);
+    }
+  });
+  const failed = chosen.length + over.length + replace.length - sent - applied - pushed;
   if (failed) rc = rc || 1;
   const last = await syncShare(repo, m, "share pushed", first.offline ? "committed locally \u2014 offline, pushed by the next sync" : "already in sync", copyBack, { timeout, commitOnly: first.offline });
   if (!last.ok) rc = 2;
-  const bits = [applied ? `${applied} handoff(s) applied` : "", sent ? `${sent} handoff(s) sent` : "", cloned ? `${cloned} project(s) cloned` : "", kept ? yellow(`${kept} handoff(s) left waiting \u2014 see above`) : ""].filter(Boolean);
+  const bits = [applied ? `${applied} handoff(s) applied` : "", sent ? `${sent} handoff(s) sent` : "", pushed ? `${pushed} branch(es) pushed` : "", cloned ? `${cloned} project(s) cloned` : "", kept ? yellow(`${kept} handoff(s) left waiting \u2014 see above`) : ""].filter(Boolean);
   const summary = rc === 2 ? red("share not synced \u2014 see above") : failed ? red(`${failed} action(s) failed \u2014 see above`) : bits.length ? bits.join(" \xB7 ") : dim(first.offline || last.offline ? "offline \u2014 local parts done, nothing moved" : "nothing to move");
   return { rc, summary };
 }
@@ -8430,7 +8456,7 @@ var init_sync = __esm({
         return false;
       }
     };
-    GROUP = { send: "handoffs to send", apply: "handoffs to apply" };
+    GROUP = { send: "handoffs to send", apply: "handoffs to apply", push: "branches to push" };
   }
 });
 

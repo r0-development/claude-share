@@ -514,4 +514,27 @@ grep -q haiku "$HOME6/.config/claude-share/repo/claude/settings.base.json" || di
 [ "$(git -C "$S/share.git" rev-parse HEAD)" = "$(git -C "$HOME6/.config/claude-share/repo" rev-parse HEAD)" ] || die "pushed"
 pass share-conflict-inline
 
+# --- real-branch pushes (#7): local-only commits put an unchecked push row on the plan screen; the handoff carries them either way
+(cd "$ONE6" && echo "committed on desk" > commit.txt && git add commit.txt && git -c user.name="Test User" -c user.email=test@example.com commit -qm "local commit")
+echo "and dirty" >> "$ONE6/README"
+MAIN_BEFORE="$(git -C "$S/one.git" rev-parse main)"; DESK_HEAD="$(git -C "$ONE6" rev-parse HEAD)"
+# bare cs shows the unpushed count
+(cd "$ONE6" && desk $CS > "$HOME6/status-unpushed.log" 2>&1 || true); grep -q "↑1 unpushed" "$HOME6/status-unpushed.log" || die "cs shows ↑1 unpushed"
+# defaults: the handoff is sent (checked), the branch is not pushed (unchecked)
+CS_ANSWERS='["<default>","done"]' desk $CS sync > "$HOME6/push1.log" 2>&1 || { cat "$HOME6/push1.log"; die "desk sync with an unpushed commit"; }
+grep -q "○ push  one · main" "$HOME6/push1.log" && grep -q "1 unpushed commit" "$HOME6/push1.log" && grep -q "1 of 2 actions" "$HOME6/push1.log" || die "push row listed, unchecked"
+[ "$(git -C "$S/one.git" rev-parse main)" = "$MAIN_BEFORE" ] || die "defaults leave the real branch unpushed"
+git -C "$S/one.git" show-ref | grep -q "wip/test-user/main" && [ "$(git -C "$S/one.git" rev-parse 'wip/test-user/main^')" = "$DESK_HEAD" ] || die "the handoff carries the local-only commit"
+grep -q "1 handoff(s) sent" "$HOME6/push1.log" && ! grep -q "branch(es) pushed" "$HOME6/push1.log" || die "summary: sent, nothing pushed"
+# the row selected: the branch reaches its upstream; the handoff is re-sent (still carries the commit)
+CS_ANSWERS='["send:one:main,push:one:main","done"]' desk $CS sync > "$HOME6/push2.log" 2>&1 || { cat "$HOME6/push2.log"; die "desk sync pushing the branch"; }
+[ "$(git -C "$S/one.git" rev-parse main)" = "$DESK_HEAD" ] || die "selected: the real branch was pushed"
+grep -q "branches pushed" "$HOME6/push2.log" && grep -q "one · main → origin/main" "$HOME6/push2.log" && grep -q "1 branch(es) pushed" "$HOME6/push2.log" || die "push reported"
+[ "$(git -C "$S/one.git" rev-parse 'wip/test-user/main^')" = "$DESK_HEAD" ] || die "handoff still carries the commit"
+# nothing unpushed any more: only the send row remains; the tree was never touched
+CS_ANSWERS='["<default>","done"]' desk $CS sync > "$HOME6/push3.log" 2>&1 || { cat "$HOME6/push3.log"; die "desk sync after the push"; }
+grep -q "1 of 1 actions" "$HOME6/push3.log" && ! grep -q "push " "$HOME6/push3.log" || die "no push row once the branch is up to date"
+grep -q "and dirty" "$ONE6/README" && [ "$(cat "$ONE6/commit.txt")" = "committed on desk" ] || die "desk tree untouched"
+pass real-branch-push
+
 echo "ALL PASS (HOME=$HOME)"

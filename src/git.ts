@@ -42,6 +42,11 @@ export function aheadBehind(p: string): [number, number] | undefined {
   const [behind, ahead] = s.split(/\s+/).map((x) => parseInt(x, 10));
   return [ahead, behind];
 }
+/** Where `branch` pushes to: its configured upstream as { remote, ref } (ref is the remote-side refs/heads/… name), or undefined. */
+export function upstream(p: string, branch: string): { remote: string; ref: string } | undefined {
+  const remote = configGet(p, `branch.${branch}.remote`), ref = configGet(p, `branch.${branch}.merge`);
+  return remote && ref ? { remote, ref } : undefined;
+}
 export const worktrees = (p: string) => out(["worktree", "list", "--porcelain"], p).split("\n").filter((l) => l.startsWith("worktree ")).map((l) => l.slice(9));
 export function commonDir(p: string) { const c = out(["rev-parse", "--git-common-dir"], p); return isAbsolute(c) ? c : resolve(p, c); }
 export const infoExclude = (p: string) => join(commonDir(p), "info", "exclude");

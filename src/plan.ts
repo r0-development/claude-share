@@ -7,7 +7,8 @@ export interface Unit { rel: string; branch: string; dirty: number; unpushed: nu
 export interface Waiting { branch: string; machine: string; when: string; note: string; ref: string }
 export interface Facts { project: string; layout: "plain" | "worktrees"; units: Unit[]; waiting: Waiting[]; offline?: boolean; disabled?: boolean }
 
-export interface Action { id: string; kind: "send" | "apply"; project: string; branch: string; label: string; hint: string; checked: boolean }
+/** `push` is a real branch's local-only commits going to its upstream — offered, never checked by default (the handoff carries them anyway). */
+export interface Action { id: string; kind: "send" | "apply" | "push"; project: string; branch: string; label: string; hint: string; checked: boolean }
 /** A situation cs sync must not decide alone: it is asked after the plan screen (src/sync.ts). `unit` is the dirty checkout;
  *  `sameBranch` — the dirty unit is on the waiting branch, so "send mine over it" is a possible answer. */
 export interface Question { kind: "dirty-vs-waiting"; project: string; branch: string; machine: string; when: string; unit: string; sameBranch: boolean; why: string }
@@ -44,11 +45,18 @@ export function plan(facts: Facts[], machine: string): Plan {
     for (const u of f.units) {
       if (u.skip) { skipped.push(`${f.project}${u.rel === "." ? "" : "/" + u.rel}: ${u.skip}`); continue; }
       if (!u.dirty && !u.unpushed) continue;
-      if (handled.has(u.branch)) continue;
-      if (u.secrets?.length) { skipped.push(`${f.project} · ${u.branch}: not sent — files that look secret: ${u.secrets.join(", ")}  (cs handoff --allow <glob>)`); continue; }
+      const label = `${f.project} · ${u.branch}`;
+      // the real branch: its own row, unchecked, independent of what happens to the handoff (ADR-0002: only this screen pushes it)
+      const push = u.unpushed ? { id: `push:${f.project}:${u.branch}`, kind: "push" as const, project: f.project, branch: u.branch, label, hint: `${count(u.unpushed, "unpushed commit")} → upstream`, checked: false } : undefined;
+      if (handled.has(u.branch) || u.secrets?.length) {
+        if (u.secrets?.length) skipped.push(`${label}: not sent — files that look secret: ${u.secrets.join(", ")}  (cs handoff --allow <glob>)`);
+        if (push) actions.push(push);
+        continue;
+      }
       const own = f.waiting.some((w) => w.branch === u.branch && w.machine === machine);
       const bits = [u.dirty ? count(u.dirty, "change") : "", u.unpushed ? count(u.unpushed, "unpushed commit") : "", own ? "replaces the handoff sent from here earlier" : ""].filter(Boolean);
-      actions.push({ id: `send:${f.project}:${u.branch}`, kind: "send", project: f.project, branch: u.branch, label: `${f.project} · ${u.branch}`, hint: bits.join(", "), checked: true });
+      actions.push({ id: `send:${f.project}:${u.branch}`, kind: "send", project: f.project, branch: u.branch, label, hint: bits.join(", "), checked: true });
+      if (push) actions.push(push);
     }
   }
   return { actions, questions, skipped };

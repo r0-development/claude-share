@@ -61,7 +61,7 @@ async function gather(m: Machine, man: Manifest, timeout: number): Promise<{ fac
 }
 
 // ---------------------------------------------------------------- plan screen: one multi-select, a summary, one confirmation
-const GROUP: Record<Action["kind"], string> = { send: "handoffs to send", apply: "handoffs to apply" };
+const GROUP: Record<Action["kind"], string> = { send: "handoffs to send", apply: "handoffs to apply", push: "branches to push" };
 async function planScreen(pl: Plan): Promise<Action[]> {
   const byId = new Map(pl.actions.map((a) => [a.id, a]));
   let picked = new Set(pl.actions.filter((a) => a.checked).map((a) => a.id));
@@ -164,14 +164,25 @@ export async function runSync(repo: string, m: Machine, man: Manifest, o: SyncOp
     for (const { q } of replace) await resume(repo, m, man, [man.projects[q.project]], { branches: [q.branch], waiting: handoffs, replace: true, onDone: () => applied++, onNote });
   });
   for (const [title, ...lines] of notes) ui.note(lines, title);
-  const failed = chosen.length + over.length + replace.length - sent - applied;
+  // real branches last, only the rows ticked on the plan screen, each to its own upstream, never forced (ADR-0002)
+  let pushed = 0; const pushes = chosen.filter((a) => a.kind === "push");
+  if (pushes.length) await ui.group("branches pushed", async () => {
+    for (const a of pushes) {
+      const unit = units(man.projects[a.project], ws).find((u) => u.branch === a.branch) ?? units(man.projects[a.project], ws)[0]; const up = unit && git.upstream(unit.path, a.branch);
+      if (!unit || !up) { ui.fail(`${a.label}: no upstream configured — not pushed`); continue; }
+      const r = await ui.spin(`${a.label}: pushing…`, () => git.gitA(["push", "-q", up.remote, `refs/heads/${a.branch}:${up.ref}`], unit.path, { check: false, timeout: 120 }));
+      if (r.code !== 0) { ui.fail(`${a.label}: push rejected — ${r.err.split("\n").pop()}`); continue; }
+      pushed++; ui.step(`${a.label} → ${up.remote}/${up.ref.replace(/^refs\/heads\//, "")}`);
+    }
+  });
+  const failed = chosen.length + over.length + replace.length - sent - applied - pushed;
   if (failed) rc = rc || 1;
 
   // 8. the share again: what the run changed (project state, handoff notes, memory) goes out
   const last = await syncShare(repo, m, "share pushed", first.offline ? "committed locally — offline, pushed by the next sync" : "already in sync", copyBack, { timeout, commitOnly: first.offline });
   if (!last.ok) rc = 2;
 
-  const bits = [applied ? `${applied} handoff(s) applied` : "", sent ? `${sent} handoff(s) sent` : "", cloned ? `${cloned} project(s) cloned` : "", kept ? ui.yellow(`${kept} handoff(s) left waiting — see above`) : ""].filter(Boolean);
+  const bits = [applied ? `${applied} handoff(s) applied` : "", sent ? `${sent} handoff(s) sent` : "", pushed ? `${pushed} branch(es) pushed` : "", cloned ? `${cloned} project(s) cloned` : "", kept ? ui.yellow(`${kept} handoff(s) left waiting — see above`) : ""].filter(Boolean);
   const summary = rc === 2 ? ui.red("share not synced — see above") : failed ? ui.red(`${failed} action(s) failed — see above`) : bits.length ? bits.join(" · ") : ui.dim(first.offline || last.offline ? "offline — local parts done, nothing moved" : "nothing to move");
   return { rc, summary };
 }

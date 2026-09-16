@@ -155,8 +155,9 @@ cs sync                              # when leaving and when arriving; -m "where
 
 One run: pulls the share and repairs `~/.claude`, project state, hooks and timer without asking; clones projects
 missing here; then shows **one plan screen** — handoffs to send (dirty work here) and handoffs to apply (work waiting
-for this machine), both pre-checked — and one confirmation. Nothing is written to a project remote before that screen; an
-empty plan skips it ("nothing to move"). Offline, the local parts still run. A dirty checkout with a handoff waiting for
+for this machine), both pre-checked, and branches with unpushed commits, listed **unchecked** (`↑N unpushed` in `cs`) —
+and one confirmation. Nothing is written to a project remote before that screen, and a real branch is only ever pushed
+from it; a handoff carries the local-only commits either way. An empty plan skips the screen ("nothing to move"). Offline, the local parts still run. A dirty checkout with a handoff waiting for
 the same branch is asked afterwards: keep mine and leave it waiting (default) / apply the handoff / send mine over it —
 whichever side loses is kept in `refs/cs/backup/<branch>/<time>` of that checkout, never deleted. Handoffs live on `wip/<user>/<branch>` of
 the project's own remote; the sending machine is never touched (private index), secrets-looking files are refused,
