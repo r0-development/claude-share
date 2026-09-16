@@ -87,3 +87,11 @@ test("plan: apply and send never both for one branch; two projects keep their or
   const q = plan([facts({ units: [{ rel: ".", branch: "main", dirty: 1, unpushed: 0 }], waiting: [w("main", "laptop")] })], "desk").questions[0];
   assert.ok(q.why.includes("laptop") && q.project === "p" && q.branch === "main");
 });
+test("plan: a question names the dirty unit and whether it is on the waiting branch (only then can local be sent over the handoff)", () => {
+  const same = plan([facts({ units: [{ rel: ".", branch: "main", dirty: 1, unpushed: 0 }], waiting: [w("main", "laptop")] })], "desk").questions[0];
+  assert.deepEqual([same.unit, same.sameBranch, same.when], [".", true, "2026-09-16T08:00:00+00:00"]);
+  const other = plan([facts({ units: [{ rel: ".", branch: "main", dirty: 1, unpushed: 0 }], waiting: [w("feat", "laptop")] })], "desk").questions[0];
+  assert.deepEqual([other.unit, other.sameBranch], [".", false]);
+  const wt = plan([facts({ layout: "worktrees", units: [{ rel: "wt-b", branch: "b", dirty: 2, unpushed: 0 }], waiting: [w("b", "laptop")] })], "desk").questions[0];
+  assert.deepEqual([wt.unit, wt.sameBranch], ["wt-b", true]);
+});

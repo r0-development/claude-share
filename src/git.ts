@@ -1,6 +1,6 @@
 /** Thin wrapper around git (sync spawn). */
 import { spawnSync } from "node:child_process";
-import { existsSync, statSync } from "node:fs";
+import { existsSync, readFileSync, statSync } from "node:fs";
 import { join, resolve, isAbsolute } from "node:path";
 
 export interface Res { code: number; out: string; err: string }
@@ -46,10 +46,17 @@ export const worktrees = (p: string) => out(["worktree", "list", "--porcelain"],
 export function commonDir(p: string) { const c = out(["rev-parse", "--git-common-dir"], p); return isAbsolute(c) ? c : resolve(p, c); }
 export const infoExclude = (p: string) => join(commonDir(p), "info", "exclude");
 export const configGet = (p: string, key: string) => out(["config", "--get", key], p);
+/** `-c user.*` arguments for commands that create commits when no identity resolves in `p` (commit, rebase --continue). */
+export const identityArgs = (p: string, fallbackName = "cs", fallbackEmail = "cs@localhost") => (configGet(p, "user.email") ? [] : ["-c", `user.name=${fallbackName}`, "-c", `user.email=${fallbackEmail}`]);
 /** Commit with the repo's resolved identity, or a fallback when none resolves. */
 export function commit(p: string, message: string, fallbackName = "cs", fallbackEmail = "cs@localhost") {
-  const pre = configGet(p, "user.email") ? [] : ["-c", `user.name=${fallbackName}`, "-c", `user.email=${fallbackEmail}`];
-  git([...pre, "commit", "-q", "-m", message], p);
+  git([...identityArgs(p, fallbackName, fallbackEmail), "commit", "-q", "-m", message], p);
+}
+export const rebaseInProgress = (p: string) => existsSync(join(commonDir(p), "rebase-merge")) || existsSync(join(commonDir(p), "rebase-apply"));
+/** "3/5" — which commit a stopped rebase is replaying (empty when no rebase is in progress). */
+export function rebaseStep(p: string): string {
+  const read = (f: string) => { try { return readFileSync(join(commonDir(p), "rebase-merge", f), "utf8").trim(); } catch { return ""; } };
+  return read("msgnum") ? `${read("msgnum")}/${read("end")}` : "";
 }
 export function canonicalGithub(url: string): string {
   let u = url.trim();

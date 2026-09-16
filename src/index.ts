@@ -36,16 +36,16 @@ program.hook("preAction", (_root, cmd) => ui.setQuiet(Boolean(program.opts().qui
 // share-sync: the share alone (commit / pull --rebase / push) — what the hooks and the timer run. `cs sync` is the daily verb on top of it.
 const shareSyncAction = (title: string) => async (o: any) => { const { repo, m, man } = ctx(); const { runShareSync } = await import("./sharesync.js"); const opts = { pullOnly: o.pullOnly, pushOnly: o.pushOnly, timeout: +o.timeout, resolve: o.resolve, debounce: +o.debounce };
     if (o.quiet || program.opts().quiet) { process.exitCode = await runShareSync(repo, m, man, opts); return; }
-    await ui.command(title, async () => { process.exitCode = await runShareSync(repo, m, man, opts); }, { outro: () => (process.exitCode ? ui.red("blocked — see above") : ui.dim("in sync")) }); };
-const shareSyncOpts = (c: Command) => c.option("--pull-only").option("--push-only").option("--timeout <s>", "", "20").option("--resolve <ours|theirs>").option("--debounce <s>", "skip if a sync ran less than N seconds ago", "0").option("-q, --quiet");
+    await ui.command(title, async () => { process.exitCode = await runShareSync(repo, m, man, opts); }, { outro: () => (process.exitCode ? ui.red("not synced — see above") : ui.dim("in sync")) }); };
+const shareSyncOpts = (c: Command) => c.option("--pull-only").option("--push-only").option("--timeout <s>", "", "20").option("--resolve <ours|theirs|newest>", "how a file changed on both machines is settled (default newest)").option("--debounce <s>", "skip if a sync ran less than N seconds ago", "0").option("-q, --quiet");
 program.command("sync").description("the daily verb: bring this machine up to date and leave nothing stale here")
-  .option("-m, --note <text>", "note carried by the handoffs sent (shown where the work is resumed)").option("--resolve <ours|theirs>", "unblock the share after a conflict: keep this machine's (ours) or the other machine's (theirs) version")
+  .option("-m, --note <text>", "note carried by the handoffs sent (shown where the work is resumed)")
   .addOption(new Option("--timeout <s>", "").default("20").hideHelp()).addOption(new Option("-q, --quiet").hideHelp())
   // hooks installed before cs sync became the daily verb call `cs sync --push-only|--pull-only`; those stay the share-only sync (ADR-0002: never a project remote unattended)
   .addOption(new Option("--pull-only").hideHelp()).addOption(new Option("--push-only").hideHelp()).addOption(new Option("--debounce <s>").default("0").hideHelp())
   .action(async (o) => { if (o.pullOnly || o.pushOnly) return shareSyncAction("cs sync")(o);
     const { repo, m, man } = ctx(); const { runSync } = await import("./sync.js");
-    await ui.command(`cs sync  ${ui.dim(m.name)}`, async () => { const r = await runSync(repo, m, man, { note: o.note, resolve: o.resolve, timeout: +o.timeout }); process.exitCode = r.rc; return r.summary; }, { outro: (s) => s }); });
+    await ui.command(`cs sync  ${ui.dim(m.name)}`, async () => { const r = await runSync(repo, m, man, { note: o.note, timeout: +o.timeout }); process.exitCode = r.rc; return r.summary; }, { outro: (s) => s }); });
 shareSyncOpts(program.command("share-sync", HIDDEN).description("commit / pull --rebase / push the share only (what hooks and the timer run)")).action(shareSyncAction("cs share-sync"));
 
 // ------------------------------------------------------------------ occasionally

@@ -1,8 +1,8 @@
 /** cs status: share + every selected project + unregistered dirs. */
-import { existsSync, readdirSync, readFileSync } from "node:fs";
+import { existsSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import * as git from "./git.js";
-import { contract, stateDir } from "./paths.js";
+import { contract } from "./paths.js";
 import type { Machine } from "./machine.js";
 import { checkoutRoot, selected, workspace, type Manifest } from "./manifest.js";
 import * as ui from "./ui.js";
@@ -29,8 +29,8 @@ export async function runStatus(repo: string, m: Machine, man: Manifest, fetch =
   const ws = workspace(man, m);
   if (fetch) await ui.spin("fetching all remotes…", async () => {});
   ui.info(`${ui.dim("profiles")} ${m.profiles.join(", ")}  ${ui.dim("workspace")} ${contract(ws)}`);
-  const [branch, state] = repoState(repo, fetch); const mk = join(stateDir(), "blocked-config");
-  ui.table([[ui.bold("share"), branch, state + (existsSync(mk) ? "  " + ui.red("BLOCKED: " + readFileSync(mk, "utf8").trim()) : "")]]);
+  const [branch, state] = repoState(repo, fetch);
+  ui.table([[ui.bold("share"), branch, state]]);
   let rc = 0; const rows: string[][] = []; const known = new Set<string>(); const pend = pending();
   for (const p of Object.values(man.projects)) {
     known.add(p.path || p.name); const sel = selected(p, m); if (!sel && !showAll) continue;

@@ -1,5 +1,8 @@
-/** share sync: commit → fetch → ff/rebase (union attrs) → on conflict abort + blocked marker → push. */
-import { closeSync, existsSync, mkdirSync, openSync, readFileSync, statSync, unlinkSync, writeFileSync } from "node:fs";
+/** share sync: commit → fetch → ff/rebase (union attrs for memory and plans) → conflicts settled per file → push.
+ *  The share is never left mid-rebase: a conflict is resolved here (newest wins, or a side the caller decided) or the
+ *  rebase is aborted and the files are returned so that cs sync can ask. Nothing is lost — this machine's commits are
+ *  kept in refs/cs/backup/share/<time> before a rebase is settled. */
+import { closeSync, existsSync, mkdirSync, openSync, rmSync, statSync, unlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import * as git from "./git.js";
 import { contract, stateDir } from "./paths.js";
@@ -9,7 +12,6 @@ import { runApply } from "./apply.js";
 import { checkouts, runLink, syncProject } from "./link.js";
 import * as ui from "./ui.js";
 
-const marker = (label: string) => join(stateDir(), `blocked-${label}`);
 const lockFile = (label: string) => join(stateDir(), `sync-${label}.lock`);
 function tryLock(label: string): number | undefined {
   mkdirSync(stateDir(), { recursive: true });
@@ -20,16 +22,65 @@ function tryLock(label: string): number | undefined {
 }
 const unlock = (label: string, fd: number) => { closeSync(fd); try { unlinkSync(lockFile(label)); } catch {} };
 
-/** `commitOnly`: commit local changes and stop (cs sync when the first fetch of the run already failed). */
-export interface SyncOpts { pullOnly?: boolean; pushOnly?: boolean; timeout?: number; resolve?: "ours" | "theirs"; commitOnly?: boolean }
-export interface ShareResult { ok: boolean; offline?: boolean; pushed?: number }
-/** `offline`: the fetch failed, local commits are kept for a later push. `pushed`: commits that reached the remote. */
+/** Which machine's version of a file wins: `ours` = this machine, `theirs` = the other machine. (During a rebase git's own
+ *  ours/theirs are the other way round — stage 2 is the upstream commit, stage 3 the local commit being replayed.) */
+export type Side = "ours" | "theirs";
+/** A file both machines changed: per side, when it was last changed there and whether that change deleted it. */
+export interface Conflict { file: string; ours: Change; theirs: Change }
+export interface Change { when: string; deleted: boolean }
+/** `resolve`: how conflicts are settled — a side for every file, newest wins per file (the default), or a decision per file.
+ *  `ask`: a file `resolve` does not cover aborts the rebase and comes back in `conflicts` for the caller to ask about.
+ *  `commitOnly`: commit local changes and stop (cs sync when the first fetch of the run already failed). */
+export interface SyncOpts { pullOnly?: boolean; pushOnly?: boolean; timeout?: number; resolve?: Side | "newest" | Record<string, Side>; ask?: boolean; commitOnly?: boolean }
+export interface ShareResult { ok: boolean; offline?: boolean; pushed?: number; conflicts?: Conflict[] }
+
+/** Newest change wins (a deletion is a change); a tie stays with this machine. */
+export const newest = (c: Conflict): Side => (Date.parse(c.theirs.when) > Date.parse(c.ours.when) ? "theirs" : "ours");
+/** "changed 2026-09-16 08:00" / "deleted 2026-09-16 08:00" for a prompt hint. */
+export const describe = (ch: Change) => `${ch.deleted ? "deleted" : "changed"} ${ch.when.slice(0, 16).replace("T", " ")}`;
+const decide = (c: Conflict, r: SyncOpts["resolve"]): Side | undefined => (r === undefined ? undefined : r === "newest" ? newest(c) : typeof r === "string" ? r : r[c.file]);
+function conflictsOf(repo: string, local: string, upstream: string): Conflict[] {
+  const change = (tip: string, file: string): Change => ({ when: git.out(["log", "-1", "--format=%cI", tip, "--", file], repo), deleted: !git.out(["ls-tree", tip, "--", file], repo) });
+  return git.out(["diff", "--name-only", "--diff-filter=U"], repo).split("\n").filter(Boolean).map((file) => ({ file, ours: change(local, file), theirs: change(upstream, file) }));
+}
+/** Put one side's version of a conflicted file into the index (or drop the file when that side deleted it). */
+function takeSide(repo: string, file: string, side: Side) {
+  const stages = git.out(["ls-files", "-u", "--", file], repo).split("\n").filter(Boolean).map((l) => l.split(/\s+/)[2]);
+  if (!stages.includes(side === "ours" ? "3" : "2")) { git.git(["rm", "-q", "--cached", "--", file], repo, { check: false }); rmSync(join(repo, file), { force: true }); return; }
+  git.git(["checkout", side === "ours" ? "--theirs" : "--ours", "--", file], repo); git.git(["add", "--", file], repo);
+}
+/** Settle a stopped rebase file by file until it finishes. Returns the files it could not decide (rebase aborted) or nothing;
+ *  throws (rebase aborted) when git stops for another reason or the same conflict comes back. */
+function settleRebase(repo: string, label: string, local: string, upstream: string, o: SyncOpts): Conflict[] | undefined {
+  const env = { GIT_EDITOR: "true" }; const ident = git.identityArgs(repo); const settled: string[] = []; let backedUp = false; let last = "";
+  const abort = () => git.git(["rebase", "--abort"], repo, { check: false });
+  try {
+    while (git.rebaseInProgress(repo)) {
+      const stops = conflictsOf(repo, local, upstream); const step = git.rebaseStep(repo);   // the same file may stop several local commits; the same step twice means stuck
+      if (!stops.length) throw new Error(`cs: share rebase stopped without a conflict — cd ${contract(repo)} && git rebase origin/${git.currentBranch(repo)}`);
+      if (step === last) throw new Error(`cs: share rebase keeps stopping on ${stops.map((c) => c.file).join(", ")} — cd ${contract(repo)} && git rebase origin/${git.currentBranch(repo)}`);
+      last = step;
+      const open = stops.filter((c) => !decide(c, o.resolve));
+      if (open.length && o.ask) { abort(); return open; }
+      if (!backedUp) { git.git(["update-ref", `refs/cs/backup/share/${Date.now()}`, local], repo); backedUp = true; }   // this machine's commits as they were
+      for (const c of stops) { const side = decide(c, o.resolve) ?? newest(c); takeSide(repo, c.file, side); settled.push(`${c.file} (${side === "ours" ? "this machine" : "the other machine"})`); }
+      const empty = git.git(["diff", "--cached", "--quiet"], repo, { check: false }).code === 0;
+      const r = git.git([...ident, "rebase", empty ? "--skip" : "--continue"], repo, { check: false, env });
+      if (r.code !== 0 && !git.rebaseInProgress(repo)) throw new Error(`cs: share rebase failed — ${r.err.split("\n").pop()}`);
+    }
+  } catch (e) { if (git.rebaseInProgress(repo)) abort(); throw e; }
+  ui.step(`${label}: settled ${settled.join(", ")}`);
+  return undefined;
+}
+
+/** `offline`: the fetch failed, local commits are kept for a later push. `pushed`: commits that reached the remote.
+ *  `conflicts`: only with `ask` — the rebase was aborted, nothing changed; call again with `resolve` set per file. */
 export async function shareGitSync(repo: string, label: string, machine: string, o: SyncOpts = {}): Promise<ShareResult> {
   if (!git.isRepo(repo)) { ui.warn(`${label}: not a git repo (${contract(repo)})`); return { ok: false }; }
   const timeout = o.timeout ?? 20;
-  if (existsSync(marker(label)) && !o.resolve) { ui.fail(`${label}: sync blocked by an earlier conflict — ${readFileSync(marker(label), "utf8").trim()}`); return { ok: false }; }
   const fd = tryLock(label); if (fd === undefined) { ui.info(`${label}: another sync is running, skipping`); return { ok: true }; }
   try {
+    if (git.rebaseInProgress(repo)) { ui.error(`${label}: a rebase is in progress in ${contract(repo)}`, "", "finish it: git rebase --continue · or drop it: git rebase --abort"); return { ok: false }; }
     if (!o.pullOnly && git.isDirty(repo)) { const n = git.dirtyCount(repo); git.git(["add", "-A"], repo); git.commit(repo, `sync(${machine}): ${n} file(s) ${new Date().toISOString().slice(0, 16).replace("T", " ")}`, "cs", `cs@${machine}`); ui.step(`${label}: committed ${n} change(s)`); }
     if (!git.remoteUrl(repo)) { ui.ok(`${label}: no remote configured; local only`); return { ok: true }; }
     if (o.commitOnly) return { ok: true, offline: true };
@@ -45,19 +96,16 @@ export async function shareGitSync(repo: string, label: string, machine: string,
     if (behind && !o.pushOnly) {
       if (!ahead) { git.git(["merge", "-q", "--ff-only", "@{upstream}"], repo); ui.step(`${label}: fast-forwarded ${behind} commit(s)`); }
       else {
-        const args = ["rebase", "-q", ...(o.resolve === "ours" ? ["-X", "theirs"] : o.resolve === "theirs" ? ["-X", "ours"] : []), "@{upstream}"];
-        const r = git.git(args, repo, { check: false });
+        const local = git.out(["rev-parse", "HEAD"], repo), upstream = git.out(["rev-parse", "@{upstream}"], repo);
+        const r = git.git([...git.identityArgs(repo), "rebase", "-q", "@{upstream}"], repo, { check: false, env: { GIT_EDITOR: "true" } });
         if (r.code !== 0) {
-          const conflicts = git.out(["diff", "--name-only", "--diff-filter=U"], repo).split("\n").filter(Boolean).join(", ");
-          git.git(["rebase", "--abort"], repo, { check: false });
-          writeFileSync(marker(label), `conflict in: ${conflicts || "unknown"}\n`);
-          ui.error(`${label}: conflict in ${conflicts}`, "", `keep mine: cs sync --resolve ours · keep theirs: cs sync --resolve theirs · manual: cd ${contract(repo)} && git rebase origin/${branch}`);
-          return { ok: false };
+          let open: Conflict[] | undefined;
+          try { open = settleRebase(repo, label, local, upstream, o); } catch (e: any) { ui.error(`${label}: could not settle the rebase`, e.message.replace(/^cs: /, "")); return { ok: false }; }
+          if (open) { ui.step(`${label}: ${open.length} file(s) changed on both machines — asking`); return { ok: false, conflicts: open }; }
         }
         ui.step(`${label}: rebased ${ahead} local commit(s) onto ${behind} remote commit(s)`);
       }
     }
-    if (existsSync(marker(label))) unlinkSync(marker(label));
     let pushed = 0;
     if (!o.pullOnly) { const ab = git.aheadBehind(repo); if (ab && ab[0]) { const pr = await ui.spin(`${label}: pushing…`, () => git.gitA(["push", "-q", "origin", branch], repo, { check: false, timeout }));
       if (pr.code !== 0) { ui.warn(`${label}: push rejected, retrying once`); unlock(label, fd); return shareGitSync(repo, label, machine, o); } pushed = ab[0]; ui.ok(`${label}: pushed ${ab[0]} commit(s)`); } }
@@ -65,12 +113,13 @@ export async function shareGitSync(repo: string, label: string, machine: string,
     return { ok: true, pushed };
   } finally { try { unlock(label, fd); } catch {} }
 }
+/** The hidden `cs share-sync` (hooks, timer): cannot ask, so conflicts are settled newest-wins per file unless --resolve says otherwise. */
 export async function runShareSync(repo: string, m: Machine, man: Manifest, o: SyncOpts & { debounce?: number } = {}): Promise<number> {
   const ws = workspace(man, m); let rc = 0;
   if (o.debounce) { const last = join(stateDir(), "last-config"); if (existsSync(last) && Date.now() - statSync(last).mtimeMs < o.debounce * 1000) return 0; }
   const before = git.out(["rev-parse", "HEAD"], repo);
   if (!o.pullOnly) for (const p of selectedProjects(man, m)) if (checkouts(p, ws).length) syncProject(repo, p, ws);
-  if (!(await shareGitSync(repo, "config", m.name, o)).ok) rc = 2;
+  if (!(await shareGitSync(repo, "config", m.name, { ...o, resolve: o.resolve ?? "newest", ask: false })).ok) rc = 2;
   const after = git.out(["rev-parse", "HEAD"], repo);
   if (after !== before || o.pullOnly) {
     const changed = before ? git.out(["diff", "--name-only", before, after], repo) : "";

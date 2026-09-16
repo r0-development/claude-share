@@ -134,19 +134,37 @@ $CS share-sync >/dev/null || die "m1 sync after m2"
 grep -q "m2 fact" "$SIDE/memory/MEMORY.md" && grep -q "m1 fact" "$SIDE/memory/MEMORY.md" || die "union merge"
 pass two-machines-union
 
-# --- real JSON conflict blocks cleanly, resolve unblocks
+# --- a real (non-union) conflict through share-sync, what hooks and the timer run: settled newest-wins per file, pushed, no marker, never mid-rebase
+# two local commits touch the file: the rebase stops twice on it and both stops are settled
+echo '{"model":"haiku","permissions":{"allow":["Read(**)"]}}' > "$CS_CONFIG_DIR/repo/claude/settings.base.json"
+(cd "$CS_CONFIG_DIR/repo" && git add -A && git commit -qm "m1 older")
+echo '{"model":"haiku","permissions":{"allow":["Read(**)","Bash(ls *)"]}}' > "$CS_CONFIG_DIR/repo/claude/settings.base.json"
+(cd "$CS_CONFIG_DIR/repo" && git add -A && git commit -qm "m1 older, again") ; sleep 1
 ( export HOME="$HOME2" CLAUDE_CONFIG_DIR="$HOME2/.claude" XDG_STATE_HOME="$HOME2/.local/state" CS_CONFIG_DIR="$HOME2/.config/claude-share"
   echo '{"model":"sonnet","permissions":{"allow":["Read(**)"]}}' > "$CS_CONFIG_DIR/repo/claude/settings.base.json"
   $CS share-sync >/dev/null || die "m2 conflict setup"
 )
-echo '{"model":"haiku","permissions":{"allow":["Read(**)"]}}' > "$CS_CONFIG_DIR/repo/claude/settings.base.json"
-if $CS share-sync >/dev/null 2>&1; then die "conflict should block"; fi
-[ -f "$XDG_STATE_HOME/cs/blocked-config" ] || die "blocked marker"
-git -C "$CS_CONFIG_DIR/repo" rebase --abort 2>/dev/null && die "left mid-rebase" || true
-$CS share-sync --resolve theirs >/dev/null || die "resolve"
-grep -q sonnet "$CS_CONFIG_DIR/repo/claude/settings.base.json" || die "theirs applied"
+$CS share-sync > "$HOME/share-conflict.log" 2>&1 || { cat "$HOME/share-conflict.log"; die "share-sync must settle the conflict itself"; }
+grep -q sonnet "$CS_CONFIG_DIR/repo/claude/settings.base.json" || die "newest (m2) won"
+grep -q "settled claude/settings.base.json (the other machine), claude/settings.base.json (the other machine)" "$HOME/share-conflict.log" || die "settled line names the file and the side, once per stop"
+[ ! -f "$XDG_STATE_HOME/cs/blocked-config" ] || die "no blocked marker"
+[ ! -d "$CS_CONFIG_DIR/repo/.git/rebase-merge" ] && [ ! -d "$CS_CONFIG_DIR/repo/.git/rebase-apply" ] || die "left mid-rebase"
+[ "$(git -C "$HOME/cfg.git" rev-parse HEAD)" = "$(git -C "$CS_CONFIG_DIR/repo" rev-parse HEAD)" ] || die "pushed after settling"
+BK="$(git -C "$CS_CONFIG_DIR/repo" for-each-ref --format='%(refname)' refs/cs/backup/share | head -1)"
+[ -n "$BK" ] && git -C "$CS_CONFIG_DIR/repo" show "$BK:claude/settings.base.json" | grep -q haiku || die "this machine's commits kept in a backup ref with the losing version"
 grep -q sonnet "$HOME/.claude/settings.json" || die "settings re-rendered after pull"
-pass conflict-abort-resolve
+# --resolve ours overrides newest-wins (m1 newer this time would also win; make m2 newer again and keep ours)
+echo '{"model":"opus","permissions":{"allow":["Read(**)"]}}' > "$CS_CONFIG_DIR/repo/claude/settings.base.json"
+(cd "$CS_CONFIG_DIR/repo" && git add -A && git commit -qm "m1 older again") ; sleep 1
+( export HOME="$HOME2" CLAUDE_CONFIG_DIR="$HOME2/.claude" XDG_STATE_HOME="$HOME2/.local/state" CS_CONFIG_DIR="$HOME2/.config/claude-share"
+  $CS share-sync >/dev/null || die "m2 pull"
+  echo '{"model":"sonnet","permissions":{"allow":["Read(**)","Edit(**)"]}}' > "$CS_CONFIG_DIR/repo/claude/settings.base.json"
+  $CS share-sync >/dev/null || die "m2 conflict setup 2"
+)
+$CS share-sync --resolve ours >/dev/null 2>&1 || die "share-sync --resolve ours"
+grep -q opus "$CS_CONFIG_DIR/repo/claude/settings.base.json" || die "--resolve ours kept this machine's version"
+[ "$(git -C "$HOME/cfg.git" rev-parse HEAD)" = "$(git -C "$CS_CONFIG_DIR/repo" rev-parse HEAD)" ] || die "pushed after --resolve ours"
+pass share-sync-newest-wins
 
 # --- every project has a remote (ADR-0001): a registered project without one and an unregistered dir are flagged with the fixing command
 printf '\n[projects.orphan]\nprofiles = ["all"]\n' >> "$CS_CONFIG_DIR/repo/projects.toml"; (cd "$CS_CONFIG_DIR/repo" && git add -A && git commit -qm "orphan: registered before it had a remote")
@@ -440,5 +458,60 @@ CS_ANSWERS='[]' desk $CS sync > "$HOME6/sync7.log" 2>&1 || { cat "$HOME6/sync7.l
 grep -q "remote unreachable" "$HOME6/sync7.log" && grep -q "offline" "$HOME6/sync7.log" || die "offline reported"
 mv "$S/one.git.off" "$S/one.git"; mv "$S/share.git.off" "$S/share.git"
 pass cs-sync
+
+# --- dirty tree vs waiting handoff (#6): laptop is still dirty from the handoff it applied; desk's newer handoff (sync 6) waits for the same branch
+ONE7="$HOME7/dev/one"; ONE6="$HOME6/dev/one"
+L_BEFORE="$(git -C "$ONE7" status --porcelain | sort)"
+# keep (the default): nothing moves, the handoff stays, the run says so; no plan screen because nothing else is planned
+CS_ANSWERS='["<default>"]' laptop $CS sync > "$HOME7/q-keep.log" 2>&1 || { cat "$HOME7/q-keep.log"; die "laptop keep"; }
+[ "$(git -C "$ONE7" status --porcelain | sort)" = "$L_BEFORE" ] || die "keep: tree untouched"
+git -C "$S/one.git" log -1 --format=%B wip/test-user/main | grep -q "Cs-Machine: desk" || die "keep: desk's handoff still waiting"
+grep -q "1 handoff(s) left waiting" "$HOME7/q-keep.log" && grep -q "kept local" "$HOME7/q-keep.log" || die "keep: reported"
+[ -z "$(git -C "$ONE7" for-each-ref refs/cs/backup)" ] || die "keep: no backup ref needed"
+# send mine over it: desk's handoff is kept in a backup ref here, then laptop's changes replace it on the remote; the tree stays
+CS_ANSWERS='["send"]' laptop $CS sync > "$HOME7/q-send.log" 2>&1 || { cat "$HOME7/q-send.log"; die "laptop send"; }
+[ "$(git -C "$ONE7" status --porcelain | sort)" = "$L_BEFORE" ] || die "send: tree untouched"
+git -C "$S/one.git" log -1 --format=%B wip/test-user/main | grep -q "Cs-Machine: laptop" || die "send: laptop's handoff replaced desk's"
+BK="$(git -C "$ONE7" for-each-ref --format='%(refname)' refs/cs/backup | head -1)"
+[ -n "$BK" ] && git -C "$ONE7" log -1 --format=%B "$BK" | grep -q "Cs-Machine: desk" && git -C "$ONE7" show "$BK:README" | grep -q "again" || die "send: backup ref holds desk's handoff (the losing side)"
+grep -q "backed up to refs/cs/backup" "$HOME7/q-send.log" && grep -q "1 handoff(s) sent" "$HOME7/q-send.log" || die "send: reported"
+# apply: on desk (dirty with "again"), laptop's handoff wins; desk's changes go to a backup ref; the handoff leaves the remote
+grep -q again "$ONE6/README" || die "desk still dirty"
+CS_ANSWERS='["apply"]' desk $CS sync > "$HOME6/q-apply.log" 2>&1 || { cat "$HOME6/q-apply.log"; die "desk apply"; }
+[ "$(git -C "$ONE6" status --porcelain | sort)" = "$L_BEFORE" ] || die "apply: laptop's changes are here now"
+grep -q "changed on desk" "$ONE6/README" && ! grep -q again "$ONE6/README" && [ "$(cat "$ONE6/notes.txt")" = "new" ] || die "apply: contents are the handoff's"
+BK="$(git -C "$ONE6" for-each-ref --format='%(refname)' refs/cs/backup | head -1)"
+[ -n "$BK" ] && git -C "$ONE6" show "$BK:README" | grep -q again || die "apply: backup ref holds the local changes (the losing side)"
+! git -C "$S/one.git" show-ref | grep -q "wip/test-user/main" || die "apply: handoff removed from the remote"
+grep -q "backed up to refs/cs/backup" "$HOME6/q-apply.log" && grep -q "1 handoff(s) applied" "$HOME6/q-apply.log" || die "apply: reported"
+pass dirty-vs-waiting
+
+# --- share file changed on both machines (#6): cs sync asks per file and finishes rebased and pushed; memory *.md union-merges without a question
+(cd "$ONE6" && git checkout -q -- . && git clean -qfd); (cd "$ONE7" && git checkout -q -- . && git clean -qfd)
+mkdir -p "$HOME7/.config/claude-share/repo/projects/one/memory" && echo "# one" > "$HOME7/.config/claude-share/repo/projects/one/memory/MEMORY.md"
+CS_ANSWERS='[]' laptop $CS sync >/dev/null 2>&1 || die "laptop seeds memory"
+CS_ANSWERS='[]' desk $CS sync >/dev/null 2>&1 || die "desk pulls memory"
+[ -f "$HOME6/.config/claude-share/repo/projects/one/memory/MEMORY.md" ] || die "memory arrived on desk"
+echo '{"model":"haiku","permissions":{"allow":["Read(**)"]}}' > "$HOME6/.config/claude-share/repo/claude/settings.base.json"; echo "- desk fact" >> "$HOME6/.config/claude-share/repo/projects/one/memory/MEMORY.md"
+echo '{"model":"sonnet","permissions":{"allow":["Read(**)"]}}' > "$HOME7/.config/claude-share/repo/claude/settings.base.json"; echo "- laptop fact" >> "$HOME7/.config/claude-share/repo/projects/one/memory/MEMORY.md"
+CS_ANSWERS='[]' laptop $CS sync >/dev/null 2>&1 || die "laptop pushes its side"
+# exactly one answer: the settings file; a question about MEMORY.md would exhaust the scripted answers and fail the run
+CS_ANSWERS='["theirs"]' desk $CS sync > "$HOME6/share-conflict.log" 2>&1 || { cat "$HOME6/share-conflict.log"; die "desk sync with a share conflict"; }
+grep -q sonnet "$HOME6/.config/claude-share/repo/claude/settings.base.json" || die "the other machine's version chosen"
+grep -q "desk fact" "$HOME6/.config/claude-share/repo/projects/one/memory/MEMORY.md" && grep -q "laptop fact" "$HOME6/.config/claude-share/repo/projects/one/memory/MEMORY.md" || die "memory union-merged"
+grep -q "changed on both machines" "$HOME6/share-conflict.log" && grep -q "settled claude/settings.base.json (the other machine)" "$HOME6/share-conflict.log" || die "conflict asked and settled in the same run"
+[ ! -d "$HOME6/.config/claude-share/repo/.git/rebase-merge" ] || die "not mid-rebase"
+[ "$(git -C "$S/share.git" rev-parse HEAD)" = "$(git -C "$HOME6/.config/claude-share/repo" rev-parse HEAD)" ] || die "share pushed after the conflict"
+grep -q sonnet "$HOME6/.claude/settings.json" || die "settings re-rendered in the same run"
+# no terminal, no answers: cs sync settles it newest-wins like share-sync
+echo '{"model":"opus","permissions":{"allow":["Read(**)"]}}' > "$HOME6/.config/claude-share/repo/claude/settings.base.json"
+(cd "$HOME6/.config/claude-share/repo" && git add -A && git commit -qm "desk older") ; sleep 1
+CS_ANSWERS='[]' laptop $CS sync >/dev/null 2>&1 || die "laptop pulls"
+echo '{"model":"haiku","permissions":{"allow":["Read(**)"]}}' > "$HOME7/.config/claude-share/repo/claude/settings.base.json"
+CS_ANSWERS='[]' laptop $CS sync >/dev/null 2>&1 || die "laptop pushes the newer version"
+desk $CS sync > "$HOME6/share-conflict2.log" 2>&1 < /dev/null || { cat "$HOME6/share-conflict2.log"; die "desk sync, nobody to ask"; }
+grep -q haiku "$HOME6/.config/claude-share/repo/claude/settings.base.json" || die "newest won without a prompt"
+[ "$(git -C "$S/share.git" rev-parse HEAD)" = "$(git -C "$HOME6/.config/claude-share/repo" rev-parse HEAD)" ] || die "pushed"
+pass share-conflict-inline
 
 echo "ALL PASS (HOME=$HOME)"

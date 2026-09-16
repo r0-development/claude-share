@@ -8,8 +8,11 @@ export interface Waiting { branch: string; machine: string; when: string; note: 
 export interface Facts { project: string; layout: "plain" | "worktrees"; units: Unit[]; waiting: Waiting[]; offline?: boolean; disabled?: boolean }
 
 export interface Action { id: string; kind: "send" | "apply"; project: string; branch: string; label: string; hint: string; checked: boolean }
-/** A situation cs sync must not decide alone (ticket #6 turns these into prompts; until then they are reported). */
-export interface Question { kind: "dirty-vs-waiting"; project: string; branch: string; machine: string; why: string }
+/** A situation cs sync must not decide alone: it is asked after the plan screen (src/sync.ts). `unit` is the dirty checkout;
+ *  `sameBranch` — the dirty unit is on the waiting branch, so "send mine over it" is a possible answer. */
+export interface Question { kind: "dirty-vs-waiting"; project: string; branch: string; machine: string; when: string; unit: string; sameBranch: boolean; why: string }
+/** Answers to a dirty-vs-waiting question: apply the handoff (local → backup ref), keep local and leave it waiting, send local over it (handoff → backup ref). */
+export type Answer = "apply" | "keep" | "send";
 export interface Plan { actions: Action[]; questions: Question[]; skipped: string[] }
 
 /** "1 change" / "3 changes" — shared with the gather lines in src/sync.ts so both read the same. */
@@ -30,7 +33,8 @@ export function plan(facts: Facts[], machine: string): Plan {
       if (target && target.dirty) {
         if (w.machine === machine && target.branch === w.branch) continue;   // my own earlier handoff; the dirty tree here is the newer copy and gets sent again
         handled.add(w.branch);
-        questions.push({ kind: "dirty-vs-waiting", project: f.project, branch: w.branch, machine: w.machine, why: `${f.project}: a handoff from ${w.machine} is waiting for ${w.branch}, but ${target.rel === "." ? "the checkout" : target.rel} has uncommitted changes` });
+        questions.push({ kind: "dirty-vs-waiting", project: f.project, branch: w.branch, machine: w.machine, when: w.when, unit: target.rel, sameBranch: target.branch === w.branch,
+          why: `${f.project}: a handoff from ${w.machine} (${when(w.when)}) is waiting for ${w.branch}, but ${target.rel === "." ? "the checkout" : target.rel}${target.branch === w.branch ? "" : ` (on ${target.branch})`} has ${count(target.dirty, "uncommitted change")}` });
         continue;
       }
       handled.add(w.branch);

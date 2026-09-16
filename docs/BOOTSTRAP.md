@@ -62,4 +62,4 @@ Fails with instructions instead of prompting when the share key is not yet regis
 ## Day to day
 
 Nothing. Hooks push after each Claude response and pull at session start; the timer syncs every 15 min.
-`cs` shows the dashboard; `cs sync` when it says blocked; `cs doctor` when something feels off.
+`cs` shows the dashboard; `cs sync` when leaving and when arriving; `cs doctor` when something feels off.

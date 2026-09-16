@@ -39,5 +39,7 @@ The manual halves stay callable (hidden): `cs handoff [-m note] [--all]`, `cs re
 ## Reminders, no automation
 Nothing is pushed to a project remote by itself (ADR-0002): hooks and the timer sync only the share. When a Claude
 session ends with uncommitted work, a local marker is written and `cs` shows `uncommitted work — cs sync` for that
-project. A dirty tree here plus a handoff from another machine waiting for the same branch is never decided by `cs sync`;
-it says so and names the manual commands (`cs resume --replace` keeps yours in a backup ref, `cs handoffs drop` discards theirs).
+project. A dirty tree here plus a handoff from another machine waiting for the same branch is never decided by `cs sync`
+alone: it asks, after the plan screen — *keep mine, leave the handoff waiting* (default; asked again next time) /
+*apply the handoff* (your changes go to `refs/cs/backup/<branch>/<time>` first) / *send mine over it* (the waiting handoff
+is kept in a backup ref here, then yours replaces it on the remote). Without a terminal the default is taken.

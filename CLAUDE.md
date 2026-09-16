@@ -10,7 +10,9 @@
 - Anything under a spinner (`ui.spin`, `ui.group`) must be async: `proc.exec` / `git.gitA`. `spawnSync` blocks the event loop and freezes spinners — only use it for instant local git queries. `cs ui-demo` (hidden) exercises every element.
 - Never write machine-specific values (absolute paths, hostnames) into the config repo; inject them at link/apply time.
 - Never touch a user's git index, stash, or working tree in project repos (`git add -A` only in the config repo and `kind=synced` repos).
-- `cs sync` must never leave a repo mid-rebase: abort, write a `blocked-*` marker, print the resolve commands.
+- The share is never left mid-rebase or blocked: a file changed on both machines is settled per file in the same run
+  (`cs sync` asks; hidden `share-sync` takes newest-wins), otherwise the rebase is aborted and the reason printed.
+  The losing side of any conflict goes to a `refs/cs/backup/…` ref, never away.
 - This repo is PUBLIC: no real names, emails, orgs, project names or hostnames anywhere (docs, examples, tests, commit messages) — placeholders only.
 - No AI attribution lines in commit messages.
 

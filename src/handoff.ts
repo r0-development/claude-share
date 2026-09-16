@@ -60,6 +60,17 @@ async function buildSnapshot(unit: Unit, p: Project, m: Machine, note: string, e
   } finally { rmSync(idx, { force: true }); }
 }
 
+/** The losing side of a conflict is never lost: keep a commit under refs/cs/backup/<branch>/<time> of the unit. */
+export function backupRef(unit: string, branch: string, sha: string): string { const ref = `refs/cs/backup/${git.slug(branch)}/${Date.now()}`; git.git(["update-ref", ref, sha], unit); return ref; }
+/** Snapshot a unit's uncommitted work to a backup ref, then reset the tree so a handoff can be applied. */
+async function backupAndReset(p: Project, m: Machine, ws: string, path: string, label: string): Promise<string> {
+  const branch = git.currentBranch(path) || "detached";
+  const snap = await buildSnapshot({ path, branch, rel: relative(container(p, ws), path) || "." }, p, m, "", [], []);
+  const ref = backupRef(path, branch, snap.sha);
+  git.git(["reset", "-q", "--hard"], path); git.git(["clean", "-qfd"], path); ui.step(`${label}: local changes backed up to ${ref}`);
+  return ref;
+}
+
 const stateFile = (p: Project) => join(handoffStateDir(), `${p.name}.json`);
 const noteFile = (p: Project) => join(handoffStateDir(), `${p.name}.note`);
 export const pendingFile = () => join(handoffStateDir(), "pending");
@@ -114,7 +125,7 @@ export async function fetchHandoffs(root: string, user: string, timeout = 60): P
 }
 const fetchWaiting = async (root: string, user: string) => (await fetchHandoffs(root, user)).list;
 
-function findOrCreateUnit(p: Project, ws: string, handoff: Handoff): { path: string; created: boolean } | undefined {
+async function findOrCreateUnit(p: Project, m: Machine, ws: string, handoff: Handoff, replace: boolean): Promise<{ path: string; created: boolean } | undefined> {
   const root = checkoutRoot(p, ws);
   const existing = units(p, ws).find((u) => u.branch === handoff.branch); if (existing) return { path: existing.path, created: false };
   if (p.layout === "worktrees") {
@@ -124,7 +135,10 @@ function findOrCreateUnit(p: Project, ws: string, handoff: Handoff): { path: str
     if (r.code !== 0) { ui.fail(`${p.name}: could not create worktree ${contract(dir)} — ${r.err.split("\n").pop()}`); return undefined; }
     return { path: dir, created: true };
   }
-  if (git.isDirty(root)) { ui.fail(`${p.name}: ${contract(root)} is dirty and on ${git.currentBranch(root)}; commit/stash or use --replace`); return undefined; }
+  if (git.isDirty(root)) {   // plain layout: the root must be clean before another branch can be checked out
+    if (!replace) { ui.fail(`${p.name}: ${contract(root)} is dirty and on ${git.currentBranch(root)}; commit/stash or use --replace`); return undefined; }
+    await backupAndReset(p, m, ws, root, `${p.name} · ${git.currentBranch(root)}`);
+  }
   const r = git.git(["checkout", "-q", "-B", handoff.branch, git.out(["rev-parse", "--verify", "-q", `refs/heads/${handoff.branch}`], root) || handoff.base], root, { check: false });
   if (r.code !== 0) { ui.fail(`${p.name}: checkout ${handoff.branch} failed — ${r.err.split("\n").pop()}`); return undefined; }
   return { path: root, created: false };
@@ -144,12 +158,10 @@ export async function resume(repo: string, m: Machine, man: Manifest, projects: 
       if (o.branches && !o.branches.includes(pc.branch)) continue;
       const label = `${p.name} · ${pc.branch}`;
       if (o.dryRun) { ui.step(`${label}: handoff from ${pc.machine} (${pc.when.slice(0, 16)})${pc.note ? " — " + pc.note : ""}`); continue; }
-      const unit = findOrCreateUnit(p, ws, pc); if (!unit) { rc = 1; continue; }
+      const unit = await findOrCreateUnit(p, m, ws, pc, !!o.replace); if (!unit) { rc = 1; continue; }
       if (git.isDirty(unit.path)) {
         if (!o.replace) { ui.fail(`${label}: ${contract(unit.path)} has uncommitted changes — commit them, or --replace (keeps a backup ref)`); rc = 1; continue; }
-        const backup = await buildSnapshot({ path: unit.path, branch: pc.branch, rel: relative(container(p, ws), unit.path) || "." }, p, m, "", [], []);
-        const bref = `refs/cs/backup/${git.slug(pc.branch)}/${Date.now()}`; git.git(["update-ref", bref, backup.sha], unit.path);
-        git.git(["reset", "-q", "--hard"], unit.path); git.git(["clean", "-qfd"], unit.path); ui.step(`${label}: local changes backed up to ${bref}`);
+        await backupAndReset(p, m, ws, unit.path, label);
       }
       const ff = git.git(["merge", "-q", "--ff-only", pc.base], unit.path, { check: false });
       if (ff.code !== 0) { ui.fail(`${label}: branch diverged from the handoff's base ${pc.base.slice(0, 7)} — merge/rebase manually, then re-run`); rc = 1; continue; }

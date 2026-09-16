@@ -156,7 +156,9 @@ cs sync                              # when leaving and when arriving; -m "where
 One run: pulls the share and repairs `~/.claude`, project state, hooks and timer without asking; clones projects
 missing here; then shows **one plan screen** — handoffs to send (dirty work here) and handoffs to apply (work waiting
 for this machine), both pre-checked — and one confirmation. Nothing is written to a project remote before that screen; an
-empty plan skips it ("nothing to move"). Offline, the local parts still run. Handoffs live on `wip/<user>/<branch>` of
+empty plan skips it ("nothing to move"). Offline, the local parts still run. A dirty checkout with a handoff waiting for
+the same branch is asked afterwards: keep mine and leave it waiting (default) / apply the handoff / send mine over it —
+whichever side loses is kept in `refs/cs/backup/<branch>/<time>` of that checkout, never deleted. Handoffs live on `wip/<user>/<branch>` of
 the project's own remote; the sending machine is never touched (private index), secrets-looking files are refused,
 worktrees are created on demand. The manual halves (`cs handoff`, `cs resume`, `cs handoffs`) stay callable but hidden.
 See `docs/HANDOFF.md`.
@@ -167,8 +169,8 @@ See `docs/HANDOFF.md`.
 
 | command | what it does |
 |---|---|
-| `cs sync` | the daily verb (above). The share part: commit → pull --rebase → push; memory/plan collisions union-merge; other conflicts abort cleanly: `cs sync --resolve ours\|theirs` |
-| `cs share-sync` (hidden) | the share alone — what the Claude Code hooks (push after each response, pull at session start) and the 15-min timer run; `cs sync` re-installs both |
+| `cs sync` | the daily verb (above). The share part: commit → pull --rebase → push; memory/plan collisions union-merge; a file changed on both machines is asked per file (this machine's / the other machine's version) and the rebase finishes in the same run |
+| `cs share-sync` (hidden) | the share alone — what the Claude Code hooks (push after each response, pull at session start) and the 15-min timer run; cannot ask, so a file changed on both machines is settled newest-wins (`--resolve ours\|theirs` overrides); the share is never left blocked or mid-rebase. `cs sync` re-installs both |
 | `cs doctor [--fix]` | platform, tools, links, settings drift, identities, remotes, leftover local-scope MCP secrets |
 | `cs deps [--install]` | prerequisites; installs age, sops, fnm, claude user-locally |
 | `cs update` | update the tool |

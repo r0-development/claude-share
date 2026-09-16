@@ -11,13 +11,13 @@ import { checkoutRoot, loadManifest, selectedProjects, workspace, type Manifest 
 import { applyGit, applyLinks, applySettings, applyShellRc } from "./apply.js";
 import { checkouts, syncProject } from "./link.js";
 import { hooksStatus, installHooks, installTimer } from "./hooks.js";
-import { shareGitSync } from "./sharesync.js";
+import { describe, newest, shareGitSync, type Side, type SyncOpts as ShareOpts } from "./sharesync.js";
 import { clone } from "./projects.js";
-import { denyHits, enabled, fetchHandoffs, handoff, REF_NS, resume, units, userSlug, type Handoff } from "./handoff.js";
-import { count, plan, when, type Action, type Facts, type Plan } from "./plan.js";
+import { backupRef, denyHits, enabled, fetchHandoffs, handoff, REF_NS, resume, units, userSlug, type Handoff } from "./handoff.js";
+import { count, plan, when, type Action, type Answer, type Facts, type Plan, type Question } from "./plan.js";
 import * as ui from "./ui.js";
 
-export interface SyncOpts { note?: string; resolve?: "ours" | "theirs"; timeout?: number }
+export interface SyncOpts { note?: string; timeout?: number }
 export interface SyncResult { rc: number; summary: string }
 
 // ---------------------------------------------------------------- one cs sync at a time (a timer tick and a manual run must never race)
@@ -77,6 +77,34 @@ async function planScreen(pl: Plan): Promise<Action[]> {
   return pl.actions.filter((a) => picked.has(a.id));
 }
 
+// ---------------------------------------------------------------- share conflicts: asked per file, outside the spinner, then the rebase is settled and finished
+async function syncShare(repo: string, m: Machine, title: string, done: string, copyBack: () => void, opts: ShareOpts) {
+  const once = (t: string, extra: ShareOpts) => ui.group(t, async () => { copyBack(); const r = await shareGitSync(repo, "config", m.name, { ...opts, ...extra, ask: ui.canAsk() }); if (r.offline) ui.step("offline — local changes wait for the next sync"); return r; }, { done });
+  let r = await once(title, {}); const answers: Record<string, Side> = {};
+  while (r.conflicts?.length) {   // memory/plan *.md never get here (merge=union); the rebase was aborted, nothing changed yet
+    for (const c of r.conflicts) answers[c.file] = await ui.select(`${c.file} changed on both machines — keep which version?`,
+      [{ value: "ours" as Side, label: "this machine's version", hint: describe(c.ours) }, { value: "theirs" as Side, label: "the other machine's version", hint: describe(c.theirs) }], newest(c));
+    r = await once("share settled", { resolve: answers });
+  }
+  return r;
+}
+
+// ---------------------------------------------------------------- dirty tree vs waiting handoff: asked per question after the plan screen; nothing is ever destructive
+async function askQuestions(qs: Question[]): Promise<{ q: Question; answer: Answer }[]> {
+  const out: { q: Question; answer: Answer }[] = [];
+  for (const q of qs) {
+    if (!ui.canAsk()) { ui.warn(`${q.why}\n${ui.cyan("→ ")}kept local, the handoff stays waiting — run cs sync in a terminal to choose`); out.push({ q, answer: "keep" }); continue; }
+    const options: { value: Answer; label: string; hint: string }[] = [
+      { value: "keep", label: "keep mine, leave the handoff waiting", hint: "nothing moves; asked again next sync" },
+      { value: "apply", label: `apply the handoff from ${q.machine}`, hint: "my changes here go to a backup ref" },
+      ...(q.sameBranch ? [{ value: "send" as Answer, label: "send mine over it", hint: "the waiting handoff goes to a backup ref, then my changes replace it" }] : [])];
+    const answer = await ui.select(`${q.why} — what now?`, options, "keep");
+    if (answer === "keep") ui.skip(`${q.project} · ${q.branch}: kept local — the handoff from ${q.machine} stays waiting`);
+    out.push({ q, answer });
+  }
+  return out;
+}
+
 // ---------------------------------------------------------------- the run
 export async function runSync(repo: string, m: Machine, man: Manifest, o: SyncOpts = {}): Promise<SyncResult> {
   if (!lock()) throw new Error("cs: another cs sync is running here — wait for it to finish");
@@ -84,7 +112,7 @@ export async function runSync(repo: string, m: Machine, man: Manifest, o: SyncOp
   const copyBack = () => { const ws = workspace(man, m); for (const p of selectedProjects(man, m)) if (checkouts(p, ws).length) syncProject(repo, p, ws); };
 
   // 1. the share: newest memory/plans/settings in, other machines' changes out
-  const first = await ui.group("share synced", async () => { copyBack(); const r = await shareGitSync(repo, "config", m.name, { resolve: o.resolve, timeout }); if (r.offline) ui.step("offline — local changes wait for the next sync"); return r; }, { done: "already in sync" });
+  const first = await syncShare(repo, m, "share synced", "already in sync", copyBack, { timeout });
   if (!first.ok) rc = 2;
   man = loadManifest(repo); const ws = workspace(man, m);   // the pull may have changed the manifest
 
@@ -107,28 +135,43 @@ export async function runSync(repo: string, m: Machine, man: Manifest, o: SyncOp
   const { facts, handoffs } = await ui.group("projects checked", () => gather(m, man, timeout), { done: "all clean, nothing waiting" });
   const pl = plan(facts, m.name);
   for (const s of pl.skipped) ui.skip(s);
-  for (const q of pl.questions) ui.warn(`${q.why}\n${ui.cyan("→ ")}apply it over them: cs resume --replace (keeps a backup ref) · keep yours and drop it: cs handoffs drop ${q.branch} · or commit first and run cs sync again`);
   let chosen: Action[] = [];
   const unreachable = facts.filter((f) => f.offline).length;
-  if (pl.actions.length) chosen = await planScreen(pl); else ui.info(ui.dim(unreachable ? `nothing moved — ${unreachable} remote(s) unreachable` : "nothing to move — no handoffs waiting, nothing stale here"));
+  if (pl.actions.length) chosen = await planScreen(pl); else if (!pl.questions.length) ui.info(ui.dim(unreachable ? `nothing moved — ${unreachable} remote(s) unreachable` : "nothing to move — no handoffs waiting, nothing stale here"));
+  const answered = await askQuestions(pl.questions);
+  const kept = answered.filter((a) => a.answer === "keep").length;
 
   // 7. execute: send what is dirty here, then apply what is waiting (the local tree is clean, the plan checked). Sends go
   //    first because applying may check another branch out in a plain-layout checkout. Counts come from what actually happened.
+  //    Answered questions run in the same groups: "send" replaces the other machine's handoff (kept in a backup ref first),
+  //    "apply" replaces the local changes (kept in a backup ref by resume).
   const notes: string[][] = []; let applied = 0, sent = 0;
   const per = (kind: Action["kind"]) => { const by = new Map<string, string[]>(); for (const a of chosen) if (a.kind === kind) by.set(a.project, [...(by.get(a.project) ?? []), a.branch]); return by; };
   const sends = per("send"), applies = per("apply");
-  if (sends.size) await ui.group("handoffs sent", async () => { for (const [name, branches] of sends) await handoff(repo, m, man, [man.projects[name]], { branches, note: o.note, onDone: () => sent++ }); });
-  if (applies.size) await ui.group("handoffs applied", async () => { for (const [name, branches] of applies)
-    await resume(repo, m, man, [man.projects[name]], { branches, waiting: handoffs, onDone: () => applied++, onNote: (p, from, note) => notes.push([`${p} — note from ${from}`, ...note.trim().split("\n")]) }); });
+  const over = answered.filter((a) => a.answer === "send"), replace = answered.filter((a) => a.answer === "apply");
+  if (sends.size || over.length) await ui.group("handoffs sent", async () => {
+    for (const [name, branches] of sends) await handoff(repo, m, man, [man.projects[name]], { branches, note: o.note, onDone: () => sent++ });
+    for (const { q } of over) {
+      const h = handoffs[q.project]?.find((x) => x.branch === q.branch); const unit = units(man.projects[q.project], ws).find((u) => u.rel === q.unit);
+      if (!h || !unit) { ui.fail(`${q.project} · ${q.branch}: could not back the waiting handoff up — not sent`); continue; }   // never overwrite without the backup
+      ui.step(`${q.project} · ${q.branch}: handoff from ${q.machine} backed up to ${backupRef(unit.path, q.branch, h.sha)}`);
+      await handoff(repo, m, man, [man.projects[q.project]], { branches: [q.branch], note: o.note, overwrite: true, onDone: () => sent++ });
+    }
+  });
+  if (applies.size || replace.length) await ui.group("handoffs applied", async () => {
+    const onNote = (p: string, from: string, note: string) => notes.push([`${p} — note from ${from}`, ...note.trim().split("\n")]);
+    for (const [name, branches] of applies) await resume(repo, m, man, [man.projects[name]], { branches, waiting: handoffs, onDone: () => applied++, onNote });
+    for (const { q } of replace) await resume(repo, m, man, [man.projects[q.project]], { branches: [q.branch], waiting: handoffs, replace: true, onDone: () => applied++, onNote });
+  });
   for (const [title, ...lines] of notes) ui.note(lines, title);
-  const failed = chosen.length - sent - applied;
+  const failed = chosen.length + over.length + replace.length - sent - applied;
   if (failed) rc = rc || 1;
 
   // 8. the share again: what the run changed (project state, handoff notes, memory) goes out
-  const last = await ui.group("share pushed", async () => { copyBack(); return shareGitSync(repo, "config", m.name, { timeout, commitOnly: first.offline }); }, { done: first.offline ? "committed locally — offline, pushed by the next sync" : "already in sync" });
+  const last = await syncShare(repo, m, "share pushed", first.offline ? "committed locally — offline, pushed by the next sync" : "already in sync", copyBack, { timeout, commitOnly: first.offline });
   if (!last.ok) rc = 2;
 
-  const bits = [applied ? `${applied} handoff(s) applied` : "", sent ? `${sent} handoff(s) sent` : "", cloned ? `${cloned} project(s) cloned` : "", pl.questions.length ? ui.yellow(`${pl.questions.length} need(s) you — see above`) : ""].filter(Boolean);
-  const summary = rc === 2 ? ui.red("share blocked — see above") : failed ? ui.red(`${failed} action(s) failed — see above`) : bits.length ? bits.join(" · ") : ui.dim(first.offline || last.offline ? "offline — local parts done, nothing moved" : "nothing to move");
+  const bits = [applied ? `${applied} handoff(s) applied` : "", sent ? `${sent} handoff(s) sent` : "", cloned ? `${cloned} project(s) cloned` : "", kept ? ui.yellow(`${kept} handoff(s) left waiting — see above`) : ""].filter(Boolean);
+  const summary = rc === 2 ? ui.red("share not synced — see above") : failed ? ui.red(`${failed} action(s) failed — see above`) : bits.length ? bits.join(" · ") : ui.dim(first.offline || last.offline ? "offline — local parts done, nothing moved" : "nothing to move");
   return { rc, summary };
 }
