@@ -50,7 +50,7 @@ function localize(rel: string, data: Buffer, mem: string): Buffer {
 const placedDir = () => join(stateDir(), "project-state");
 const stateFile = (p: Project) => join(placedDir(), `${p.name}.json`);
 const loadState = (p: Project): Set<string> => { try { return new Set(JSON.parse(readFileSync(stateFile(p), "utf8")).files); } catch { return new Set(); } };
-const saveState = (p: Project, files: Set<string>) => { mkdirSync(dirname(stateFile(p)), { recursive: true }); writeFileSync(stateFile(p), JSON.stringify({ files: [...files].sort() }, null, 2)); };
+const saveState = (p: Project, ws: string, files: Set<string>) => { mkdirSync(dirname(stateFile(p)), { recursive: true }); writeFileSync(stateFile(p), JSON.stringify({ root: checkoutRoot(p, ws), files: [...files].sort() }, null, 2)); };   // root: where cs remove's sweep looks once the manifest entry is gone
 export const dropPlacedRecord = (name: string) => rmSync(join(placedDir(), `${name}.json`), { force: true });
 /** The one thing cs wrote into a checkout that points at the share: the auto-memory location in .claude/settings.local.json.
  *  Removes the key; the file goes when nothing else is left in it. Nothing else in the checkout is touched. True when it changed something. */
@@ -63,13 +63,14 @@ export function stripPointer(checkout: string): boolean {
   return true;
 }
 /** A placed-files record whose name is no longer in the manifest means the project was removed from the share (cs remove
- *  on another machine): strip the pointer from the checkout at the project's default location — plain or `<name>/repo`
- *  with its worktrees — and drop the record. Returns one line per checkout changed. */
+ *  on another machine): strip the pointer from the checkout the record names (its worktrees included) and drop the record.
+ *  A record from before roots were recorded falls back to the default location, plain or `<name>/repo`. One line per checkout changed. */
 export function sweepRemoved(man: Manifest, ws: string): string[] {
   const changes: string[] = []; if (!existsSync(placedDir())) return changes;
   for (const f of readdirSync(placedDir())) {
     if (!f.endsWith(".json")) continue; const name = f.slice(0, -5); if (man.projects[name]) continue;
-    const root = existsSync(join(ws, name, "repo", ".git")) ? join(ws, name, "repo") : join(ws, name);
+    let root = ""; try { root = JSON.parse(readFileSync(join(placedDir(), f), "utf8")).root ?? ""; } catch {}
+    root ||= existsSync(join(ws, name, "repo", ".git")) ? join(ws, name, "repo") : join(ws, name);
     for (const c of checkoutsAt(root)) if (stripPointer(c)) changes.push(`${name}: auto-memory pointer removed from ${contract(c)} (project removed from the share)`);
     dropPlacedRecord(name);
   }
@@ -111,7 +112,7 @@ export function syncProject(repo: string, p: Project, ws: string, check = false)
       if (!have || !have.equals(want)) { changes.push(`${contract(t)}/${rel} ← project state`); if (!check) write(tp, want, bestM > 0 ? bestM : undefined); } }
   }
   for (const t of targets) ensureExclude(t, check, changes);
-  if (!check) saveState(p, final);
+  if (!check) saveState(p, ws, final);
   return changes;
 }
 export function runLink(repo: string, m: Machine, man: Manifest, names: string[] = [], check = false): number {

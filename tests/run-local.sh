@@ -767,6 +767,7 @@ echo '# one guidance' > "$ONE6/CLAUDE.md"; echo '{"permissions":{"allow":["Bash(
 CS_ANSWERS='[]' desk $CS sync >/dev/null 2>&1 || die "desk sync before remove"
 git -C "$CFG6/share" ls-files --error-unmatch projects/one/CLAUDE.md >/dev/null 2>&1 || die "one has project state in the share"
 grep -q autoMemoryDirectory "$ONE6/.claude/settings.local.json" && grep -q 'Bash(ls)' "$ONE6/.claude/settings.local.json" || die "pointer and own settings present before remove"
+grep -q '"root": ".*/dev/one"' "$ST6/project-state/one.json" || die "the placed-files record names the checkout root (where the sweep looks once the entry is gone)"
 printf '\n[projects.one.handoff]\nextra = ["dist/"]\n' >> "$CFG6/share/projects.toml"
 mkdir -p "$CFG6/share/secrets/projects" && printf 'API=ENC[x]\nsops_version=3.9.0\n' > "$CFG6/share/secrets/projects/one.env"   # the shape the share's plaintext guard accepts
 (cd "$CFG6/share" && git add -A && git commit -qm "one: handoff table + secrets")
@@ -794,12 +795,12 @@ grep -q '^\.claude/$' "$ONE6/.git/info/exclude" || die "exclude lines kept"
 git -C "$CFG6/share" revert --no-edit HEAD >/dev/null && grep -q '^\[projects.one.handoff\]' "$CFG6/share/projects.toml" && [ -f "$CFG6/share/projects/one/CLAUDE.md" ] && [ -f "$CFG6/share/secrets/projects/one.env" ] || die "git revert brings everything back"
 git -C "$CFG6/share" reset -q --hard HEAD~1
 # leftovers: state or secrets for names no manifest entry knows → doctor points at cs remove; several names go in one call (--yes), --no-commit leaves the commit to the user
-mkdir -p "$CFG6/share/projects/ghost" "$CFG6/share/secrets/projects" && echo x > "$CFG6/share/projects/ghost/CLAUDE.md" && printf 'K=ENC[v]\nsops_version=3.9.0\n' | tee "$CFG6/share/secrets/projects/ghost2.env" > "$CFG6/share/secrets/projects/ghost3.env"
+mkdir -p "$CFG6/share/projects/ghost" "$CFG6/share/secrets/projects" && echo x > "$CFG6/share/projects/ghost/CLAUDE.md" && printf 'K=ENC[v]\nsops_version=3.9.0\n' | tee "$CFG6/share/secrets/projects/ghost2.env" "$CFG6/share/secrets/projects/ghost2.staging.env" > "$CFG6/share/secrets/projects/ghost3.env"
 (cd "$CFG6/share" && git add -A && git commit -qm "leftovers")
 (desk $CS doctor > "$HOME6/doctor-ghost.log" 2>&1 || true)
-grep -q "ghost: state/secrets in the share but not registered  (cs remove ghost)" "$HOME6/doctor-ghost.log" && grep -q "(cs remove ghost2)" "$HOME6/doctor-ghost.log" || { cat "$HOME6/doctor-ghost.log"; die "doctor flags the leftovers"; }
+grep -q "ghost: state/secrets in the share but not registered  (cs remove ghost)" "$HOME6/doctor-ghost.log" && grep -q "(cs remove ghost2)" "$HOME6/doctor-ghost.log" && ! grep -q "ghost2.staging" "$HOME6/doctor-ghost.log" || { cat "$HOME6/doctor-ghost.log"; die "doctor flags the leftovers, one line per name (.env.staging folds into ghost2)"; }
 desk $CS remove ghost ghost2 --yes >/dev/null 2>&1 || die "remove two orphans with --yes"
-[ ! -e "$CFG6/share/projects/ghost" ] && [ ! -e "$CFG6/share/secrets/projects/ghost2.env" ] && [ "$(git -C "$CFG6/share" log -1 --format=%s)" = "remove ghost, ghost2" ] || die "orphans removed in one commit"
+[ ! -e "$CFG6/share/projects/ghost" ] && [ ! -e "$CFG6/share/secrets/projects/ghost2.env" ] && [ ! -e "$CFG6/share/secrets/projects/ghost2.staging.env" ] && [ "$(git -C "$CFG6/share" log -1 --format=%s)" = "remove ghost, ghost2" ] || die "orphans (and the .env.staging entry) removed in one commit"
 desk $CS remove ghost3 --yes --no-commit >/dev/null 2>&1 || die "remove --no-commit"
 [ ! -e "$CFG6/share/secrets/projects/ghost3.env" ] && git -C "$CFG6/share" status --porcelain | grep -q "secrets/projects/ghost3.env" || die "--no-commit leaves the deletion uncommitted"
 (cd "$CFG6/share" && git add -A && git commit -qm "remove ghost3")

@@ -6,31 +6,33 @@ import { join, relative } from "node:path";
 import * as git from "./git.js";
 import { contract } from "./paths.js";
 import type { Machine } from "./machine.js";
-import { checkoutRoot, NAME_RE, removeProjectText, workspace, type Manifest, type Project } from "./manifest.js";
+import { checkoutRoot, NAME_RE, projectTableRe, removeProjectText, workspace, type Manifest, type Project } from "./manifest.js";
 import { checkouts, dropPlacedRecord, stripPointer } from "./link.js";
 import { fetchHandoffs, userSlug } from "./handoff.js";
+import { fileOf } from "./env.js";
+import { parseRepoUrl } from "./sharekey.js";
 import * as ui from "./ui.js";
 
 const secretsDir = (repo: string) => join(repo, "secrets", "projects");
-/** The entries under secrets/projects/ that belong to `name`: `<name>.env` (its .env) and `<name>.<suffix>.env` (its .env.<suffix>),
- *  unless `<name>.<suffix>` is itself a registered project (src/env.ts resolves the same ambiguity the same way). */
+/** Entries under secrets/projects/ (`<entry>.env`), by name. */
+const secretEntries = (repo: string): string[] => (existsSync(secretsDir(repo)) ? readdirSync(secretsDir(repo)).filter((f) => f.endsWith(".env")).map((f) => f.slice(0, -4)).sort() : []);
+/** The entries that belong to `name`: its `.env` and its `.env.<suffix>` files (src/env.ts's naming) — unless the entry is a registered project of its own. */
 export function secretsFiles(repo: string, man: Manifest, name: string): string[] {
-  const d = secretsDir(repo); if (!existsSync(d)) return [];
-  return readdirSync(d).filter((f) => f.endsWith(".env")).filter((f) => { const e = f.slice(0, -4); return e === name || (e.startsWith(name + ".") && !man.projects[e]); }).map((f) => join(d, f)).sort();
+  return secretEntries(repo).filter((e) => fileOf(name, e) && (e === name || !man.projects[e])).map((e) => join(secretsDir(repo), `${e}.env`));
 }
-/** Names that have project state or secrets in the share but no manifest entry — leftovers cs doctor points at cs remove for. */
+/** Names that have project state or secrets in the share but no manifest entry — leftovers cs doctor points at cs remove for.
+ *  An entry that reads as another orphan's `.env.<suffix>` is folded into that orphan: one `cs remove <name>` takes both. */
 export function orphans(repo: string, man: Manifest): string[] {
-  const names = new Set<string>();
+  const names = new Set<string>(), state = new Set<string>(); const registered = Object.keys(man.projects);
   const st = join(repo, "projects");
-  if (existsSync(st)) for (const e of readdirSync(st, { withFileTypes: true })) if (e.isDirectory() && !man.projects[e.name]) names.add(e.name);
-  if (existsSync(secretsDir(repo))) for (const f of readdirSync(secretsDir(repo))) if (f.endsWith(".env")) { const e = f.slice(0, -4); if (!man.projects[e] && !Object.keys(man.projects).some((p) => e.startsWith(p + "."))) names.add(e); }
-  return [...names].sort();
+  if (existsSync(st)) for (const e of readdirSync(st, { withFileTypes: true })) if (e.isDirectory() && !man.projects[e.name]) { names.add(e.name); state.add(e.name); }
+  for (const e of secretEntries(repo)) if (!registered.some((p) => fileOf(p, e))) names.add(e);
+  return [...names].filter((n) => state.has(n) || ![...names].some((o) => o !== n && fileOf(o, n))).sort();
 }
 
 interface Target { name: string; project?: Project; state?: string; secrets: string[]; here: string[] }
 const countFiles = (dir: string): number => readdirSync(dir, { withFileTypes: true }).reduce((n, e) => n + (e.isDirectory() ? countFiles(join(dir, e.name)) : e.isFile() && e.name !== ".gitkeep" ? 1 : 0), 0);
-const subTables = (text: string, name: string) => [...text.matchAll(new RegExp(`^\\[projects\\.${name.replace(/[.]/g, "\\.")}(\\.[^\\]]+)?\\]`, "gm"))].map((m) => m[0]);
-const githubRepo = (url: string) => git.canonicalGithub(url).match(/^git@github\.com:([^/]+)\/(.+)\.git$/)?.slice(1, 3);
+const subTables = (text: string, name: string) => [...text.matchAll(projectTableRe(name, "gm"))].map((m) => m[0].replace(/\s*(#.*)?$/, ""));
 
 /** A name is accepted when any of the three exists; unknown when none does. */
 function resolve(repo: string, m: Machine, man: Manifest, names: string[]): Target[] {
@@ -48,10 +50,11 @@ function resolve(repo: string, m: Machine, man: Manifest, names: string[]): Targ
 /** Never blocks: what the removal leaves behind elsewhere, so the user knows before saying yes. */
 async function warnings(t: Target, ws: string) {
   if (t.secrets.length) ui.warn(`${t.name}: .env values stored in the share go with it — the checkout's own .env files stay`);
-  if (!t.project) return;
+  if (!t.project?.url) return;
   const root = checkoutRoot(t.project, ws);
-  if (t.project.url && existsSync(root) && git.isRepo(root))   // what the last fetch brought, no network: a handoff left on the remote stays there
+  if (existsSync(root) && git.isRepo(root)) {   // what the last fetch brought, no network: a handoff left on the remote stays there
     for (const h of (await fetchHandoffs(root, userSlug(root), 0, false)).list) ui.warn(`${t.name}: a handoff from ${h.machine} (${h.branch}) is waiting on the remote — it stays there, the remote is not touched`);
+  } else ui.warn(`${t.name}: no checkout here to look for waiting handoffs — one left on the remote stays there (cs handoffs on a machine that has it)`);
 }
 function summary(t: Target, manifestText: string) {
   const lines: string[] = [];
@@ -72,7 +75,7 @@ export async function remove(repo: string, m: Machine, man: Manifest, names: str
   const label = targets.map((t) => t.name).join(", ");
   if (!o.yes) {
     if (!ui.canAsk()) throw new Error(`cs: no terminal to confirm\nadd --yes to remove ${label} unattended`);
-    if (!(await ui.confirm(`remove ${label} from the share? (checkouts and remotes stay)`, false))) { ui.info(ui.dim("nothing removed")); return ui.dim("nothing removed"); }
+    if (!(await ui.confirm(`remove ${label} from the share? (checkouts and remotes stay)`, false))) return ui.dim("nothing removed");
   }
   const paths: string[] = [];
   for (const t of targets) {
@@ -88,10 +91,10 @@ export async function remove(repo: string, m: Machine, man: Manifest, names: str
     for (const p of new Set(paths)) git.git(["add", "-A", "--", p], repo, { check: false });   // a state dir never committed matches nothing: fine
     if (git.git(["diff", "--cached", "--quiet"], repo, { check: false }).code !== 0) { git.commit(repo, `remove ${label}`, "cs", `cs@${m.name}`); sha = git.out(["rev-parse", "--short", "HEAD"], repo); }
   }
-  ui.ok(`removed ${label} from the share${sha ? `  ${ui.dim(`commit ${sha}`)}` : o.noCommit ? ui.dim("  (not committed: --no-commit)") : ""}`);
+  ui.ok(`removed ${label} from the share${sha ? `  ${ui.dim(`commit ${sha}`)}` : ui.dim(o.noCommit ? "  (not committed: --no-commit)" : "  (nothing to commit — the share had none of it committed)")}`);
   for (const t of targets) {
     for (const c of t.here) ui.info(`${t.name}: checkout kept at ${contract(c)} — just a directory now, yours to keep or rm`);
-    if (t.project?.url) { const gh = githubRepo(t.project.url); ui.info(ui.dim(gh ? `${t.name}: the GitHub repo stays — to remove it too, by hand: gh repo delete ${gh[0]}/${gh[1]}` : `${t.name}: the remote stays — ${t.project.url}`)); }
+    if (t.project?.url) { const [, gh] = parseRepoUrl(t.project.url); ui.info(ui.dim(gh ? `${t.name}: the GitHub repo stays — to delete it too, by hand: gh repo delete ${gh[0]}/${gh[1]}` : `${t.name}: the remote stays — ${t.project.url}`)); }
   }
   return sha ? ui.dim(`undo: git -C ${contract(repo)} revert ${sha}, then cs sync everywhere`) : ui.dim("the share pushes with the next cs sync");
 }

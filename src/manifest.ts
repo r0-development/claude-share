@@ -117,11 +117,14 @@ export function updateProject(repo: string, p: Project) {
   while (end > start + 1 && lines[end - 1].trim() === "") end--;
   writeFileSync(f, [...lines.slice(0, start), projectBlock(p).trimEnd(), ...lines.slice(end)].join("\n"));
 }
-/** Remove `[projects.<name>]` and every `[projects.<name>.*]` sub-table from the manifest text, wherever they sit; every other
- *  line stays byte-for-byte. A block runs from its header to the line before the next table header; the blank lines that
- *  precede the file's last block go with it, so the file still ends in one newline. Pure — cs remove writes the result. */
+/** The header of `[projects.<name>]` or any `[projects.<name>.<sub>]` table, as one trimmed line (a trailing comment allowed). */
+export const projectTableRe = (name: string, flags = "") => new RegExp(`^\\[projects\\.${name.replace(/[.]/g, "\\.")}(\\.[^\\]]+)?\\]\\s*(#.*)?$`, flags);
+/** Remove `[projects.<name>]` and every `[projects.<name>.*]` sub-table from the manifest text, wherever they sit; the lines
+ *  kept are kept byte-for-byte. A block runs from its header to the line before the next table header (its trailing blank
+ *  lines go with it); when it was the file's last block the blank lines before it go too, so the file still ends in one
+ *  newline. Pure — cs remove writes the result. */
 export function removeProjectText(text: string, name: string): { text: string; found: boolean } {
-  const mine = new RegExp(`^\\[projects\\.${name.replace(/[.]/g, "\\.")}(\\.[^\\]]+)?\\]\\s*(#.*)?$`);
+  const mine = projectTableRe(name);
   const lines = text.split("\n"); const keep: string[] = []; let found = false, skipping = false;
   for (const l of lines) {
     if (/^\s*\[/.test(l)) skipping = mine.test(l.trim());
