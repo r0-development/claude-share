@@ -8,7 +8,7 @@ import { envVarName } from "../src/import.ts";
 import { parseDotenv, dumpDotenv } from "../src/secrets/index.ts";
 import { plan, status, type Facts } from "../src/plan.ts";
 import { digest, gitNote } from "../src/note.ts";
-import { classify, storeName, fileOf, merge3, patchDotenv, describeMerge } from "../src/env.ts";
+import { classify, storeName, fileOf, merge3, mergeKeys, patchDotenv, describeMerge, describeKeys, blank } from "../src/env.ts";
 
 test("jsonmerge: dicts recurse, scalars override, permission lists union, plain lists replace", () => {
   assert.deepEqual(mergeLayers({ a: { x: 1 } }, { a: { y: 2 } }), { a: { x: 1, y: 2 } });
@@ -171,6 +171,18 @@ test("status: .env bits — what would move is pending; an unignored file names 
   const un = status(facts({ env: [env({ kind: "unignored" })] }), "desk");
   assert.deepEqual(un.bits.map((b) => b.kind), ["skip"]); assert.ok(un.bits[0].text.includes(".gitignore")); assert.equal(un.pending, false);
 });
+test("plan/status: a keys-only file (.env.local) is self-heal — no row, no question; keys arriving are pending; empty keys are named to fill in", () => {
+  const local = env({ file: ".env.local", kind: "local", from: "laptop", merge: { result: { HOST: "", PORT: "3000" }, toLocal: ["HOST", "PORT"], toStore: [], conflicts: [] }, toFill: ["HOST"] });
+  const pl = plan([facts({ env: [local] })], "desk");
+  assert.equal(pl.actions.length, 0); assert.equal(pl.questions.length, 0); assert.equal(pl.skipped.length, 0);
+  const st = status(facts({ env: [local] }), "desk");
+  assert.deepEqual(st.bits.map((b) => [b.kind, b.text]), [["env", ".env.local: take 2 keys from laptop (1 to fill in)"], ["env", ".env.local: 1 key to fill in (HOST)"]]);
+  assert.equal(st.pending, true);
+  // nothing arriving, one key still empty: only the fill-in line, and cs sync is not the answer
+  const filled = status(facts({ env: [env({ file: ".env.local", kind: "local", toFill: ["HOST"] })] }), "desk");
+  assert.deepEqual(filled.bits.map((b) => b.text), [".env.local: 1 key to fill in (HOST)"]); assert.equal(filled.pending, false);
+  assert.equal(status(facts({ env: [env({ file: ".env.local", kind: "local", toFill: [] })] }), "desk").bits.length, 0);
+});
 
 // handoff notes: a session transcript (jsonl) → the digest headless Claude reads; the git-derived fallback text
 const line = (o: object) => JSON.stringify(o);
@@ -263,6 +275,40 @@ test("env: the local file is patched in place — comments, order and quoting st
   assert.equal(patchDotenv("", { A: "1" }), "A=1\n");
   assert.equal(patchDotenv("A=1", { A: "1", B: "2" }), "A=1\nB=2\n");   // a missing final newline is added before appending
   assert.deepEqual(parseDotenv(patchDotenv(text, { DB: "a b", TOKEN: "t'q" })), { DB: "a b", TOKEN: "t'q" });   // patched values always parse back
+});
+test("env: keys-only merge — keys travel, values never: a new key arrives with the .env.example default or empty, an existing value is untouched, a removed key leaves", () => {
+  const example = { DB: "postgres://localhost/db", PORT: "3000" };
+  // first sync here: the share lists KEY and PORT, this machine has HOST with its own value
+  const m = mergeKeys(undefined, { HOST: "10.0.0.2" }, ["KEY", "PORT"], example);
+  assert.deepEqual(m.result, { HOST: "10.0.0.2", KEY: "", PORT: "3000" });
+  assert.deepEqual([m.toLocal.sort(), m.toStore, m.conflicts], [["KEY", "PORT"], ["HOST"], []]);
+  assert.deepEqual(m.toFill, ["KEY"]);
+  // an existing value is never overwritten, whatever the example says
+  const kept = mergeKeys(["PORT"], { PORT: "8080" }, ["PORT"], example);
+  assert.deepEqual([kept.result, kept.toLocal, kept.toStore], [{ PORT: "8080" }, [], []]);
+  // the same key on both sides with different values here vs there is never a conflict: values do not travel
+  assert.deepEqual(mergeKeys(undefined, { A: "here" }, ["A"], {}).conflicts, []);
+  // removed on one machine since the last sync → removed everywhere (the set of keys must not drift); the line goes, the value with it
+  const rm = mergeKeys(["A", "B"], { A: "1", B: "2" }, ["A"], {});
+  assert.deepEqual([rm.result, rm.toLocal, rm.toStore], [{ A: "1" }, ["B"], []]);
+  const rmHere = mergeKeys(["A", "B"], { A: "1" }, ["A", "B"], {});
+  assert.deepEqual([rmHere.result, rmHere.toLocal, rmHere.toStore], [{ A: "1" }, [], ["B"]]);
+  // a key that is empty here stays listed as to fill in
+  assert.deepEqual(mergeKeys(["A"], { A: "" }, ["A"], {}).toFill, ["A"]);
+  assert.deepEqual(blank({ A: "1", B: "" }), { A: "", B: "" });
+});
+test("env: an empty value is written as KEY= (to fill in), never KEY=\"\"", () => {
+  assert.equal(patchDotenv("A=1\n", { A: "1", KEY: "" }), "A=1\nKEY=\n");
+  assert.equal(patchDotenv("KEY=old\n", { KEY: "" }), "KEY=\n");
+  assert.deepEqual(parseDotenv("KEY=\n"), { KEY: "" });
+});
+test("env: the keys-only hint counts keys, names the machine, and says how many are still to fill in", () => {
+  const mk = (over: Partial<ReturnType<typeof mergeKeys>>) => ({ result: {}, toStore: [], toLocal: [], conflicts: [], toFill: [], ...over });
+  assert.equal(describeKeys(mk({ result: { A: "", B: "3000" }, toLocal: ["A", "B"], toFill: ["A"] }), "laptop"), "take 2 keys from laptop (1 to fill in)");
+  assert.equal(describeKeys(mk({ result: { A: "x" }, toLocal: ["A"] }), "laptop"), "take 1 key from laptop");
+  assert.equal(describeKeys(mk({ result: { A: "x" }, toStore: ["A"] })), "store 1 key");
+  assert.equal(describeKeys(mk({ result: {}, toLocal: ["A"] })), "drop 1 key here");
+  assert.equal(describeKeys(mk({ result: { A: "" }, toFill: ["A"] })), "");   // nothing moves: the fill-in line is the status bit's job
 });
 test("env: the plan-screen hint says what moves, where from, and when a key is dropped", () => {
   const mk = (over: Partial<ReturnType<typeof merge3>>) => ({ result: {}, toStore: [], toLocal: [], conflicts: [], ...over });

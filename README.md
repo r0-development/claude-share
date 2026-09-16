@@ -97,7 +97,7 @@ Every project is a `[projects.<name>]` entry in `projects.toml` and a directory 
 | `cs new <name> --<identity>` | brand-new project: `mkdir`, `git init -b master`, private GitHub repo under the identity's owner, first commit + push, register, link Claude files. Re-runnable. `--public`, `--no-github`, `--synced`, `-d "description"` |
 | `cs add [path]` | register an existing directory (default: cwd; infers url, branch, identity, worktree layout) |
 | `cs clone [name…]` | clone the projects this machine's profiles select but that are missing here |
-| `cs` | fetches and shows one line per project — branch, dirty, ↑unpushed, handoff waiting from *machine*, `.env: store N keys`, missing here — the share's state and last sync, unregistered dirs; ends with `run: cs sync` when anything is pending (exit 1). `cs --no-fetch` for scripts |
+| `cs` | fetches and shows one line per project — branch, dirty, ↑unpushed, handoff waiting from *machine*, `.env: store N keys`, `.env.local: 1 key to fill in`, missing here — the share's state and last sync, unregistered dirs; ends with `run: cs sync` when anything is pending (exit 1). `cs --no-fetch` for scripts |
 
 Project kinds: `git` (normal), `synced` (auto-committed notes; no manual git), `local` (registered so other machines know
 it exists, never cloned). `profiles` decide which machines get a project; `machines = [...]` is a hard allowlist;
@@ -175,8 +175,10 @@ See `docs/HANDOFF.md`.
 to move is a row on the plan screen (`one · .env  store 2 keys, take 1 key from laptop`, pre-checked). Values merge per
 key against the last-synced snapshot, so a key changed on the other machine is never lost and the local file is patched in
 place (comments and order kept); only a key changed on both machines since the last sync is asked, per key (no terminal:
-newest wins). Files git tracks (`.env.example`) are git's business; a `.env` git would commit is refused until it is
-gitignored; `env = false` on a project opts it out. See `docs/SECRETS.md`.
+newest wins). Gitignored `.env.local` / `.env.*.local` (and `env.local = [...]`) travel **keys only**, without a row: a key
+new on the other machine arrives with the `.env.example` value or empty, an existing value is never touched, and `cs`
+says `.env.local: 1 key to fill in (KEY)` until it is. Files git tracks (`.env.example`) are git's business; a `.env` git
+would commit is refused until it is gitignored; `env = false` on a project opts it out. See `docs/SECRETS.md`.
 
 ---
 

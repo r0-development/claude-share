@@ -1,14 +1,15 @@
 /** cs sync, the pure middle: facts gathered per project → the actions to take (with their defaults) and the
  *  questions only a human can answer. No I/O here, so the table in tests/unit.test.ts covers every rule. */
-import { describeMerge, type Merge } from "./env.js";
+import { describeKeys, describeMerge, type Merge } from "./env.js";
 
 /** One checkout of a project (the root, or one worktree). `branch` is "" when detached. */
 export interface Unit { rel: string; branch: string; dirty: number; unpushed: number; skip?: string; secrets?: string[] }
 /** A handoff waiting on the project's remote. */
 export interface Waiting { branch: string; machine: string; when: string; note: string; ref: string }
 /** One `.env*` file of the project as src/envfiles.ts saw it: what the per-key merge would move (ADR-0003) and which
- *  machine stored the other side. `unignored` — the file exists but git would commit it: not carried until it is gitignored. */
-export interface EnvFact { file: string; kind: "values" | "unignored"; merge: Merge; from?: string }
+ *  machine stored the other side. `local` — a keys-only file (`.env.local`): `toFill` names its keys without a value here.
+ *  `unignored` — the file exists but git would commit it: not carried until it is gitignored. */
+export interface EnvFact { file: string; kind: "values" | "local" | "unignored"; merge: Merge; from?: string; toFill?: string[] }
 export interface Facts { project: string; layout: "plain" | "worktrees"; units: Unit[]; waiting: Waiting[]; env?: EnvFact[]; offline?: boolean; disabled?: boolean }
 
 /** `push` is a real branch's local-only commits going to its upstream — offered, never checked by default (the handoff carries them anyway).
@@ -38,9 +39,11 @@ export function plan(facts: Facts[], machine: string): Plan {
   const actions: Action[] = [], questions: Question[] = [], skipped: string[] = [];
   for (const f of facts) {
     handoffs(f, machine, actions, questions, skipped);
-    // .env files travel through the share, not the project remote: their rows are independent of the handoff state
+    // .env files travel through the share, not the project remote: their rows are independent of the handoff state.
+    // Keys-only files are self-heal (nothing secret moves, no value is ever overwritten): no row, cs sync just does it.
     for (const e of f.env ?? []) {
       if (e.kind === "unignored") { skipped.push(`${f.project}: ${e.file} is not gitignored — not carried (add it to .gitignore)`); continue; }
+      if (e.kind === "local") continue;
       if (!e.merge.toLocal.length && !e.merge.toStore.length && !e.merge.conflicts.length) continue;
       actions.push({ id: `env:${f.project}:${e.file}`, kind: "env", project: f.project, branch: e.file, label: `${f.project} · ${e.file}`, hint: describeMerge(e.merge, e.from), checked: true });
       for (const c of e.merge.conflicts) questions.push({ kind: "env-key", project: f.project, file: e.file, key: c.key, from: e.from,
@@ -100,14 +103,18 @@ export function status(f: Facts, machine: string): { bits: StatusBit[]; pending:
     if (u.skip) { bits.push({ kind: "skip", text: `${at}${u.skip}${work ? " — not carried by cs sync: check a branch out" : ""}` }); if (work) stuck = true; }
     if (u.secrets?.length) { bits.push({ kind: "skip", text: `${at}not sent — files that look secret: ${u.secrets.join(", ")} (cs handoff --allow <glob>)` }); stuck = true; }
   }
+  let keys = false;   // a keys-only file with keys to take or store: self-heal, but only cs sync does it
   for (const e of f.env ?? []) {
     if (e.kind === "unignored") bits.push({ kind: "skip", text: `${e.file}: not gitignored — not carried (add it to .gitignore)` });
-    else { const what = describeMerge(e.merge, e.from); if (what) bits.push({ kind: "env", text: `${e.file}: ${what}` }); }
+    else if (e.kind === "local") {
+      const what = describeKeys({ ...e.merge, toFill: e.toFill ?? [] }, e.from); if (what) { bits.push({ kind: "env", text: `${e.file}: ${what}` }); keys = true; }
+      if (e.toFill?.length) bits.push({ kind: "env", text: `${e.file}: ${count(e.toFill.length, "key")} to fill in (${e.toFill.join(", ")})` });
+    } else { const what = describeMerge(e.merge, e.from); if (what) bits.push({ kind: "env", text: `${e.file}: ${what}` }); }
   }
   const here = f.units[0]?.branch;
   for (const w of f.waiting) bits.push({ kind: "waiting", text: `handoff waiting from ${w.machine}${w.branch === here ? "" : ` for ${w.branch}`} (${when(w.when)})` });
   if (f.offline) bits.push({ kind: "offline", text: "offline" });
   if (f.disabled) bits.push({ kind: "disabled", text: "handoff disabled" });
   const pl = plan([{ ...f, offline: false }], machine);   // offline: what cs sync would do once the remote is reachable again
-  return { bits, pending: pl.actions.length > 0 || pl.questions.length > 0, stuck };
+  return { bits, pending: pl.actions.length > 0 || pl.questions.length > 0 || keys, stuck };
 }

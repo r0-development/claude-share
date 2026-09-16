@@ -17,7 +17,7 @@ import { backupRef, handoff, resume, units } from "./handoff.js";
 import { gather } from "./gather.js";
 import { getBackend } from "./secrets/index.js";
 import { applyEnv, newestSide, snapshotInSync, type EnvState } from "./envfiles.js";
-import { describeMerge, type Side as EnvSide } from "./env.js";
+import { describeKeys, describeMerge, type Side as EnvSide } from "./env.js";
 import { count, plan, when, type Action, type Answer, type EnvQuestion, type Facts, type HandoffQuestion, type Plan } from "./plan.js";
 import * as ui from "./ui.js";
 
@@ -45,7 +45,7 @@ function report(facts: Facts[]) {
   for (const f of facts) {
     for (const w of f.waiting) ui.step(`${f.project} · ${w.branch}  handoff waiting from ${w.machine} (${when(w.when)})`);
     for (const u of f.units) if ((u.dirty || u.unpushed) && !u.skip) ui.step(`${f.project} · ${u.branch}  ${[u.dirty ? count(u.dirty, "change") : "", u.unpushed ? count(u.unpushed, "unpushed commit") : ""].filter(Boolean).join(", ")}`);
-    for (const e of f.env ?? []) if (e.kind === "values") { const what = describeMerge(e.merge, e.from); if (what) ui.step(`${f.project} · ${e.file}  ${what}`); }
+    for (const e of f.env ?? []) if (e.kind === "values" || e.kind === "local") { const what = e.kind === "local" ? describeKeys({ ...e.merge, toFill: e.toFill ?? [] }, e.from) : describeMerge(e.merge, e.from); if (what) ui.step(`${f.project} · ${e.file}  ${what}`); }
   }
 }
 
@@ -187,19 +187,25 @@ export async function runSync(repo: string, m: Machine, man: Manifest, o: SyncOp
     }
   });
   // .env files: the rows ticked are merged per key with the share (encrypted through the secrets backend) and patched in place here (ADR-0003);
-  // files already the same on both sides get their snapshot so the next change is known to be one-sided
+  // keys-only files (.env.local) are merged without a row — nothing secret moves and no value is overwritten; a key new here says so.
+  // Files already the same on both sides get their snapshot so the next change is known to be one-sided.
   let envDone = 0;
-  if (envRows.length) await ui.group(".env files", async () => {
+  const keysOnly = Object.values(env).flat().filter((st) => st.kind === "local" && (st.merge.toLocal.length || st.merge.toStore.length));
+  if (envRows.length || keysOnly.length) await ui.group(".env files", async () => {
     const b = await getBackend(m);
+    const one = async (label: string, st: EnvState, decide: Partial<Record<string, EnvSide>>) => {
+      try { const r = await applyEnv(repo, b, st, decide); envDone++;
+        ui.step(`${label}: ${[r.stored ? `${count(r.stored, "key")} stored` : "", r.local ? `${count(r.local, "key")} taken${st.storedFrom ? ` from ${st.storedFrom}` : ""}` : ""].filter(Boolean).join(", ")}${r.toFill.length ? ui.yellow(` — to fill in: ${r.toFill.join(", ")}`) : ""}`); }
+      catch (e: any) { ui.fail(`${label}: ${String(e?.message ?? e).replace(/^cs: /, "")}`); }
+    };
     for (const a of envRows) {
       const st = env[a.project]?.find((s) => s.file === a.branch); if (!st) { ui.fail(`${a.label}: not observed — not merged`); continue; }
-      try { const r = await applyEnv(repo, b, st, decided[`${a.project}:${a.branch}`] ?? {}); envDone++;
-        ui.step(`${a.label}: ${[r.stored ? `${count(r.stored, "key")} stored` : "", r.local ? `${count(r.local, "key")} taken${st.storedFrom ? ` from ${st.storedFrom}` : ""}` : ""].filter(Boolean).join(", ")}`); }
-      catch (e: any) { ui.fail(`${a.label}: ${String(e?.message ?? e).replace(/^cs: /, "")}`); }
+      await one(a.label, st, decided[`${a.project}:${a.branch}`] ?? {});
     }
+    for (const st of keysOnly) await one(`${st.project} · ${st.file}`, st, {});
   });
   for (const sts of Object.values(env)) for (const st of sts) snapshotInSync(st);
-  const failed = chosen.length + over.length + replace.length - sent - applied - pushed - envDone;
+  const failed = chosen.length + over.length + replace.length + keysOnly.length - sent - applied - pushed - envDone;
   if (failed) rc = rc || 1;
 
   // 8. the share again: what the run changed (project state, handoff notes, memory) goes out

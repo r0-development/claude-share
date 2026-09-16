@@ -32,7 +32,7 @@ Which files `cs sync` carries is decided by the file name and git, never by a qu
 |---|---|---|
 | tracked by git (`.env.example`) | no | git's business |
 | gitignored `.env`, `.env.production`, `.env.<anything>` | with its values, encrypted in the share | project secrets follow you |
-| gitignored `*.local` (`.env.local`, `.env.*.local`, plus `env.local = [...]` in the manifest) | keys only (planned) | site-specific values stay per machine |
+| gitignored `*.local` (`.env.local`, `.env.*.local`, plus `env.local = [...]` in the manifest) | keys only | site-specific values stay per machine |
 | untracked and not gitignored | refused: "not carried (add it to .gitignore)" | git would commit it |
 
 `env = false` under `[projects.<name>]` opts the project out entirely.
@@ -46,6 +46,13 @@ share) is pulled or stored again, never deleted on the other side. The local fil
 order and quoting survive, and its previous text is kept as `<file>.prev` next to the snapshot; a file that arrives on a
 machine for the first time is written 0600. `cs` shows `.env: store 1 key,
 take 2 keys from laptop` on the project's line while something is pending.
+
+Keys-only files (`.env.local`) go through the same entry with blank values and the same three-way merge, on the *set of
+keys*: a key added on one machine appears on the other with the value from `.env.example` when that file has it, else
+empty (`KEY=`); a key removed on one machine leaves the other machine's file too (its previous text is kept as
+`<file>.prev`); a value already there is never changed, whatever the share or the example says. Nothing secret moves and
+nothing is overwritten, so there is no plan row — `cs sync` just does it and says `one · .env.local: 2 keys taken from
+desk — to fill in: KEY`. Bare `cs` shows `.env.local: 1 key to fill in (KEY)` until the value is filled in.
 
 ## How Claude gets them
 

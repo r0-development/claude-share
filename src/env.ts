@@ -1,6 +1,6 @@
 /** .env files (ADR-0003), the pure part: which files travel, how a project's files map to entries in the share's secrets
- *  area, and the per-key three-way merge behind "newest wins, asked only when both sides changed the same key".
- *  No I/O here — src/envfiles.ts observes and writes; tests/unit.test.ts covers every rule. */
+ *  area, the per-key three-way merge behind "newest wins, asked only when both sides changed the same key", and the
+ *  keys-only merge of `.local` files. No I/O here — src/envfiles.ts observes and writes; tests/unit.test.ts covers every rule. */
 
 /** tracked → git's business; values → travels with its values (encrypted in the share); local → keys only (site-specific
  *  values stay per machine); unignored → an untracked file git would commit: refused until it is gitignored. */
@@ -45,7 +45,21 @@ export function merge3(base: Values | undefined, local: Values, stored: Values, 
   return { result, toLocal, toStore, conflicts };
 }
 
-const quote = (v: string) => (/[ #"'\\$`]/.test(v) || v === "" ? JSON.stringify(v) : v);
+/** Every value emptied: what a keys-only file looks like in the share and in its snapshot. */
+export const blank = (v: Values | string[]): Values => Object.fromEntries((Array.isArray(v) ? v : Object.keys(v)).map((k) => [k, ""]));
+/** `toFill` — keys of the merged file that have no value here (empty): named by cs so the person fills them in. */
+export interface KeysMerge extends Merge { toFill: string[] }
+/** A `.local` file: the set of keys is merged three-way like values are (a key added or removed on one side travels), but
+ *  values never leave the machine. A key new here takes `example`'s value (`.env.example`) or stays empty; a key already
+ *  here keeps its value whatever the share or the example says. Never a conflict — there is nothing to choose between. */
+export function mergeKeys(base: string[] | undefined, local: Values, stored: string[], example: Values): KeysMerge {
+  const m = merge3(base && blank(base), blank(local), blank(stored));
+  const result: Values = {}; for (const k of Object.keys(m.result)) result[k] = local[k] ?? example[k] ?? "";
+  return { result, toLocal: m.toLocal, toStore: m.toStore, conflicts: [], toFill: Object.keys(result).filter((k) => result[k] === "") };
+}
+
+/** An empty value is written bare (`KEY=`): what a key to fill in looks like. */
+const quote = (v: string) => (v === "" ? "" : /[ #"'\\$`]/.test(v) ? JSON.stringify(v) : v);
 /** Rewrite a dotenv text to hold exactly `values`: lines of keys that keep their value stay byte for byte (comments, order,
  *  `export`, quoting style), changed keys get a fresh value on their line, removed keys lose their line, new keys are appended. */
 export function patchDotenv(text: string, values: Values): string {
@@ -77,4 +91,12 @@ export function describeMerge(m: Merge, from?: string): string {
   return [put ? `store ${n(put)}` : "", m.toStore.length - put ? `drop ${n(m.toStore.length - put)} from the share` : "",
     take ? `take ${n(take)}${from ? ` from ${from}` : ""}` : "", m.toLocal.length - take ? `drop ${n(m.toLocal.length - take)} here` : "",
     m.conflicts.length ? `${n(m.conflicts.length)} changed on both machines — asked next` : ""].filter(Boolean).join(", ");
+}
+/** The keys-only hint: "take 2 keys from laptop (1 to fill in)" / "store 1 key" / "drop 1 key here". Empty when nothing moves. */
+export function describeKeys(m: KeysMerge, from?: string): string {
+  const n = (c: number) => `${c} key${c === 1 ? "" : "s"}`;
+  const take = m.toLocal.filter((k) => k in m.result), fill = take.filter((k) => m.toFill.includes(k)).length;
+  const put = m.toStore.filter((k) => k in m.result).length;
+  return [put ? `store ${n(put)}` : "", m.toStore.length - put ? `drop ${n(m.toStore.length - put)} from the share` : "",
+    take.length ? `take ${n(take.length)}${from ? ` from ${from}` : ""}${fill ? ` (${fill} to fill in)` : ""}` : "", m.toLocal.length - take.length ? `drop ${n(m.toLocal.length - take.length)} here` : ""].filter(Boolean).join(", ");
 }

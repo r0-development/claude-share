@@ -8065,6 +8065,12 @@ function merge3(base, local, stored, decide2 = {}) {
   }
   return { result, toLocal, toStore, conflicts };
 }
+function mergeKeys(base, local, stored, example) {
+  const m = merge3(base && blank(base), blank(local), blank(stored));
+  const result = {};
+  for (const k of Object.keys(m.result)) result[k] = local[k] ?? example[k] ?? "";
+  return { result, toLocal: m.toLocal, toStore: m.toStore, conflicts: [], toFill: Object.keys(result).filter((k) => result[k] === "") };
+}
 function patchDotenv(text3, values) {
   const seen = /* @__PURE__ */ new Set();
   const out2 = [];
@@ -8108,13 +8114,25 @@ function describeMerge(m, from) {
     m.conflicts.length ? `${n3(m.conflicts.length)} changed on both machines \u2014 asked next` : ""
   ].filter(Boolean).join(", ");
 }
-var isEnvName, storeName, quote;
+function describeKeys(m, from) {
+  const n3 = (c2) => `${c2} key${c2 === 1 ? "" : "s"}`;
+  const take = m.toLocal.filter((k) => k in m.result), fill = take.filter((k) => m.toFill.includes(k)).length;
+  const put = m.toStore.filter((k) => k in m.result).length;
+  return [
+    put ? `store ${n3(put)}` : "",
+    m.toStore.length - put ? `drop ${n3(m.toStore.length - put)} from the share` : "",
+    take.length ? `take ${n3(take.length)}${from ? ` from ${from}` : ""}${fill ? ` (${fill} to fill in)` : ""}` : "",
+    m.toLocal.length - take.length ? `drop ${n3(m.toLocal.length - take.length)} here` : ""
+  ].filter(Boolean).join(", ");
+}
+var isEnvName, storeName, blank, quote;
 var init_env = __esm({
   "src/env.ts"() {
     "use strict";
     isEnvName = (name2) => /^\.env(\..+)?$/.test(name2);
     storeName = (project, file) => file === ".env" ? project : `${project}.${file.slice(".env.".length)}`;
-    quote = (v) => /[ #"'\\$`]/.test(v) || v === "" ? JSON.stringify(v) : v;
+    blank = (v) => Object.fromEntries((Array.isArray(v) ? v : Object.keys(v)).map((k) => [k, ""]));
+    quote = (v) => v === "" ? "" : /[ #"'\\$`]/.test(v) ? JSON.stringify(v) : v;
   }
 });
 
@@ -8134,6 +8152,7 @@ function plan(facts, machine) {
         skipped.push(`${f.project}: ${e.file} is not gitignored \u2014 not carried (add it to .gitignore)`);
         continue;
       }
+      if (e.kind === "local") continue;
       if (!e.merge.toLocal.length && !e.merge.toStore.length && !e.merge.conflicts.length) continue;
       actions.push({ id: `env:${f.project}:${e.file}`, kind: "env", project: f.project, branch: e.file, label: `${f.project} \xB7 ${e.file}`, hint: describeMerge(e.merge, e.from), checked: true });
       for (const c2 of e.merge.conflicts) questions.push({
@@ -8223,9 +8242,17 @@ function status(f, machine) {
       stuck = true;
     }
   }
+  let keys = false;
   for (const e of f.env ?? []) {
     if (e.kind === "unignored") bits.push({ kind: "skip", text: `${e.file}: not gitignored \u2014 not carried (add it to .gitignore)` });
-    else {
+    else if (e.kind === "local") {
+      const what = describeKeys({ ...e.merge, toFill: e.toFill ?? [] }, e.from);
+      if (what) {
+        bits.push({ kind: "env", text: `${e.file}: ${what}` });
+        keys = true;
+      }
+      if (e.toFill?.length) bits.push({ kind: "env", text: `${e.file}: ${count(e.toFill.length, "key")} to fill in (${e.toFill.join(", ")})` });
+    } else {
       const what = describeMerge(e.merge, e.from);
       if (what) bits.push({ kind: "env", text: `${e.file}: ${what}` });
     }
@@ -8235,7 +8262,7 @@ function status(f, machine) {
   if (f.offline) bits.push({ kind: "offline", text: "offline" });
   if (f.disabled) bits.push({ kind: "disabled", text: "handoff disabled" });
   const pl = plan([{ ...f, offline: false }], machine);
-  return { bits, pending: pl.actions.length > 0 || pl.questions.length > 0, stuck };
+  return { bits, pending: pl.actions.length > 0 || pl.questions.length > 0 || keys, stuck };
 }
 var count, when;
 var init_plan = __esm({
@@ -9025,16 +9052,18 @@ async function observeEnv(repo, b, p, root, others) {
   const here = existsSync15(root) ? readdirSync6(root).filter(isEnvName) : [];
   const files = [.../* @__PURE__ */ new Set([...here, ...storedFiles(repo, p.name, others)])].sort();
   const out2 = [];
+  const example = readValues(join17(root, ".env.example"));
   for (const file of files) {
     const tracked = git(["ls-files", "--error-unmatch", "--", file], root, { check: false }).code === 0;
     const ignored = git(["check-ignore", "-q", "--", file], root, { check: false }).code === 0;
     const kind = classify(file, { tracked, ignored }, extraLocal);
     const name2 = storeName(p.name, file), path = join17(root, file), sf = envFile(repo, name2);
     const st = { project: p.name, file, kind, name: name2, path, localText: "", merge: { result: {}, toLocal: [], toStore: [], conflicts: [] } };
-    if (kind !== "values") {
+    if (kind !== "values" && kind !== "local") {
       out2.push(st);
       continue;
     }
+    if (kind === "local") st.example = example;
     if (existsSync15(path)) {
       st.localText = readFileSync13(path, "utf8");
       st.local = parseDotenv(st.localText);
@@ -9047,13 +9076,14 @@ async function observeEnv(repo, b, p, root, others) {
       st.storedFrom = s.from;
     }
     if (st.local && st.stored) st.base = readValues(snapshotFile(p.name, file));
-    st.merge = merge3(st.base, st.local ?? {}, st.stored ?? {});
+    st.merge = mergeOf(st);
     out2.push(st);
   }
   return out2;
 }
 function writeSnapshot(st, values) {
   const f = snapshotFile(st.project, st.file);
+  if (st.kind === "local") values = blank(values);
   if (!Object.keys(values).length) {
     rmSync6(f, { force: true });
     return;
@@ -9061,13 +9091,13 @@ function writeSnapshot(st, values) {
   mkdirSync13(dirname7(f), { recursive: true, mode: 448 });
   writeFileSync12(f, dumpDotenv(values), { mode: 384 });
 }
-async function applyEnv(repo, b, st, decide2) {
-  const m = merge3(st.base, st.local ?? {}, st.stored ?? {}, decide2);
+async function applyEnv(repo, b, st, decide2 = {}) {
+  const m = mergeOf(st, decide2);
   if (m.conflicts.length) throw new Error(`cs: ${st.project} ${st.file}: undecided keys ${m.conflicts.map((c2) => c2.key).join(", ")}`);
   const empty = !Object.keys(m.result).length;
   if (m.toStore.length) {
     if (empty) rmSync6(envFile(repo, st.name), { force: true });
-    else await b.writeEnvA(repo, st.name, m.result);
+    else await b.writeEnvA(repo, st.name, st.kind === "local" ? blank(m.result) : m.result);
   }
   if (m.toLocal.length) {
     if (st.local) {
@@ -9083,13 +9113,13 @@ async function applyEnv(repo, b, st, decide2) {
     }
   }
   writeSnapshot(st, m.result);
-  return { stored: m.toStore.length, local: m.toLocal.length };
+  return { stored: m.toStore.length, local: m.toLocal.length, toFill: "toFill" in m ? m.toFill.filter((k) => m.toLocal.includes(k)) : [] };
 }
 function snapshotInSync(st) {
-  if (st.kind !== "values" || !st.local || !st.stored || st.merge.toLocal.length || st.merge.toStore.length || st.merge.conflicts.length) return;
+  if (st.kind !== "values" && st.kind !== "local" || !st.local || !st.stored || st.merge.toLocal.length || st.merge.toStore.length || st.merge.conflicts.length) return;
   writeSnapshot(st, st.merge.result);
 }
-var snapshotFile, readValues, mtime, newestSide;
+var mergeOf, toFill, snapshotFile, readValues, mtime, newestSide;
 var init_envfiles = __esm({
   "src/envfiles.ts"() {
     "use strict";
@@ -9097,6 +9127,8 @@ var init_envfiles = __esm({
     init_paths();
     init_secrets();
     init_env();
+    mergeOf = (st, decide2 = {}) => st.kind === "local" ? mergeKeys(st.base && Object.keys(st.base), st.local ?? {}, Object.keys(st.stored ?? {}), st.example ?? {}) : merge3(st.base, st.local ?? {}, st.stored ?? {}, decide2);
+    toFill = (st) => st.kind === "local" ? mergeOf(st).toFill : [];
     snapshotFile = (project, file) => join17(stateDir(), "env", project, file);
     readValues = (f) => existsSync15(f) ? parseDotenv(readFileSync13(f, "utf8")) : void 0;
     mtime = (f) => new Date(statSync7(f).mtimeMs).toISOString();
@@ -9124,7 +9156,7 @@ async function gather(repo, m, man, o) {
       if (canRead) {
         try {
           env2[p.name] = await observeEnv(repo, backend, p, root, names);
-          f.env = env2[p.name].filter((s) => s.kind === "values" || s.kind === "unignored").map((s) => ({ file: s.file, kind: s.kind, merge: s.merge, from: s.storedFrom }));
+          f.env = env2[p.name].filter((s) => s.kind !== "tracked").map((s) => ({ file: s.file, kind: s.kind, merge: s.merge, from: s.storedFrom, ...s.kind === "local" ? { toFill: toFill(s) } : {} }));
         } catch (e) {
           envSkipped.push(`${p.name}: .env files not carried \u2014 ${String(e?.message ?? e).replace(/^cs: /, "").split("\n")[0]}`);
         }
@@ -9214,8 +9246,8 @@ function report(facts) {
   for (const f of facts) {
     for (const w of f.waiting) step(`${f.project} \xB7 ${w.branch}  handoff waiting from ${w.machine} (${when(w.when)})`);
     for (const u5 of f.units) if ((u5.dirty || u5.unpushed) && !u5.skip) step(`${f.project} \xB7 ${u5.branch}  ${[u5.dirty ? count(u5.dirty, "change") : "", u5.unpushed ? count(u5.unpushed, "unpushed commit") : ""].filter(Boolean).join(", ")}`);
-    for (const e of f.env ?? []) if (e.kind === "values") {
-      const what = describeMerge(e.merge, e.from);
+    for (const e of f.env ?? []) if (e.kind === "values" || e.kind === "local") {
+      const what = e.kind === "local" ? describeKeys({ ...e.merge, toFill: e.toFill ?? [] }, e.from) : describeMerge(e.merge, e.from);
       if (what) step(`${f.project} \xB7 ${e.file}  ${what}`);
     }
   }
@@ -9393,25 +9425,30 @@ async function runSync(repo, m, man, o = {}) {
     }
   });
   let envDone = 0;
-  if (envRows.length) await group(".env files", async () => {
+  const keysOnly = Object.values(env2).flat().filter((st) => st.kind === "local" && (st.merge.toLocal.length || st.merge.toStore.length));
+  if (envRows.length || keysOnly.length) await group(".env files", async () => {
     const b = await getBackend(m);
+    const one = async (label, st, decide2) => {
+      try {
+        const r2 = await applyEnv(repo, b, st, decide2);
+        envDone++;
+        step(`${label}: ${[r2.stored ? `${count(r2.stored, "key")} stored` : "", r2.local ? `${count(r2.local, "key")} taken${st.storedFrom ? ` from ${st.storedFrom}` : ""}` : ""].filter(Boolean).join(", ")}${r2.toFill.length ? yellow(` \u2014 to fill in: ${r2.toFill.join(", ")}`) : ""}`);
+      } catch (e) {
+        fail(`${label}: ${String(e?.message ?? e).replace(/^cs: /, "")}`);
+      }
+    };
     for (const a2 of envRows) {
       const st = env2[a2.project]?.find((s) => s.file === a2.branch);
       if (!st) {
         fail(`${a2.label}: not observed \u2014 not merged`);
         continue;
       }
-      try {
-        const r2 = await applyEnv(repo, b, st, decided[`${a2.project}:${a2.branch}`] ?? {});
-        envDone++;
-        step(`${a2.label}: ${[r2.stored ? `${count(r2.stored, "key")} stored` : "", r2.local ? `${count(r2.local, "key")} taken${st.storedFrom ? ` from ${st.storedFrom}` : ""}` : ""].filter(Boolean).join(", ")}`);
-      } catch (e) {
-        fail(`${a2.label}: ${String(e?.message ?? e).replace(/^cs: /, "")}`);
-      }
+      await one(a2.label, st, decided[`${a2.project}:${a2.branch}`] ?? {});
     }
+    for (const st of keysOnly) await one(`${st.project} \xB7 ${st.file}`, st, {});
   });
   for (const sts of Object.values(env2)) for (const st of sts) snapshotInSync(st);
-  const failed = chosen.length + over.length + replace.length - sent - applied - pushed - envDone;
+  const failed = chosen.length + over.length + replace.length + keysOnly.length - sent - applied - pushed - envDone;
   if (failed) rc = rc || 1;
   const last = await syncShare(repo, m, "share pushed", first.offline ? "committed locally \u2014 offline, pushed by the next sync" : "already in sync", copyBack, { timeout, commitOnly: first.offline });
   if (!last.ok) rc = 2;

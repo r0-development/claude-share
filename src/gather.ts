@@ -7,7 +7,7 @@ import type { Machine } from "./machine.js";
 import { checkoutRoot, selectedProjects, workspace, type Manifest } from "./manifest.js";
 import { denyHits, enabled, fetchHandoffs, REF_NS, units, userSlug, type Handoff } from "./handoff.js";
 import { getBackend } from "./secrets/index.js";
-import { observeEnv, type EnvState } from "./envfiles.js";
+import { observeEnv, toFill, type EnvState } from "./envfiles.js";
 import { isEnvName } from "./env.js";
 import type { Facts } from "./plan.js";
 import * as ui from "./ui.js";
@@ -28,7 +28,7 @@ export async function gather(repo: string, m: Machine, man: Manifest, o: { timeo
     const f: Facts = { project: p.name, layout: p.layout, units: [], waiting: [] };
     facts.push(f);
     if (p.env !== false) {
-      if (canRead) { try { env[p.name] = await observeEnv(repo, backend, p, root, names); f.env = env[p.name].filter((s) => s.kind === "values" || s.kind === "unignored").map((s) => ({ file: s.file, kind: s.kind as "values" | "unignored", merge: s.merge, from: s.storedFrom })); }
+      if (canRead) { try { env[p.name] = await observeEnv(repo, backend, p, root, names); f.env = env[p.name].filter((s) => s.kind !== "tracked").map((s) => ({ file: s.file, kind: s.kind as "values" | "local" | "unignored", merge: s.merge, from: s.storedFrom, ...(s.kind === "local" ? { toFill: toFill(s) } : {}) })); }
         catch (e: any) { envSkipped.push(`${p.name}: .env files not carried — ${String(e?.message ?? e).replace(/^cs: /, "").split("\n")[0]}`); } }
       else if (!envSkipped.length && hasIgnoredEnv(root)) envSkipped.push(backend.name === "none" ? ".env files not carried — secrets backend is 'none' (machine.toml [secrets].backend)" : `.env files not carried — this machine cannot read the secrets yet: cs secrets init here, or cs trust ${m.name} on a machine that can`);
     }

@@ -688,6 +688,35 @@ TOML
   grep -q "one: .env.staging is not gitignored — not carried (add it to .gitignore)" "$HOME6/env8.log" && [ ! -e "$ENVDIR6/one.staging.env" ] || { cat "$HOME6/env8.log"; die "unignored file refused with the fix"; }
   (cd "$ONE6" && git checkout -q -- .gitignore && rm .env.staging)
   pass env-values
+
+  # --- .env.local travels keys only (#11): a key new on the other machine arrives with the .env.example value or empty, an existing
+  #     value is never touched, nothing is asked (self-heal), bare cs names the keys to fill in; env.local = [...] makes another file keys-only
+  (cd "$ONE6" && echo 'PORT=3000' >> .env.example && git add .env.example && git -c user.name="Test User" -c user.email=test@example.com commit -qm "example port" && git push -q origin main)
+  (cd "$ONE7" && git pull -q)
+  printf 'HOST=10.0.0.7\n' > "$ONE7/.env.local"; printf 'KEY=1.2.3.4\nPORT=8080\n' > "$ONE6/.env.local"
+  CS_ANSWERS='[]' desk $CS sync > "$HOME6/local1.log" 2>&1 || { cat "$HOME6/local1.log"; die "desk sync stores the keys"; }
+  grep -q "one · .env.local  store 2 keys" "$HOME6/local1.log" && grep -q "one · .env.local: 2 keys stored" "$HOME6/local1.log" && [ -f "$ENVDIR6/one.local.env" ] || { cat "$HOME6/local1.log"; die "keys stored without a plan row"; }
+  ! git -C "$S/share.git" grep -q -e "1.2.3.4" -e "8080" HEAD || die "a .env.local value never reaches the share"
+  CS_ANSWERS='[]' laptop $CS sync > "$HOME7/local1.log" 2>&1 || { cat "$HOME7/local1.log"; die "laptop sync takes the keys"; }
+  grep -q "one · .env.local  store 1 key, take 2 keys from desk (1 to fill in)" "$HOME7/local1.log" && grep -q "one · .env.local: 1 key stored, 2 keys taken from desk — to fill in: KEY" "$HOME7/local1.log" || { cat "$HOME7/local1.log"; die "keys-only lines say what arrived and what to fill in"; }
+  [ "$(cat "$ONE7/.env.local")" = "$(printf 'HOST=10.0.0.7\nKEY=\nPORT=3000')" ] || { cat "$ONE7/.env.local"; die "laptop: own value kept, KEY empty, PORT from .env.example"; }
+  laptop $CS > "$HOME7/status-local.log" 2>&1 || { cat "$HOME7/status-local.log"; die "keys to fill are not something cs sync can do: exit 0"; }
+  grep -q "one .*\.env\.local: 1 key to fill in (KEY)" "$HOME7/status-local.log" && ! grep -q "run: cs sync" "$HOME7/status-local.log" || { cat "$HOME7/status-local.log"; die "cs names the key to fill in"; }
+  CS_ANSWERS='[]' desk $CS sync > "$HOME6/local2.log" 2>&1 || { cat "$HOME6/local2.log"; die "desk takes HOST"; }
+  grep -q "to fill in: HOST" "$HOME6/local2.log" && [ "$(cat "$ONE6/.env.local")" = "$(printf 'KEY=1.2.3.4\nPORT=8080\nHOST=')" ] || { cat "$HOME6/local2.log"; cat "$ONE6/.env.local"; die "desk: HOST arrives empty (no example), own values untouched"; }
+  sed -i 's/^HOST=$/HOST=10.0.0.6/' "$ONE6/.env.local"
+  CS_ANSWERS='[]' desk $CS sync > "$HOME6/local3.log" 2>&1 && grep -q "nothing to move" "$HOME6/local3.log" || { cat "$HOME6/local3.log"; die "filling a value in moves nothing"; }
+  # a key removed on one machine leaves the other machine's file too (the set of keys never drifts); the previous text is kept
+  sed -i '/^PORT=/d' "$ONE6/.env.local"
+  CS_ANSWERS='[]' desk $CS sync >/dev/null 2>&1 && CS_ANSWERS='[]' laptop $CS sync > "$HOME7/local2.log" 2>&1 || die "removal round trip"
+  grep -q "one · .env.local  drop 1 key here" "$HOME7/local2.log" && [ "$(cat "$ONE7/.env.local")" = "$(printf 'HOST=10.0.0.7\nKEY=')" ] && grep -q '^PORT=3000$' "$HOME7/.local/state/cs/env/one/.env.local.prev" || { cat "$HOME7/local2.log"; die "PORT dropped on laptop, previous text kept"; }
+  # env.local = [".env.site"] in the manifest: another file is keys-only
+  printf '\n[projects.one.env]\nlocal = [".env.site"]\n' >> "$HOME6/.config/claude-share/repo/projects.toml"
+  echo 'SITE=desk' > "$ONE6/.env.site"
+  CS_ANSWERS='[]' desk $CS sync > "$HOME6/local4.log" 2>&1 || { cat "$HOME6/local4.log"; die "desk stores .env.site keys"; }
+  grep -q "one · .env.site  store 1 key" "$HOME6/local4.log" && ! git -C "$S/share.git" grep -q "SITE=desk" HEAD || { cat "$HOME6/local4.log"; die ".env.site is keys-only"; }
+  CS_ANSWERS='[]' laptop $CS sync > "$HOME7/local3.log" 2>&1 && [ "$(cat "$ONE7/.env.site")" = "SITE=" ] || { cat "$HOME7/local3.log"; die ".env.site arrives with its key to fill in"; }
+  pass env-local
 else
   echo "SKIP env-values (sops/age not installed)"
 fi
