@@ -1,9 +1,9 @@
-/** cs link: side-store (<repo>/projects/<name>/) ⇄ every checkout, newer wins; autoMemoryDirectory injected. */
+/** cs link: project state (<share>/projects/<name>/) ⇄ every checkout, newer wins; autoMemoryDirectory injected. */
 import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, statSync, unlinkSync, utimesSync, writeFileSync } from "node:fs";
 import { dirname, join, relative } from "node:path";
 import * as git from "./git.js";
 import { contract, stateDir } from "./paths.js";
-import type { Machine } from "./config.js";
+import type { Machine } from "./machine.js";
 import { checkoutRoot, selectedProjects, workspace, type Manifest, type Project } from "./manifest.js";
 import { dumps } from "./jsonmerge.js";
 import * as ui from "./ui.js";
@@ -14,12 +14,12 @@ const EXCLUDE_LINES = [".claude/", ".mcp.json", "CLAUDE.md", "CLAUDE.local.md"];
 const SETTINGS_LOCAL = ".claude/settings.local.json";
 const NOT_SYNCED = new Set(["memory", "secrets"]);
 
-export const sideStore = (repo: string, p: Project) => join(repo, "projects", p.name);
-export const memoryDir = (repo: string, p: Project) => join(sideStore(repo, p), "memory");
+export const projectState = (repo: string, p: Project) => join(repo, "projects", p.name);
+export const memoryDir = (repo: string, p: Project) => join(projectState(repo, p), "memory");
 export function checkouts(p: Project, ws: string): string[] {
   const root = checkoutRoot(p, ws);
   if (!existsSync(root)) return [];
-  if (p.kind !== "git" || !git.isRepo(root)) return [root];
+  if (!git.isRepo(root)) return [root];
   const w = git.worktrees(root); return w.length ? w : [root];
 }
 function walk(dir: string, fn: (f: string) => void, skipDir?: (rel: string) => boolean, base = dir) {
@@ -45,7 +45,8 @@ function localize(rel: string, data: Buffer, mem: string): Buffer {
   let d: any = {}; try { d = data.toString("utf8").trim() ? JSON.parse(data.toString("utf8")) : {}; } catch {}
   d.autoMemoryDirectory = contract(mem); return Buffer.from(dumps(d));
 }
-const stateFile = (p: Project) => join(stateDir(), "link", `${p.name}.json`);
+/** Which files the project state placed last time, so a file deleted from the state is removed from the checkouts. */
+const stateFile = (p: Project) => join(stateDir(), "project-state", `${p.name}.json`);
 const loadState = (p: Project): Set<string> => { try { return new Set(JSON.parse(readFileSync(stateFile(p), "utf8")).files); } catch { return new Set(); } };
 const saveState = (p: Project, files: Set<string>) => { mkdirSync(dirname(stateFile(p)), { recursive: true }); writeFileSync(stateFile(p), JSON.stringify({ files: [...files].sort() }, null, 2)); };
 function write(path: string, data: Buffer, mtime?: number) {
@@ -61,7 +62,7 @@ export function ensureExclude(checkout: string, check: boolean, changes: string[
   if (!check) { mkdirSync(dirname(ex), { recursive: true }); writeFileSync(ex, text + (!text || text.endsWith("\n") ? "" : "\n") + "# claude-share managed files\n" + missing.join("\n") + "\n"); }
 }
 export function syncProject(repo: string, p: Project, ws: string, check = false): string[] {
-  const changes: string[] = []; const side = sideStore(repo, p); const targets = checkouts(p, ws);
+  const changes: string[] = []; const side = projectState(repo, p); const targets = checkouts(p, ws);
   if (!targets.length) return changes;
   const mem = memoryDir(repo, p); if (!existsSync(mem) && !check) mkdirSync(mem, { recursive: true });
   const previously = loadState(p);
@@ -70,18 +71,18 @@ export function syncProject(repo: string, p: Project, ws: string, check = false)
   for (const rel of [...all].sort()) {
     const sp = join(side, rel); const sideExists = existsSync(sp) && statSync(sp).isFile();
     const sideData = sideExists ? normalize(rel, readFileSync(sp)) : undefined; const sideMtime = sideExists ? statSync(sp).mtimeMs / 1000 : -1;
-    let best = sideData, bestM = sideMtime, from = "side-store";
+    let best = sideData, bestM = sideMtime, from = "project state";
     for (const t of targets) { const tp = join(t, rel); if (existsSync(tp) && statSync(tp).isFile()) { const d = normalize(rel, readFileSync(tp)); const mt = statSync(tp).mtimeMs / 1000;
       if ((!best || !d.equals(best)) && mt > bestM + 1e-6) { best = d; bestM = mt; from = contract(t); } } }
     if (!sideExists && previously.has(rel) && rel !== SETTINGS_LOCAL) {
-      for (const t of targets) { const tp = join(t, rel); if (existsSync(tp)) { changes.push(`remove ${rel} from ${contract(t)} (deleted in side-store)`); if (!check) unlinkSync(tp); } }
+      for (const t of targets) { const tp = join(t, rel); if (existsSync(tp)) { changes.push(`remove ${rel} from ${contract(t)} (deleted in project state)`); if (!check) unlinkSync(tp); } }
       continue;
     }
     if (best === undefined) { if (rel === SETTINGS_LOCAL) { best = Buffer.alloc(0); bestM = sideMtime; } else continue; }
-    if ((!sideData || !best.equals(sideData)) && (best.length || rel !== SETTINGS_LOCAL)) { changes.push(`side-store ← ${rel} (from ${from})`); if (!check) write(sp, best, bestM > 0 ? bestM : undefined); }
+    if ((!sideData || !best.equals(sideData)) && (best.length || rel !== SETTINGS_LOCAL)) { changes.push(`project state ← ${rel} (from ${from})`); if (!check) write(sp, best, bestM > 0 ? bestM : undefined); }
     if (best.length || rel !== SETTINGS_LOCAL) final.add(rel);
     for (const t of targets) { const tp = join(t, rel); const want = localize(rel, best, mem); const have = existsSync(tp) && statSync(tp).isFile() ? readFileSync(tp) : undefined;
-      if (!have || !have.equals(want)) { changes.push(`${contract(t)}/${rel} ← side-store`); if (!check) write(tp, want, bestM > 0 ? bestM : undefined); } }
+      if (!have || !have.equals(want)) { changes.push(`${contract(t)}/${rel} ← project state`); if (!check) write(tp, want, bestM > 0 ? bestM : undefined); } }
   }
   for (const t of targets) ensureExclude(t, check, changes);
   if (!check) saveState(p, final);

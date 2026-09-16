@@ -5,11 +5,28 @@
 - Runtime deps are bundled; the only runtime prerequisite is Node. Keep dependencies few: `@clack/prompts`, `commander`, `smol-toml`, `picocolors`.
 - One subcommand → one module in `src/`. `src/index.ts` only declares the command tree and dispatches.
 - Every filesystem path comes from `src/paths.ts` (HOME / CLAUDE_CONFIG_DIR / CS_CONFIG_DIR / XDG_STATE_HOME overridable)
-  so `tests/run-local.sh` runs against a throwaway HOME. `CS_ANSWERS` (JSON array) scripts every prompt; `CS_OFFLINE=1` disables network calls.
+  so `tests/run-local.sh` runs against a throwaway HOME. `CS_ANSWERS` (JSON array) scripts every prompt; `CS_OFFLINE=1` disables network calls;
+  `CS_NOTE_TIMEOUT` (seconds) caps headless `claude` when a handoff note is generated (tests put a fake `claude` on PATH).
 - All user interaction goes through `src/ui.ts` (clack). Never `console.log` in command modules except for machine-readable output.
 - Anything under a spinner (`ui.spin`, `ui.group`) must be async: `proc.exec` / `git.gitA`. `spawnSync` blocks the event loop and freezes spinners — only use it for instant local git queries. `cs ui-demo` (hidden) exercises every element.
 - Never write machine-specific values (absolute paths, hostnames) into the config repo; inject them at link/apply time.
 - Never touch a user's git index, stash, or working tree in project repos (`git add -A` only in the config repo and `kind=synced` repos).
-- `cs sync` must never leave a repo mid-rebase: abort, write a `blocked-*` marker, print the resolve commands.
+- The share is never left mid-rebase or blocked: a file changed on both machines is settled per file in the same run
+  (`cs sync` asks; hidden `share-sync` takes newest-wins), otherwise the rebase is aborted and the reason printed.
+  The losing side of any conflict goes to a `refs/cs/backup/…` ref, never away.
 - This repo is PUBLIC: no real names, emails, orgs, project names or hostnames anywhere (docs, examples, tests, commit messages) — placeholders only.
 - No AI attribution lines in commit messages.
+
+## Agent skills
+
+### Issue tracker
+
+Issues live in this repo's GitHub Issues (`gh` CLI). See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+Default vocabulary: `needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human`, `wontfix`. See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+Single-context: `CONTEXT.md` + `docs/adr/` at the repo root (created lazily by `/domain-modeling`). See `docs/agents/domain.md`.

@@ -19,7 +19,7 @@ Rules that matter:
 
 - **Projects and `~/.claude` live on the WSL ext4 filesystem** (`~/dev`), never under `/mnt/c`. `/mnt/c` is a network
   mount: git is 10–50× slower, file watching breaks, permissions are faked, Defender scans it. `cs doctor` fails on it.
-- Never open a WSL repo with Git for Windows; never set `core.autocrlf` in WSL.
+- Never open a WSL checkout with Git for Windows; never set `core.autocrlf` in WSL.
 - SSH keys live in WSL `~/.ssh` (per machine, `cs ssh setup`). No agent forwarding from Windows.
 - Clock drift after sleep breaks git timestamps and OAuth: `sudo hwclock -s` or `wsl --shutdown`.
 - Sandbox-hostile leftovers like `file:Zone.Identifier` appear when files are copied from Windows; `cs new` gitignores them.

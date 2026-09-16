@@ -1,11 +1,11 @@
-/** cs secrets …, cs enroll, cs revoke */
+/** cs secrets …, cs trust, cs untrust */
 import { chmodSync, existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync, rmSync } from "node:fs";
 import { join, relative } from "node:path";
 import { spawnSync } from "node:child_process";
 import * as git from "./git.js";
 import { contract, home } from "./paths.js";
 import { which } from "./deps.js";
-import type { Machine } from "./config.js";
+import type { Machine } from "./machine.js";
 import { checkoutRoot, projectForPath, workspace, type Manifest } from "./manifest.js";
 import { dumpDotenv, envFile, getBackend, parseDotenv } from "./secrets/index.js";
 import * as S from "./secrets/sops.js";
@@ -53,7 +53,7 @@ export async function diff(repo: string, m: Machine, man: Manifest, project: str
 export async function environment(repo: string, m: Machine, man: Manifest, project?: string, warnMissing = true): Promise<NodeJS.ProcessEnv> {
   const env = { ...process.env }; if (env.CS_SECRETS_LOADED === "1") return env;
   const b = await getBackend(m);
-  if (b.name !== "none" && !b.ready(repo)) { if (warnMissing) ui.warn("secrets not available on this machine (cs secrets init / cs enroll) — continuing without them"); return env; }
+  if (b.name !== "none" && !b.ready(repo)) { if (warnMissing) ui.warn("secrets not available on this machine (cs secrets init / cs trust) — continuing without them"); return env; }
   Object.assign(env, b.loadEnv(repo, "global")); if (project) Object.assign(env, b.loadEnv(repo, project)); env.CS_SECRETS_LOADED = "1"; return env;
 }
 export async function exec(repo: string, m: Machine, man: Manifest, project: string | undefined, cmd: string[]): Promise<number> {
@@ -62,16 +62,16 @@ export async function exec(repo: string, m: Machine, man: Manifest, project: str
   const env = await environment(repo, m, man, project);
   const p = spawnSync(cmd[0], cmd.slice(1), { stdio: "inherit", env }); return p.status ?? 1;
 }
-export async function enroll(repo: string, m: Machine, machine: string) {
+export async function trust(repo: string, m: Machine, machine: string) {
   const pf = S.machinePubFile(repo, machine); if (!existsSync(pf)) throw new Error(`cs: ${contract(pf)} not found — run cs secrets init on ${machine} and cs sync on both sides first`);
   const pub = readFileSync(pf, "utf8").trim(); const recs = S.recipients(repo); if (recs.includes(pub)) { ui.ok(`${machine} is already a recipient`); return 0; }
-  S.writeRecipients(repo, [...recs, pub]); const n = await ui.spin("re-encrypting secrets for the new recipient…", () => S.updatekeys(repo)); git.git(["add", "-A", ".sops.yaml", "secrets"], repo); git.commit(repo, `secrets: enroll ${machine}`, "cs", `cs@${m.name}`);
+  S.writeRecipients(repo, [...recs, pub]); const n = await ui.spin("re-encrypting secrets for the new recipient…", () => S.updatekeys(repo)); git.git(["add", "-A", ".sops.yaml", "secrets"], repo); git.commit(repo, `secrets: trust ${machine}`, "cs", `cs@${m.name}`);
   ui.ok(`${machine} can now decrypt  ${ui.dim(`${n} file(s) re-encrypted`)}`); return 0;
 }
-export async function revoke(repo: string, m: Machine, machine: string) {
+export async function untrust(repo: string, m: Machine, machine: string) {
   const pf = S.machinePubFile(repo, machine); const pub = existsSync(pf) ? readFileSync(pf, "utf8").trim() : ""; const recs = S.recipients(repo);
   if (pub && recs.includes(pub)) { S.writeRecipients(repo, recs.filter((r) => r !== pub)); const n = await ui.spin("re-encrypting secrets without that machine…", () => S.updatekeys(repo)); rmSync(join(repo, "machines", machine), { recursive: true, force: true });
-    git.git(["add", "-A", ".sops.yaml", "secrets", "machines"], repo); git.commit(repo, `secrets: revoke ${machine}`, "cs", `cs@${m.name}`); ui.ok(`revoked ${machine}; re-encrypted ${n} file(s)`); }
+    git.git(["add", "-A", ".sops.yaml", "secrets", "machines"], repo); git.commit(repo, `secrets: untrust ${machine}`, "cs", `cs@${m.name}`); ui.ok(`untrusted ${machine}; re-encrypted ${n} file(s)`); }
   else ui.warn(`${machine} was not a recipient`);
   const b = await getBackend(m); const keys = new Set<string>();
   for (const name of ["global", ...Object.keys(man_projects(repo))]) for (const k of Object.keys(b.loadEnv(repo, name))) keys.add(k);
@@ -86,21 +86,21 @@ export async function recovery(repo: string, m: Machine) {
   const pub = text.split("\n").find((l) => l.startsWith("# public key:"))!.split(":")[1].trim(); const priv = text.split("\n").find((l) => l.startsWith("AGE-SECRET-KEY-"))!;
   const pf = S.machinePubFile(repo, "recovery"); mkdirSync(join(repo, "machines", "recovery"), { recursive: true }); writeFileSync(pf, pub + "\n");
   S.writeRecipients(repo, [...S.recipients(repo), pub]); const n = await S.updatekeys(repo); git.git(["add", "-A", ".sops.yaml", "secrets", "machines/recovery"], repo); git.commit(repo, "secrets: recovery recipient", "cs", `cs@${m.name}`);
-  ui.ok(`recovery recipient added; re-encrypted ${n} file(s)`); ui.note([priv, "", ui.dim("On a bare machine: write it to ~/.config/sops/age/keys.txt, run cs secrets init, enroll the machine's own key, delete it.")], "Store this in your password manager now — it is not saved anywhere else");
+  ui.ok(`recovery recipient added; re-encrypted ${n} file(s)`); ui.note([priv, "", ui.dim("On a bare machine: write it to ~/.config/sops/age/keys.txt, run cs secrets init, trust the machine's own key, delete it.")], "Store this in your password manager now — it is not saved anywhere else");
   return 0;
 }
 
-/** Wizard step: make sure this machine can decrypt — enroll from another machine, or self-enroll with the recovery key. */
+/** Wizard step: make sure this machine can decrypt — trust from another machine, or self-trust with the recovery key. */
 export async function ensureRecipient(repo: string, m: Machine, interactive: boolean): Promise<boolean> {
   const b = await getBackend(m); if (b.name === "none" || b.ready(repo)) return true;
   const { existsSync: ex, readdirSync: rd } = await import("node:fs");
   const md = join(repo, "machines");
   const others = ex(md) ? rd(md).filter((d) => d !== m.name && d !== "recovery" && S.recipients(repo).includes((() => { try { return readFileSync(join(md, d, "age.pub"), "utf8").trim(); } catch { return ""; } })())) : [];
   const where = others.length ? `on ${others.map((x) => ui.bold(x)).join(" or ")}` : "on a machine that already has secrets";
-  if (!interactive) { ui.warn(`secrets: not a recipient yet — ${where}: cs sync && cs enroll ${m.name} && cs sync; then cs sync here`); return false; }
+  if (!interactive) { ui.warn(`secrets: not a recipient yet — ${where}: cs sync && cs trust ${m.name} && cs sync; then cs sync here`); return false; }
   for (;;) {
     const choice = await ui.select("This machine cannot decrypt secrets yet. How do you want to enable it?", [
-      { value: "enroll", label: "Enroll it from another machine", hint: "recommended — nothing secret is typed or copied" },
+      { value: "trust", label: "Trust it from another machine", hint: "recommended — nothing secret is typed or copied" },
       { value: "recovery", label: "Use the recovery key", hint: "paste it once; it is discarded afterwards" },
       { value: "skip", label: "Skip for now", hint: "Claude runs without secrets until then" },
     ]);
@@ -116,17 +116,17 @@ export async function ensureRecipient(repo: string, m: Machine, interactive: boo
         const own = readFileSync(S.machinePubFile(repo, m.name), "utf8").trim();
         if (!S.recipients(repo).includes(own)) S.writeRecipients(repo, [...S.recipients(repo), own]);
         const n = await ui.spin("re-encrypting secrets for this machine…", () => S.updatekeys(repo));
-        git.git(["add", "-A", ".sops.yaml", "secrets"], repo); git.commit(repo, `secrets: enroll ${m.name} (recovery key)`, "cs", `cs@${m.name}`);
-        ui.ok(`enrolled with the recovery key  ${ui.dim(`${n} file(s) re-encrypted`)}`); void pub;
-      } catch (e: any) { ui.fail(`could not enroll: ${e.message}`); continue; }
+        git.git(["add", "-A", ".sops.yaml", "secrets"], repo); git.commit(repo, `secrets: trust ${m.name} (recovery key)`, "cs", `cs@${m.name}`);
+        ui.ok(`trusted via the recovery key  ${ui.dim(`${n} file(s) re-encrypted`)}`); void pub;
+      } catch (e: any) { ui.fail(`could not trust: ${e.message}`); continue; }
       finally { if (prev === undefined) delete process.env.SOPS_AGE_KEY_FILE; else process.env.SOPS_AGE_KEY_FILE = prev; rmSync(tmp, { force: true }); }
       return b.ready(repo);
     }
-    ui.note([`${where} run:`, "", `  ${ui.bold(`cs sync && cs enroll ${m.name} && cs sync`)}`, "", ui.dim("that machine re-encrypts the secrets so this one can read them — no secret leaves either machine")], "Enroll this machine");
+    ui.note([`${where} run:`, "", `  ${ui.bold(`cs sync && cs trust ${m.name} && cs sync`)}`, "", ui.dim("that machine re-encrypts the secrets so this one can read them — no secret leaves either machine")], "Trust this machine");
     if (!(await ui.proceed("done on the other machine?", "Done — check now", "Skip for now"))) return false;
-    const { runSync } = await import("./sync.js"); const { loadManifest } = await import("./manifest.js");
-    await ui.spin("syncing…", () => runSync(repo, m, loadManifest(repo), { pullOnly: true, timeout: 20 }));
+    const { runShareSync } = await import("./sharesync.js"); const { loadManifest } = await import("./manifest.js");
+    await ui.spin("syncing…", () => runShareSync(repo, m, loadManifest(repo), { pullOnly: true, timeout: 20 }));
     if (b.ready(repo)) { ui.ok("this machine can decrypt secrets"); return true; }
-    ui.warn("still not a recipient — did the other machine run cs sync after enrolling?");
+    ui.warn("still not a recipient — did the other machine run cs sync after trusting it?");
   }
 }

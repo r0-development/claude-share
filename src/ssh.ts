@@ -6,7 +6,7 @@ import * as git from "./git.js";
 import * as github from "./github.js";
 import { expand, home, contract } from "./paths.js";
 import * as platform from "./platform.js";
-import type { Machine } from "./config.js";
+import type { Machine } from "./machine.js";
 import { keyPath, type Identity, type Manifest } from "./manifest.js";
 import * as ui from "./ui.js";
 

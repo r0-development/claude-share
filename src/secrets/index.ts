@@ -1,6 +1,6 @@
 /** Secrets backends: sops (default) | none. */
 import { join } from "node:path";
-import type { Machine } from "../config.js";
+import type { Machine } from "../machine.js";
 
 export interface Backend {
   name: string;
@@ -8,6 +8,9 @@ export interface Backend {
   ready(repo: string): boolean;
   loadEnv(repo: string, name: string): Record<string, string>;
   writeEnv(repo: string, name: string, values: Record<string, string>): string;
+  /** The same, without blocking the event loop — what runs under a spinner (cs sync) must use these. */
+  loadEnvA(repo: string, name: string): Promise<Record<string, string>>;
+  writeEnvA(repo: string, name: string, values: Record<string, string>): Promise<string>;
   edit(repo: string, name: string): void;
   status(repo: string, m: Machine): void;
 }

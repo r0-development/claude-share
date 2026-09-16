@@ -12,19 +12,19 @@ Arguments after `bash -s --` go to `cs init` (e.g. `bash -s -- --repo <url> --na
 ## 1. Machine name, then join an existing share or create one
 
 First question: what this machine is called (`desktop-work`, `laptop`, …). Every key it creates carries that name
-(`cs:<machine>:master`, `cs:<machine>:<identity>`), so keys are recognizable on GitHub and revocable per machine.
+(`cs:<machine>:share-key`, `cs:<machine>:<identity>`), so keys are recognizable on GitHub and revocable per machine.
 
-**Join** — paste the config repo URL in any form (`https://github.com/<owner>/claude-share-config` is fine).
-cs checks whether the repo exists (public or private), then makes sure this machine can reach it:
+**Join** — paste the share URL in any form (`https://github.com/<owner>/claude-share-config` is fine).
+cs checks whether the share exists on GitHub (public or private), then makes sure this machine can reach it:
 
-- a **master key** `~/.ssh/cs/master` is generated. It is this machine's key for the config repo *only* — separate
+- a **share key** `~/.ssh/cs/share` is generated. It is this machine's key for the share *only* — separate
   from all identities and never involving a token.
 - the public key is shown with the link `…/settings/keys/new` and the title to use; add it as a **deploy key with write
   access** (your account's SSH keys work too), choose *Done — check access*, and cs verifies it.
-- the repo is cloned to `~/.config/claude-share/repo`, pinned to the master key.
+- the share is cloned to `~/.config/claude-share/share`, pinned to the share key.
 
-**Create** — name the repo (default `claude-share-config`), create it *empty and private* on GitHub, paste its URL;
-same master-key step; cs initializes it from the template and pushes.
+**Create** — name the share's GitHub repo (default `claude-share-config`), create it *empty and private* on GitHub, paste its URL;
+same share-key step; cs initializes it from the template and pushes.
 
 ## 2. Projects and location
 
@@ -41,13 +41,13 @@ Then it offers to store a GitHub token per owner (needed only for `cs new`; skip
 
 On a brand-new share the wizard first asks for your first identity.
 
-## 4. Apply, link, secrets, hooks, doctor, clone
+## 4. Apply, project state, secrets, hooks, doctor, clone
 
-`~/.claude` is rendered, Claude files are linked, this machine's age key is created and published, the Claude Code
+`~/.claude` is rendered, project state is placed into every checkout, this machine's age key is created and published, the Claude Code
 hooks and the 15-minute timer are installed, doctor runs, and cs offers to clone the projects for your profiles.
 
-The secrets step asks how to enable decryption on this machine: **enroll it from another machine** (the wizard
-shows the exact command — `cs sync && cs enroll <this-machine> && cs sync` — and checks when you say it's done), **use the
+The secrets step asks how to enable decryption on this machine: **trust it from another machine** (the wizard
+shows the exact command — `cs sync && cs trust <this-machine> && cs sync` — and checks when you say it's done), **use the
 recovery key** (pasted once, discarded), or skip for now.
 
 Afterwards: **open a new terminal** (the `claude()` wrapper) and log into Claude Code once (`claude`).
@@ -57,9 +57,9 @@ Afterwards: **open a new terminal** (the `claude()` wrapper) and log into Claude
 ```sh
 cs init --repo https://github.com/<owner>/claude-share-config --name work-mac --profiles personal,acme --non-interactive
 ```
-Fails with instructions instead of prompting when the master key is not yet registered.
+Fails with instructions instead of prompting when the share key is not yet registered.
 
 ## Day to day
 
-Nothing. Hooks push after each Claude response and pull at session start; the timer syncs every 15 min.
-`cs` shows the dashboard; `cs sync` when it says blocked; `cs doctor` when something feels off.
+`cs sync` when leaving and when arriving; bare `cs` shows what is waiting and what is stale; `cs doctor` when something
+feels off. The hooks and the timer keep the share itself in sync in between (README: *The daily loop*).

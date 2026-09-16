@@ -1,12 +1,12 @@
-/** cs init — wizard (no args) or flag-driven. Join/create a share via a per-machine master key. */
+/** cs init — wizard (no args) or flag-driven. Join/create a share via a per-machine share key. */
 import { copyFileSync, existsSync, mkdirSync, readdirSync, writeFileSync } from "node:fs";
 import { dirname, join, relative } from "node:path";
 import * as git from "./git.js";
 import * as github from "./github.js";
-import * as master from "./master.js";
-import { contract, expand, home, repoDirDefault, templatesDir } from "./paths.js";
+import * as sharekey from "./sharekey.js";
+import { contract, expand, home, shareDirDefault, templatesDir } from "./paths.js";
 import * as platform from "./platform.js";
-import { loadMachine, machineExists, saveMachine, type Machine } from "./config.js";
+import { loadMachine, machineExists, saveMachine, type Machine } from "./machine.js";
 import { checkoutRoot, loadManifest, NAME_RE, selectedProjects, workspace, type Manifest, type Project } from "./manifest.js";
 import { runApply } from "./apply.js";
 import { runLink } from "./link.js";
@@ -15,14 +15,14 @@ import { runDeps } from "./deps.js";
 import * as identity from "./identity.js";
 import * as ui from "./ui.js";
 
-export const CONFIG_REPO_NAME = "claude-share-config";
-export const PHASES = ["deps", "repo", "ssh", "apply", "link", "secrets", "hooks", "doctor"];
+export const SHARE_REPO_NAME = "claude-share-config";
+export const PHASES = ["deps", "share", "ssh", "apply", "link", "secrets", "hooks", "doctor"];
 const owner = (v: string) => (/^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})$/.test(v) ? undefined : "a GitHub login, e.g. octocat");
 const email = (v: string) => (/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(v) ? undefined : "not an email address");
 const name = (v: string) => (NAME_RE.test(v) ? undefined : "letters, digits, . _ - only");
 
-export function newConfigRepo(dest: string, branch = "master"): string {
-  const src = templatesDir() + "/config-repo"; mkdirSync(dest, { recursive: true });
+export function newShare(dest: string, branch = "master"): string {
+  const src = templatesDir() + "/share"; mkdirSync(dest, { recursive: true });
   const copy = (d: string) => { for (const e of readdirSync(d, { withFileTypes: true })) { const f = join(d, e.name), t = join(dest, relative(src, f)); if (e.isDirectory()) { mkdirSync(t, { recursive: true }); copy(f); } else if (!existsSync(t)) { mkdirSync(dirname(t), { recursive: true }); copyFileSync(f, t); } } };
   copy(src);
   for (const d of ["plans", "projects", "secrets", "claude/skills", "claude/rules", "claude/agents", "machines"]) { mkdirSync(join(dest, d), { recursive: true }); if (!readdirSync(join(dest, d)).length) writeFileSync(join(dest, d, ".gitkeep"), ""); }
@@ -32,40 +32,40 @@ export function newConfigRepo(dest: string, branch = "master"): string {
 }
 
 async function accessLoop(sshUrl: string, gh: [string, string] | undefined, interactive: boolean, machine: string) {
-  const { pub, created } = master.ensureKey(machine); if (created) ui.step(`master key generated  ${ui.dim(master.KEY)}`);
-  let [ok, err] = await ui.spin("checking access to the config repo…", () => master.canAccess(sshUrl));
+  const { pub, created } = sharekey.ensureKey(machine); if (created) ui.step(`share key generated  ${ui.dim(sharekey.KEY())}`);
+  let [ok, err] = await ui.spin("checking access to the share…", () => sharekey.canAccess(sshUrl));
   let tries = 0;
-  while (!ok) { master.instructions(pub, gh, machine); if (!interactive) throw new Error("cs: config repo not reachable with the master key (see instructions above)");
-    if (!(await ui.proceed("added the key?", "Done — check access", "Abort")) || tries++ >= 10) throw new Error("cs: aborted — config repo not reachable");
-    [ok, err] = await ui.spin("checking access…", () => master.canAccess(sshUrl)); if (!ok) ui.warn(`still no access — ${err}`); }
-  ui.step("config repo reachable with the master key");
+  while (!ok) { sharekey.instructions(pub, gh, machine); if (!interactive) throw new Error("cs: share not reachable with the share key (see instructions above)");
+    if (!(await ui.proceed("added the key?", "Done — check access", "Abort")) || tries++ >= 10) throw new Error("cs: aborted — share not reachable");
+    [ok, err] = await ui.spin("checking access…", () => sharekey.canAccess(sshUrl)); if (!ok) ui.warn(`still no access — ${err}`); }
+  ui.step("share reachable with the share key");
 }
 async function cloneConfig(sshUrl: string, target: string) {
   mkdirSync(dirname(target), { recursive: true });
-  await ui.spin("cloning the config repo…", () => git.gitA(["clone", "-q", sshUrl, target], undefined, { sshKey: master.keyPath() }));
-  master.configureRepo(target); ui.step(`config repo cloned to ${ui.dim(contract(target))}`);
+  await ui.spin("cloning the share…", () => git.gitA(["clone", "-q", sshUrl, target], undefined, { sshKey: sharekey.keyPath() }));
+  sharekey.configureRepo(target); ui.step(`share cloned to ${ui.dim(contract(target))}`);
 }
 async function askUrl(prompt: string): Promise<[string, [string, string] | undefined]> {
   for (;;) {
     const raw = await ui.text(prompt, { placeholder: "https://github.com/<owner>/claude-share-config", validate: (v) => (v.trim() ? undefined : "a URL is required") });
-    const [sshUrl, gh] = master.parseRepoUrl(raw);
-    if (gh) { const vis = await ui.spin("looking up the repository…", () => master.isPublic(master.httpsUrl(...gh)));
-      if (vis === true) ui.step(`${gh[0]}/${gh[1]} found (public)`); else if (vis === false) ui.step(`${gh[0]}/${gh[1]} found (private) — access via the master key`);
+    const [sshUrl, gh] = sharekey.parseRepoUrl(raw);
+    if (gh) { const vis = await ui.spin("looking up the repository…", () => sharekey.isPublic(sharekey.httpsUrl(...gh)));
+      if (vis === true) ui.step(`${gh[0]}/${gh[1]} found (public)`); else if (vis === false) ui.step(`${gh[0]}/${gh[1]} found (private) — access via the share key`);
       else { ui.warn(`${gh[0]}/${gh[1]} not found or unreachable`); if (!(await ui.confirm("use this URL anyway?", false))) continue; } }
     return [sshUrl, gh];
   }
 }
 async function join_(target: string, interactive: boolean, machine: string, repoUrl = "") {
-  if (existsSync(target) && git.isRepo(target)) { ui.skip(`config repo already at ${contract(target)}`); master.configureRepo(target); return; }
-  const [sshUrl, gh] = repoUrl ? master.parseRepoUrl(repoUrl) : await askUrl("config repo URL");
+  if (existsSync(target) && git.isRepo(target)) { ui.skip(`share already at ${contract(target)}`); sharekey.configureRepo(target); return; }
+  const [sshUrl, gh] = repoUrl ? sharekey.parseRepoUrl(repoUrl) : await askUrl("share URL");
   await accessLoop(sshUrl, gh, interactive, machine); await cloneConfig(sshUrl, target);
 }
 async function create(target: string, interactive: boolean, machine: string) {
-  const n = await ui.text("name for your new config repo", { default: CONFIG_REPO_NAME, validate: name });
+  const n = await ui.text("name for your new share", { default: SHARE_REPO_NAME, validate: name });
   ui.note([ui.cyan("https://github.com/new"), ui.dim("no README, no .gitignore, no license — completely empty")], `Create an empty PRIVATE repository named '${n}' on GitHub`);
   const [sshUrl, gh] = await askUrl("paste the new repo's URL"); await accessLoop(sshUrl, gh, interactive, machine);
-  newConfigRepo(target); if (!git.remoteUrl(target)) git.git(["remote", "add", "origin", sshUrl], target); master.configureRepo(target);
-  await ui.spin("pushing the initial config repo…", () => git.gitA(["push", "-q", "-u", "origin", git.currentBranch(target)], target)); ui.step(`config repo initialized and pushed  ${ui.dim(sshUrl)}`);
+  newShare(target); if (!git.remoteUrl(target)) git.git(["remote", "add", "origin", sshUrl], target); sharekey.configureRepo(target);
+  await ui.spin("pushing the initial share…", () => git.gitA(["push", "-q", "-u", "origin", git.currentBranch(target)], target)); ui.step(`share initialized and pushed  ${ui.dim(sshUrl)}`);
 }
 async function machineName(existingName: string, interactive: boolean): Promise<string> {
   if (machineExists()) return existingName || loadMachine().name;
@@ -90,7 +90,7 @@ async function machinePhase(repo: string, nm: string, profiles: string[], ws: st
     let projects: Project[] = []; try { projects = Object.values(loadManifest(repo).projects); } catch {}
     if (interactive && projects.length) {
       const groups: Record<string, { value: string; label: string; hint?: string }[]> = {};
-      for (const p of projects) { const g = p.profiles.includes("all") ? "every machine" : p.profiles.join(", "); (groups[g] ??= []).push({ value: p.name, label: p.name, hint: p.kind === "git" ? `${p.identity} · ${p.url?.replace(/^git@github\.com:/, "").replace(/\.git$/, "")}` : p.kind }); }
+      for (const p of projects) { const g = p.profiles.includes("all") ? "every machine" : p.profiles.join(", "); (groups[g] ??= []).push({ value: p.name, label: p.name, hint: p.url ? `${p.identity} · ${p.url.replace(/^git@github\.com:/, "").replace(/\.git$/, "")}` : "no remote yet" }); }
       const names = new Set(projects.map((p) => p.name));
       let picked = new Set<string>(); let initial = projects.map((p) => p.name);
       for (;;) {
@@ -149,7 +149,7 @@ async function keysAndTokens(repo: string, m: Machine, interactive: boolean, ski
 }
 function push(repo: string) {
   if (!git.remoteUrl(repo)) return; const ab = git.aheadBehind(repo);
-  if (ab === undefined || ab[0]) { const r = git.git(["push", "-q", "-u", "origin", git.currentBranch(repo)], repo, { check: false, timeout: 60 }); r.code === 0 ? ui.ok("config repo pushed") : ui.fail(`push failed: ${r.err}`); }
+  if (ab === undefined || ab[0]) { const r = git.git(["push", "-q", "-u", "origin", git.currentBranch(repo)], repo, { check: false, timeout: 60 }); r.code === 0 ? ui.ok("share pushed") : ui.fail(`push failed: ${r.err}`); }
 }
 async function finish(repo: string, m: Machine, interactive: boolean, skip: string[]): Promise<number> {
   const man = loadManifest(repo);
@@ -157,37 +157,38 @@ async function finish(repo: string, m: Machine, interactive: boolean, skip: stri
   if (!skip.includes("link")) await ui.group("project files linked", () => runLink(repo, m, man), { done: "already in sync" });
   let secretsOk = true;
   if (!skip.includes("secrets") && m.secretsBackend !== "none") { const sc = await import("./secretscmd.js"); await ui.group("secrets", () => sc.init(repo, m, interactive)); secretsOk = await sc.ensureRecipient(repo, m, interactive); }
-  if (!skip.includes("hooks")) await ui.group("automatic sync", async () => { (await import("./hooks.js")).runHooks(repo, m, "install"); runApply(repo, m, loadManifest(repo)); });
-  await ui.group("config repo", () => push(repo), { done: "nothing to push" });
-  let rc = 0; if (!skip.includes("doctor")) rc = await ui.group("doctor", () => runDoctor(repo, m, man, false, true), { done: "all checks passed" });
-  const ws = workspace(man, m); const missing = selectedProjects(man, m).filter((p) => p.kind !== "local" && !existsSync(checkoutRoot(p, ws)));
+  if (!skip.includes("hooks")) await ui.group("automatic sync", async () => { await (await import("./hooks.js")).runHooks(repo, m, "install"); runApply(repo, m, loadManifest(repo)); });
+  await ui.group("share", () => push(repo), { done: "nothing to push" });
+  let rc = 0; if (!skip.includes("doctor")) rc = await ui.group("doctor", () => runDoctor(repo, m, loadManifest(repo), false, true), { done: "all checks passed" });
+  const ws = workspace(man, m); const missing = selectedProjects(man, m).filter((p) => p.url && !existsSync(checkoutRoot(p, ws)));
   if (missing.length && interactive && (await ui.confirm(`clone ${missing.length} project(s) now (${missing.slice(0, 6).map((p) => p.name).join(", ")}${missing.length > 6 ? "…" : ""})?`, true))) await ui.group(`clone ${missing.length} project(s)`, async () => (await import("./projects.js")).clone(repo, m, man, []));
   const rcFile = platform.shellRc().split("/").pop();
   ui.note([`${ui.bold("open a new terminal")} ${ui.dim(`(or: source ~/${rcFile})`)} — that gives you ${ui.bold("cs")} on PATH and the ${ui.bold("claude")} wrapper`,
-    `${ui.bold("claude")}  ${ui.dim("log in once on this machine")}`, `${ui.bold("cs status")}  ${ui.dim("dashboard")}`, `${ui.bold("cs new <project> --<identity>")}  ${ui.dim("start something")}`,
-    ...(secretsOk ? [] : ["", ui.yellow(`secrets: not enabled yet — on a trusted machine run  cs sync && cs enroll ${m.name} && cs sync,  then  cs sync  here`)])], "next");
+    `${ui.bold("claude")}  ${ui.dim("log in once on this machine")}`, `${ui.bold("cs")}  ${ui.dim("what is waiting or stale")}`, `${ui.bold("cs sync")}  ${ui.dim("when leaving and when arriving")}`, `${ui.bold("cs new <project> --<identity>")}  ${ui.dim("start something")}`,
+    ...(secretsOk ? [] : ["", ui.yellow(`secrets: not enabled yet — on a trusted machine run  cs sync && cs trust ${m.name} && cs sync,  then  cs sync  here`)])], "next");
   ui.outro(ui.bold("done"));
   return rc;
 }
 export interface InitOpts { repo?: string; owner?: string; name?: string; profiles?: string[]; skip?: string[]; workspace?: string; interactive?: boolean; key?: string; installDeps?: boolean }
 export async function init(o: InitOpts): Promise<number> {
-  const skip = o.skip ?? []; for (const x of skip) if (!PHASES.includes(x)) throw new Error(`cs: unknown phase '${x}' (phases: ${PHASES.join(", ")})`);
-  const interactive = o.interactive ?? (ui.isTTY() || ui.isScripted()); const target = repoDirDefault();
+  const skip = (o.skip ?? []).map((x) => (x === "repo" ? "share" : x));   // the share phase's old name, still accepted
+  for (const x of skip) if (!PHASES.includes(x)) throw new Error(`cs: unknown phase '${x}' (phases: ${PHASES.join(", ")})`);
+  const interactive = o.interactive ?? (ui.isTTY() || ui.isScripted()); const target = shareDirDefault();
   const localSrc = o.repo && !/:\/\/|^git@/.test(o.repo) ? expand(o.repo) : undefined;
   ui.intro("claude-share setup");
   if (!skip.includes("deps")) await ui.group("prerequisites", () => runDeps(o.installDeps, true));
   const nm = await machineName(o.name ?? "", interactive);
   const already = existsSync(target) && git.isRepo(target);
-  if (already) { ui.skip(`config repo already at ${contract(target)}`); if (git.remoteUrl(target)) master.configureRepo(target); }
-  else if (!skip.includes("repo")) {
-    if (localSrc) { if (!(git.isRepo(localSrc) || git.isBare(localSrc))) throw new Error(`cs: ${localSrc} is not a git repo`); mkdirSync(dirname(target), { recursive: true }); git.git(["clone", "-q", localSrc, target]); ui.ok(`config repo cloned from ${contract(localSrc)}`); }
-    else if (o.repo) { const [sshUrl, gh] = master.parseRepoUrl(o.repo);
+  if (already) { ui.skip(`share already at ${contract(target)}`); if (git.remoteUrl(target)) sharekey.configureRepo(target); }
+  else if (!skip.includes("share")) {
+    if (localSrc) { if (!(git.isRepo(localSrc) || git.isBare(localSrc))) throw new Error(`cs: ${localSrc} is not a git repo`); mkdirSync(dirname(target), { recursive: true }); git.git(["clone", "-q", localSrc, target]); ui.ok(`share cloned from ${contract(localSrc)}`); }
+    else if (o.repo) { const [sshUrl, gh] = sharekey.parseRepoUrl(o.repo);
       if (o.key) { mkdirSync(dirname(target), { recursive: true }); git.git(["clone", "-q", sshUrl, target], undefined, { sshKey: expand(o.key) }); git.git(["config", "core.sshCommand", `ssh -i ${contract(expand(o.key))} -o IdentitiesOnly=yes`], target); }
       else { await accessLoop(sshUrl, gh, interactive, nm); await cloneConfig(sshUrl, target); } }
-    else if (o.owner) { const token = await github.ensureToken(o.owner, interactive); const url = `git@github.com:${o.owner}/${CONFIG_REPO_NAME}.git`;
-      if (await github.ensureRepo(o.owner, CONFIG_REPO_NAME, token, true, "claude-share config (private)")) { ui.ok(`created private repo ${o.owner}/${CONFIG_REPO_NAME}`); newConfigRepo(target); git.git(["remote", "add", "origin", url], target); await accessLoop(url, [o.owner, CONFIG_REPO_NAME], interactive, nm); master.configureRepo(target); }
-      else { await accessLoop(url, [o.owner, CONFIG_REPO_NAME], interactive, nm); await cloneConfig(url, target); } }
-    else if (interactive) { const choice = await ui.select("What would you like to do?", [{ value: "join", label: "Join an existing share", hint: "you already have a config repo (from another machine)" }, { value: "create", label: "Create a new share", hint: "first machine, no config repo yet" }]);
+    else if (o.owner) { const token = await github.ensureToken(o.owner, interactive); const url = `git@github.com:${o.owner}/${SHARE_REPO_NAME}.git`;
+      if (await github.ensureRepo(o.owner, SHARE_REPO_NAME, token, true, "claude-share config (private)")) { ui.ok(`created private repo ${o.owner}/${SHARE_REPO_NAME}`); newShare(target); git.git(["remote", "add", "origin", url], target); await accessLoop(url, [o.owner, SHARE_REPO_NAME], interactive, nm); sharekey.configureRepo(target); }
+      else { await accessLoop(url, [o.owner, SHARE_REPO_NAME], interactive, nm); await cloneConfig(url, target); } }
+    else if (interactive) { const choice = await ui.select("What would you like to do?", [{ value: "join", label: "Join an existing share", hint: "you already have a share (from another machine)" }, { value: "create", label: "Create a new share", hint: "first machine, no share yet" }]);
       if (choice === "create") await create(target, true, nm); else await join_(target, true, nm); }
     else throw new Error("cs: pass --repo <url|path> or --owner <github-owner>, or run cs init in a terminal");
   }

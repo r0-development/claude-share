@@ -3,12 +3,12 @@ import { existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, readlinkSy
 import { basename, dirname, join, resolve } from "node:path";
 import { claudeDir, contract, expand, home, stateDir, toolRoot } from "./paths.js";
 import { shellRc } from "./platform.js";
-import type { Machine } from "./config.js";
+import type { Machine } from "./machine.js";
 import { globs, keyPath, type Manifest } from "./manifest.js";
 import { diffKeys, dumps, loads, mergeLayers } from "./jsonmerge.js";
 import * as ui from "./ui.js";
 
-const LINK_ITEMS = ["CLAUDE.md", "rules", "agents", "themes", "keybindings.json"];
+const LINK_ITEMS = ["CLAUDE.md", "rules", "agents", "themes", "keybindings.json", "statusline.sh"];
 const GIT_MARK = "# >>> claude-share >>>", GIT_END = "# <<< claude-share <<<";
 const stamp = () => new Date().toISOString().replace(/[-:]/g, "").slice(0, 15);
 
@@ -33,8 +33,8 @@ function link(src: string, dst: string, check: boolean, changes: string[]) {
     changes.push(`relink ${contract(dst)}`); if (!check) { unlinkSync(dst); symlinkSync(src, dst); } return;
   }
   if (existsSync(dst)) {
-    if (statSync(dst).isDirectory()) { changes.push(`adopt ${contract(dst)} → ${contract(src)} (merge)`); if (!check) { mkdirSync(src, { recursive: true }); mergeDirInto(src, dst); symlinkSync(src, dst); } }
-    else if (!existsSync(src)) { changes.push(`adopt ${contract(dst)} → ${contract(src)}`); if (!check) { mkdirSync(dirname(src), { recursive: true }); renameSync(dst, src); symlinkSync(src, dst); } }
+    if (statSync(dst).isDirectory()) { changes.push(`import ${contract(dst)} → ${contract(src)} (merge)`); if (!check) { mkdirSync(src, { recursive: true }); mergeDirInto(src, dst); symlinkSync(src, dst); } }
+    else if (!existsSync(src)) { changes.push(`import ${contract(dst)} → ${contract(src)}`); if (!check) { mkdirSync(dirname(src), { recursive: true }); renameSync(dst, src); symlinkSync(src, dst); } }
     else { changes.push(`replace ${contract(dst)} (backup kept)`); if (!check) { backup(dst); symlinkSync(src, dst); } }
     return;
   }
@@ -62,7 +62,7 @@ export function applyLinks(repo: string, check: boolean, changes: string[]) {
   const cdir = claudeDir(); mkdirSync(cdir, { recursive: true });
   for (const item of LINK_ITEMS) link(join(repo, "claude", item), join(cdir, item), check, changes);
   // skills.sh (`npx skills add … -g`) installs into ~/.agents/skills and symlinks ~/.claude/skills/<name> there;
-  // make that directory (and its lock file) the repo's claude/skills so installs land in the config repo directly.
+  // make that directory (and its lock file) the repo's claude/skills so installs land in the share directly.
   const skills = join(repo, "claude", "skills"), agents = join(home(), ".agents");
   link(skills, join(agents, "skills"), check, changes);
   link(join(repo, "claude", "skill-lock.json"), join(agents, ".skill-lock.json"), check, changes);

@@ -1,183 +1,248 @@
 # claude-share (`cs`)
 
-Keep your projects **and** your Claude Code setup identical on every machine.
+Your projects and your Claude Code setup, identical on every machine. Stop working on one machine, continue on
+another: uncommitted work, Claude's memory, `.env` files, settings, skills — all of it arrives.
 
-- **Projects manifest** — one `projects.toml` says where each project lives (which GitHub owner, which identity),
-  which machines get it, and whether it is a normal git repo, an auto-synced notes repo, or local-only.
-- **Claude Code config** — `~/.claude/settings.json` (layered base → profile → machine), `CLAUDE.md`, rules, skills,
-  agents, keybindings, plans: rendered/linked from a private config repo.
-- **Per-project Claude state** — `CLAUDE.md`, `.claude/**`, `.mcp.json` and **auto-memory** live in a side-store in the
-  config repo and are copied into every checkout (and worktree) without ever being committed to the project repo.
-- **Git identity follows the remote URL** (`includeIf hasconfig`), so work and personal repos can sit side by side.
-- **Secrets** — sops + age, per-machine keys, decrypted into `claude`'s environment at launch so `${VAR}` in `.mcp.json` resolve. Never plaintext in git.
-- **Automatic sync** — Claude Code hooks push after each response and pull at session start; a timer syncs every 15 min.
+Two things to remember:
 
-Two repos: this tool (public) and your own config repo (private, holds all your data). Node 18+ and git — nothing else
-(the installer brings Node if it's missing). WSL2 on Windows, macOS, Linux. Windows-native is unsupported.
+```sh
+cs          # what is waiting for me, what is stale here
+cs sync     # run when leaving and when arriving: handoffs, pushes, .env files, the share
+```
 
-## Quick start
+Everything else is occasional (`cs new`, `cs add`, `cs secrets`, `cs trust`), setup (`cs init`), or health (`cs doctor`).
+Vocabulary: `CONTEXT.md`. Setting a machine up: `docs/BOOTSTRAP.md`.
+
+## The daily loop
+
+### `cs` — what is waiting, what is stale
+
+Bare `cs` fetches the share and every project (short time cap per remote, offline tolerated) and prints one line each:
+
+```
+claude-share  desk
+│  profiles personal, acme  workspace ~/dev
+│
+│  project      branch   state
+│  share        master   synced 4 min ago
+│  billing-api  feat/x   3 dirty  ↑2 unpushed  cs sync
+│  notes        master   handoff waiting from laptop (2 h ago)  cs sync
+│  site         master   .env: take 1 key from laptop  cs sync
+│  tool         master   .env.local: 1 key to fill in (API_URL)
+│  docs         master   clean
+│
+└  run: cs sync
+```
+
+A project's line shows dirty changes, `↑N unpushed` commits, `handoff waiting from <machine>`, what its `.env` files
+would move, `missing here` — and `cs sync` after it when that run would do or ask something there. The share's line shows
+its own state and when it last synced. Directories under the projects location that no project claims are listed with
+the `cs add` command that registers them. The last line is the command that resolves what was found: `run: cs sync`
+when anything is pending, `run: cs doctor --fix` when only repairs are; the exit code is 1 in both cases (`cs --no-fetch`
+for scripts and prompts).
+
+### `cs sync` — leaving and arriving with one verb
+
+```sh
+cs sync                          # on leaving and on arriving; it works out the direction itself
+cs sync -m "auth flow half done"  # sets the note carried by the handoffs sent
+```
+
+One run, in this order:
+
+1. **The share** is synced: commit → pull --rebase → push. Memory and plan files that changed on both machines are
+   union-merged; any other file changed on both machines is asked, per file (this machine's version / the other
+   machine's, newest offered first), and the rebase finishes in the same run. The share is never left mid-rebase.
+2. **Repairs**, without asking: `~/.claude` (settings, links), git identity includes, the shell rc block, the Claude Code
+   hooks and the 15-minute timer, and the project state placed into every checkout and worktree.
+3. **Projects missing here** are cloned.
+4. **Projects are checked** — every checkout and worktree, every waiting handoff, every `.env` file — and one **plan
+   screen** appears:
+
+   ```
+   What should cs sync do?
+   ◻ handoffs to send
+     ◼ billing-api · feat/x     3 changes, 2 unpushed commits
+   ◻ handoffs to apply
+     ◼ notes · master           from laptop, 2 h ago — Stopped: outline done. Next: fill in section 3.
+   ◻ branches to push
+     ◻ billing-api · feat/x     2 unpushed commits → upstream
+   ◻ .env files to store or update
+     ◼ site · .env              take 1 key from laptop
+   ```
+
+   Handoffs to send (dirty work here), handoffs to apply (work waiting for this machine) and `.env` files with
+   something to move are pre-checked; branches with unpushed commits are listed **unchecked** — the handoff carries
+   those commits either way, and pushing a real branch stays your decision, made only on this screen. One
+   confirmation. An empty plan skips the screen (`nothing to move — no handoffs waiting, nothing stale here`).
+5. **Execute**: handoffs sent, handoffs applied (the note is shown), `.env` files merged, ticked branches pushed.
+6. **The share** is pushed again with what the run changed (project state, memory, notes), and a one-line summary
+   closes the run: `1 handoff(s) sent · 1 .env file(s) merged`.
+
+Nothing is written to a project remote before the plan screen (ADR-0002). Offline, the local parts still run and the
+share's changes wait for the next sync. A second `cs sync` on the same machine replaces your own earlier handoff.
+
+**A handoff** is a snapshot of one project's uncommitted work and local-only commits, pushed to
+`handoff/<user>/<branch>` on the project's own remote — one per branch — and turned back into uncommitted changes
+where it is applied. The sending machine is never touched (a private index builds it); files that look secret
+(`.env*`, `*.pem`, `*.key`, `*token*`, `*secret*`) are refused; a worktree is created on demand for a branch that is
+not checked out. **Every handoff carries a note**: `-m` sets it; otherwise headless `claude` writes "where this stopped,
+what is next" from the project's latest session transcript (under a spinner, capped at `CS_NOTE_TIMEOUT` seconds,
+60 by default); with no transcript, no `claude` on PATH, no network, a failure or the cap, the note is derived from git
+(branch, changed files, last commit, session end time, and why there is no summary). The note is shown when the
+handoff is applied and again at the next Claude Code session start there. A dirty checkout with a handoff waiting for
+the same branch is asked after the plan screen: keep mine and leave it waiting (default) / apply the handoff / send
+mine over it — the losing side goes to `refs/cs/backup/<branch>/<time>` in that checkout, never away.
+Details: `docs/HANDOFF.md`.
+
+**`.env` files** travel through the share, never through a handoff. Every gitignored `.env`, `.env.production`, … at a
+project's root is one encrypted entry in the share's secrets area. Values merge **per key** against the snapshot of
+the last sync, so a key changed on the other machine is never lost and the local file is patched in place (comments
+and order kept); only a key changed on both machines since the last sync is asked, per key (no terminal: newest wins).
+Gitignored `.env.local` / `.env.*.local` travel **keys only**, without a row: a key new on the other machine arrives
+with the `.env.example` value or empty, an existing value is never touched, and `cs` says
+`.env.local: 1 key to fill in (KEY)` until it is. Files git tracks are git's business; an untracked `.env` git would
+commit is refused until it is gitignored. Details: `docs/SECRETS.md`.
+
+### What runs by itself
+
+The Claude Code hooks push the share after a response (at most every two minutes) and pull it at session start (and print a waiting note);
+a timer syncs the share every 15 minutes. That is the share only — nothing touches a project remote unattended.
+`cs sync` re-installs both when they are missing.
+
+## Projects
+
+Every project is a git checkout with a remote, listed in the share's `projects.toml` together with which machines get
+it, and living at `~/dev/<name>` (the projects location is chosen at `cs init`; same layout on every machine).
+
+```sh
+cs new billing-api --acme            # dir, git init -b master, private GitHub repo under the identity's owner, first push, registered, Claude wired in
+cs add ~/dev/existing                # register a directory; creates its private GitHub repo when it has no remote
+cd ~/dev/thing && cs add             # default: the current directory (url, branch, identity, worktree layout inferred)
+cs clone                             # on a new machine (cs sync does this too)
+```
+
+`cs new` takes `--<identity>` (or `--<github-owner>`), `--profiles a,b`, `-d "description"`, `--public`; `cs add` takes
+`--identity`, `--profiles`, `--description`, `--public`, `--name`, `--no-commit`. Both are re-runnable. In `projects.toml`, `profiles` decides which machines get a
+project (a machine gets the projects whose profiles intersect its own), `machines = [...]` is a hard allowlist,
+`layout = "worktrees"` marks a `<name>/repo` clone with sibling worktrees, `handoff = false` / `env = false` opt a
+project out of handoffs / `.env` travel, `handoff.extra`, `handoff.exclude`, `handoff.never` and `env.local` tune what
+travels (`docs/HANDOFF.md`, `docs/SECRETS.md`).
+
+**Project state** — a project's `CLAUDE.md`, `.claude/**`, `.mcp.json` and auto-memory — lives in the share under
+`projects/<name>/` and is placed into every checkout and worktree by `cs sync` (hidden from git via
+`.git/info/exclude`; `autoMemoryDirectory` points at the share). Newer content in a checkout flows back. Auto-memory,
+`CLAUDE.md`/`.claude/` files or MCP servers that already exist on a machine are taken into the share with `cs import` (below).
+
+## Secrets and trust
+
+sops + age; every machine has its own key, only public keys are in the share. Values are decrypted into `claude`'s
+environment at launch (the `claude()` shell function from `shell/cs.sh` runs `cs secrets exec -- claude`), so `${VAR}`
+in a project state's `.mcp.json` resolves. Never plaintext in git.
+
+```sh
+cs secrets set global API_TOKEN=…        # shared across projects; available to Claude's MCP servers as ${API_TOKEN}
+cs secrets set billing-api DB_URL=…      # project-scoped (overrides global)
+cs secrets get global                    # masked; --show for values
+cs secrets edit billing-api              # in $EDITOR
+cs trust laptop                          # let another machine read the secrets (run where you already can; then cs sync on both)
+```
+
+A new machine gets access either by `cs trust <machine>` from a machine that already has it, or by pasting the
+recovery key at `cs init`. Details, the `.env` rules and the threat model: `docs/SECRETS.md`.
+
+## Identities
+
+An identity is a git author (name, email) plus the GitHub owner and SSH key it commits as; a project uses the identity
+whose owner its remote belongs to (git `includeIf hasconfig`, rendered by `cs sync`), so work and personal projects sit
+side by side. There is deliberately no global `user.email`: a checkout that matches no identity refuses to commit
+rather than committing as the wrong person.
+
+```sh
+cs identity                                                                     # list: commits as, owner, key present?, token stored?, projects
+cs identity add acme --owner acme-org --name "Your Name" --email you@acme.com    # renders the git includes, offers to store a token for acme-org
+cs identity rename acme client-a                                                # everywhere: manifest, projects, key files, published pubkeys
+```
+
+Each machine has its own SSH key per identity (`~/.ssh/cs/<id>`, GitHub title `cs:<machine>:<id>`), created and
+registered at `cs init` (`cs ssh setup` later, hidden). GitHub API tokens are per owner, stored locally, never synced,
+and asked for when first needed (`cs new` on that owner). Token permissions: fine-grained, resource owner = the user or
+org, repository access *All repositories*, *Administration: read & write*; add *Git SSH keys: read & write* if
+`cs ssh setup` should register keys for a user account. Overrides in the identity's block of `projects.toml`:
+`ssh_key = "…"`, `url_globs = [...]`.
+
+## Health and updates
+
+```sh
+cs doctor          # platform, tools, links, settings drift, identities, remotes, hooks, timer, old on-disk names
+cs doctor --fix    # repairs what it can: missing GitHub repos, remotes with an old owner, on-disk names (docs/MIGRATION.md)
+cs update          # the tool itself (git pull --ff-only in its checkout); `cs` says when one is available
+```
+
+## Setup
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/r0-development/claude-share/master/install.sh | bash
 ```
 
-One command on a fresh WSL2 Ubuntu or macOS: installs prerequisites (apt on Debian/Ubuntu, Node 22 user-local from
-nodejs.org), the tool to `~/.local/share/claude-share`, links `~/.local/bin/cs`, and starts `cs init` — a wizard: join an existing share (paste its GitHub URL) or create a new one; a per-machine **master key**
-gets this machine into the config repo (deploy key); pick a machine name and profiles; identities from the repo get their
-SSH keys and tokens; choose where projects live (default `~/dev`); then everything is applied and projects can be cloned. Details: `docs/BOOTSTRAP.md`.
+One command on a fresh WSL2 Ubuntu or macOS: installs what is missing (Node 22 user-locally when there is no Node ≥ 18),
+puts the tool in `~/.local/share/claude-share`, links `~/.local/bin/cs`, and starts `cs init` — a wizard: machine name;
+join an existing share (paste its GitHub URL) or create one; a per-machine **share key** (deploy key, reaches only the
+share) gets this machine in; which projects this machine gets and where they live; identities → SSH keys → tokens;
+`~/.claude` rendered, project state placed, secrets access (trust from another machine, or the recovery key), hooks and
+timer, doctor, clone. Every step is re-runnable; `cs init --repo <url> --name <machine> --profiles a,b --non-interactive`
+for scripts. Details: `docs/BOOTSTRAP.md`; Windows: `docs/WINDOWS.md`.
 
-```sh
-cs identity add acme --owner acme-org --name "Your Name" --email you@acme.com   # more identities
-cs new <project> --acme            # dir, git init -b master, private GitHub repo, first push, registered, Claude wired in
-```
+Two repos: this tool (public) and your own share (private, holds all your data). Node 18+ and git — nothing else.
+WSL2 on Windows, macOS, Linux; Windows-native is unsupported.
 
-`cs` with no arguments prints the dashboard. `cs <command> -h` for options.
+## Commands
 
----
-
-## Identities
-
-Two things matter:
-
-- **GitHub owner** — the account a repository lives under: *you* (`<your-login>`) or an *organization* (`acme-org`).
-  Repo creation, the API token and the URL `git@github.com:<owner>/<repo>` all hang off it.
-- **Identity** — how you act toward one owner: the name/email on commits and the SSH key. Its id is a nickname you
-  type (`--personal`, `--acme`). Name identities after the owner they belong to; one per client/employer org.
-
-Everything else is derived. An identity in `projects.toml` is just:
-
-```toml
-[identities.acme]
-owner = "acme-org"
-name  = "Your Name"
-email = "you@acme.com"
-```
-
-| derived | value |
-|---|---|
-| SSH key (per machine, never copied) | `~/.ssh/cs/<id>` — generated and registered by `cs ssh setup`; GitHub title `cs:<machine>:<id>` |
-| which repos use it | any repo whose `origin` is `git@github.com:<owner>/…` (git `includeIf hasconfig`, rendered by `cs apply`) — cloned by `cs` or by hand |
-| GitHub login of the key | whatever `ssh -T` reports; for an org it is *your user account* that is a member of the org |
-| API token | per owner, `cs token set <owner>` (asked for automatically when first needed); stored locally, never synced |
-
-There is deliberately **no global `user.email`**: a repo that matches no identity refuses to commit rather than committing as the wrong person.
+What `cs --help` lists; `cs <command> -h` for options.
 
 | command | what it does |
 |---|---|
-| `cs identity` | list: commits as, owner, key present?, token stored?, projects using it |
-| `cs identity add <id> --owner <owner> --name "<name>" --email <email>` | add it, render git includes, offer to store a token for `<owner>` (`--key <path>` to use an existing key, `--no-token`) |
-| `cs identity rename <old> <new>` | rename everywhere (manifest, projects, key files, published pubkeys, includes) |
-| `cs ssh setup` / `cs ssh check` | create missing identity keys, publish public halves, register on GitHub (user accounts, via token) or print for pasting; verify |
-| `cs ssh master` | the machine's **master key** `~/.ssh/cs/master`: reaches the config repo only (deploy key); nothing else uses it |
-| `cs token set\|check\|rm\|ls <owner>` | API tokens |
-| `cs doctor --fix` | report identity mismatches; rewrite remotes that use an old owner name or SSH alias |
+| `cs` | what is waiting for me, what is stale here |
+| `cs sync` | the daily verb: bring this machine up to date and leave nothing stale here |
+| `cs new <name>` | create a project: dir, git, private GitHub repo, first push, registered, Claude wired in |
+| `cs add [path]` | register an existing directory as a project (default: cwd); creates its private GitHub repo when it has no remote |
+| `cs clone [names...]` | clone the projects selected for this machine that are missing here |
+| `cs secrets` | encrypted secrets in the share: set \| get \| edit |
+| `cs identity` | git identities: who commits, with which key, under which GitHub owner |
+| `cs trust <machine>` | trust another machine: let it read the secrets |
+| `cs doctor` | check this machine: tools, links, identities, remotes, hooks, timer; --fix repairs what it can |
+| `cs update` | update the cs tool itself |
+| `cs init` | set this machine up (wizard) — or --repo \<url\> / --owner \<owner\> for scripts |
 
-```sh
-cs identity add personal --owner <your-login> --name "Your Name" --email you@example.com
-cs identity add acme     --owner acme-org     --name "Your Name" --email you@acme.com
-cs ssh setup                       # prints any public key you still have to paste on GitHub
-cs new billing-api --acme          # or --acme-org: id and owner both select the identity
-```
+## For debugging
 
-Token permissions (GitHub → Settings → Developer settings → Fine-grained tokens): resource owner = the user or org,
-repository access **All repositories**, **Administration: read & write**. Add the account permission
-**Git SSH keys: read & write** if `cs ssh setup` should register keys for a user account.
-
-Overrides for unusual cases go in the identity's block: `ssh_key = "…"` (a key elsewhere), `url_globs = [...]`
-(extra URL patterns, e.g. an org's old name).
-
----
-
-## Projects
-
-Every project is a `[projects.<name>]` entry in `projects.toml` and a directory `~/dev/<name>` (same layout on every machine).
+Hidden commands: the halves `cs sync` is made of and a few helpers. They stay callable; nothing in daily use needs them.
 
 | command | what it does |
 |---|---|
-| `cs new <name> --<identity>` | brand-new project: `mkdir`, `git init -b master`, private GitHub repo under the identity's owner, first commit + push, register, link Claude files. Re-runnable. `--public`, `--no-github`, `--synced`, `-d "description"` |
-| `cs add [path]` | register an existing directory (default: cwd; infers url, branch, identity, worktree layout) |
-| `cs clone [name…]` | clone the projects this machine's profiles select but that are missing here |
-| `cs status` / `cs` | every project: branch, dirty, unpushed, behind, identity mismatch, missing, unregistered dirs |
+| `cs status [--no-fetch] [--all]` | what bare `cs` shows (`--all` includes projects skipped by profile) |
+| `cs share-sync [--pull-only\|--push-only] [--resolve ours\|theirs\|newest]` | the share alone: commit / pull --rebase / push — what the hooks and the timer run. It cannot ask, so a file changed on both machines is settled newest-wins; the share is never left mid-rebase |
+| `cs handoff [-m note] [--all] [--allow <glob>] [--overwrite]` · `cs resume [--all] [--replace] [--keep-remote]` · `cs handoffs [ls\|gc\|drop]` | the handoff halves: send the cwd project's work, apply what is waiting, list / prune / delete waiting handoffs |
+| `cs note --print` | print (once) the note of the last handoff applied for the cwd project — what the SessionStart hook runs |
+| `cs apply [--check]` · `cs link [--check]` | render `~/.claude` and the git includes from the share; place project state into checkouts (`--check` reports drift, changes nothing) |
+| `cs import memory\|project\|mcp <name>` | take auto-memory, `CLAUDE.md`/`.claude/`/`.mcp.json` or MCP servers (with their secrets, as `${VAR}`) that already exist on this machine into the project state |
+| `cs hooks [install\|remove\|status] [--no-timer]` | the Claude Code hooks and the timer |
+| `cs secrets init\|status\|unset\|pull\|push\|diff\|exec\|recovery` | the secrets backend: this machine's key, whole-file `.env` transfer without a merge, run a command with the values in its environment, a recovery key for your password manager |
+| `cs untrust <machine>` | remove a machine's access to the secrets and list what to rotate |
+| `cs ssh [setup\|check\|share-key]` · `cs token set\|check\|rm <owner>` · `cs token ls` | identity keys and the share key; GitHub API tokens |
+| `cs deps [--install]` · `cs share new\|path` · `cs project id` | prerequisites; a share skeleton, the share's path; the cwd project's name |
+| `cs ui-demo` | every UI element with fake data |
 
-Project kinds: `git` (normal), `synced` (auto-committed notes; no manual git), `local` (registered so other machines know
-it exists, never cloned). `profiles` decide which machines get a project; `machines = [...]` is a hard allowlist;
-`layout = "worktrees"` for a `<name>/repo` clone with sibling worktrees.
+## Migrating from an older version
 
-```sh
-cs new <project> --personal
-cs new <project> --personal --synced     # notes: committed and pushed automatically by cs sync
-cd ~/dev/existing-thing && cs add --profiles personal
-cs clone                                  # on a new machine after cs init
-```
-
----
-
-## Claude Code config and memory
-
-`~/.claude` is rendered from `<config repo>/claude/` by `cs apply`; per-project files come from `<config repo>/projects/<name>/`
-via `cs link`.
-
-| command | what it does |
-|---|---|
-| `cs apply [--check]` | `settings.json` = `settings.base.json` ⊕ `settings.<profile>.json` ⊕ `settings.<machine>.json`; symlink `CLAUDE.md`, `rules/`, `skills/*`, `agents/`, `themes/`, `keybindings.json`, `plans/`; `~/.agents/skills` → `claude/skills` so `npx skills add … -g` (skills.sh) installs into the config repo; git identity includes; shell rc block |
-| `cs link [name…] [--check]` | copy `CLAUDE.md`, `.claude/**`, `.mcp.json` from the side-store into each checkout and worktree (hidden from git via `.git/info/exclude`); point `autoMemoryDirectory` at the config repo; newer content flows back |
-| `cs adopt memory <name>` | move existing auto-memory from `~/.claude/projects/…/memory` into the side-store |
-| `cs adopt project <name>` | take existing Claude files from a checkout into the side-store |
-| `cs adopt mcp <name>` | move MCP servers (with secrets) from `~/.claude.json` into the side-store `.mcp.json` with `${VAR}` placeholders |
-
-Global rules for all projects: `claude/CLAUDE.md` and `claude/rules/*.md` in the config repo (`cs apply` links them to `~/.claude`, so editing
-`~/.claude/CLAUDE.md` edits the repo). Global skills: `claude/skills/<name>/SKILL.md` — write them there or `npx skills add <owner/repo> -g`.
-
----
-
-## Secrets
-
-sops + age; every machine has its own key, only public keys are committed. See `docs/SECRETS.md`.
-
-```sh
-cs secrets set global COOLIFY_TOKEN=…     # shared across projects
-cs secrets set <project> DB_PASSWORD=…    # project-scoped (overrides global)
-cs secrets get global                      # masked; --show for values
-cs secrets push <project>                  # encrypt the project's .env into the store; pull / diff for the other direction
-cs enroll <machine>                        # grant a new machine access (run where you already have it)
-cs secrets recovery                        # print a recovery key once → password manager
-```
-
-`claude` (the shell function from `shell/cs.sh`) runs `cs secrets exec -- claude`, so `${VAR}` in `.mcp.json` resolve.
-
----
-
-## Handoff — uncommitted work between machines
-
-```sh
-cs handoff -m "where I stopped"      # snapshot the cwd project's working tree → wip/<user>/<branch> on its remote
-cs resume                            # on the other machine: back to uncommitted changes, branch deleted, note shown
-cs wip                               # parcels waiting · cs wip gc --older-than 14
-```
-
-Manual by design — nothing is pushed to a company remote by itself; `cs status` reminds you when a session ended with
-uncommitted work. The sending machine is never touched (private index), secrets-looking files are refused, worktrees are
-created on demand. See `docs/HANDOFF.md`.
-
----
-
-## Sync, machines, health
-
-| command | what it does |
-|---|---|
-| `cs sync` | commit → pull --rebase → push the config repo (+ `synced` projects). Memory/plan collisions union-merge; other conflicts abort cleanly: `cs sync --resolve ours\|theirs` |
-| `cs hooks install\|status\|remove` | Claude Code hooks (push after each response, pull at session start) + a 15-min timer (systemd user / launchd) |
-| `cs doctor [--fix]` | platform, tools, links, settings drift, identities, remotes, leftover local-scope MCP secrets |
-| `cs deps [--install]` | prerequisites; installs age, sops, fnm, claude user-locally |
-| `cs update` | update the tool |
-
-Docs: `docs/BOOTSTRAP.md`, `docs/SECRETS.md`, `docs/WINDOWS.md`.
+Machines set up before the September 2026 redesign keep working; `cs doctor` lists the on-disk names that changed and
+`cs doctor --fix` moves them. Run `cs sync` on both machines first so no handoff is waiting. See `docs/MIGRATION.md`.
 
 ## Developing
 
 ```sh
 git clone https://github.com/r0-development/claude-share.git && cd claude-share
 npm install            # dev toolchain only (TypeScript, esbuild, @clack/prompts, commander, smol-toml)
-npm run build          # → dist/cs.js (committed; bin/cs runs it)
+npm run build          # → dist/cs.js (committed; run by bin/cs)
 npm test               # typecheck + build + unit (node:test) + e2e (tests/run-local.sh, throwaway HOME)
 ```

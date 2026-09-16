@@ -23,13 +23,12 @@ default_branch = "master"     # branch `cs new` creates
 # url_globs = ["git@github.com:acme-org/**", "git@github.com:acme-old-name/**"]   # optional override (renamed org)
 
 # ---- Projects ---------------------------------------------------------------
-# kind:     git (clone from url) | synced (private auto-committed repo, no manual git) | local (never leaves one machine)
+# Every project is a git checkout with a remote (`cs new` / `cs add` create the GitHub repo when needed).
 # profiles: which machine profiles want it (machine.toml `profiles`); "all" = every machine
 # machines: optional hard allowlist of machine names
 # layout:   plain | worktrees  (checkout lives in <name>/repo, siblings are git worktrees)
 
 # [projects.example]
-# kind = "git"
 # url = "git@github.com:your-org/example.git"
 # identity = "personal"
 # profiles = ["all"]
@@ -41,3 +40,8 @@ default_branch = "master"     # branch `cs new` creates
 # never   = ["*.sqlite"]          # extends the secret-file deny list
 # exclude = ["vendor/"]           # never snapshot these
 # (or `handoff = false` inside [projects.example] to opt out)
+
+# .env files (cs sync) — gitignored .env, .env.<x> travel with their values, encrypted in the share, merged per key;
+# gitignored .env.local, .env.<x>.local travel keys only (a new key arrives with the .env.example value, else empty):
+# env = false                     # inside [projects.example]: never carry this project's .env files
+# env.local = [".env.site"]       # extra files that are site-specific, like .env.local (keys only)
