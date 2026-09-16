@@ -8,7 +8,7 @@ import { globs, keyPath, type Manifest } from "./manifest.js";
 import { diffKeys, dumps, loads, mergeLayers } from "./jsonmerge.js";
 import * as ui from "./ui.js";
 
-const LINK_ITEMS = ["CLAUDE.md", "rules", "agents", "themes", "keybindings.json"];
+const LINK_ITEMS = ["CLAUDE.md", "rules", "agents", "themes", "keybindings.json", "statusline.sh"];
 const GIT_MARK = "# >>> claude-share >>>", GIT_END = "# <<< claude-share <<<";
 const stamp = () => new Date().toISOString().replace(/[-:]/g, "").slice(0, 15);
 

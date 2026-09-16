@@ -6997,7 +6997,7 @@ var init_apply = __esm({
     init_manifest();
     init_jsonmerge();
     init_ui();
-    LINK_ITEMS = ["CLAUDE.md", "rules", "agents", "themes", "keybindings.json"];
+    LINK_ITEMS = ["CLAUDE.md", "rules", "agents", "themes", "keybindings.json", "statusline.sh"];
     GIT_MARK = "# >>> claude-share >>>";
     GIT_END = "# <<< claude-share <<<";
     stamp = () => (/* @__PURE__ */ new Date()).toISOString().replace(/[-:]/g, "").slice(0, 15);
