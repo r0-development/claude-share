@@ -6,7 +6,7 @@ import * as git from "./git.js";
 import * as github from "./github.js";
 import { contract, expand } from "./paths.js";
 import type { Machine } from "./machine.js";
-import { appendProject, checkoutRoot, container, identityForUrl, keyPath, loadManifest, NAME_RE, selectedProjects, updateProject, validate, workspace, type Identity, type Manifest, type Project } from "./manifest.js";
+import { appendProject, checkoutRoot, container, identityByFlag, identityForUrl, keyPath, loadManifest, NAME_RE, selectedProjects, updateProject, validate, workspace, type Identity, type Manifest, type Project } from "./manifest.js";
 import { runLink } from "./link.js";
 import * as ui from "./ui.js";
 
@@ -111,6 +111,18 @@ export async function clone(repo: string, m: Machine, man: Manifest, names: stri
   return rc;
 }
 
+/** `cs new foo --personal` → `--identity personal`: a bare `--<flag>` that names an identity id or GitHub owner is rewritten in place. */
+export function rewriteIdentityFlags(argv: string[], man: Manifest): string[] {
+  return argv.flatMap((a) => { if (!a.startsWith("--") || a.includes("=")) return [a]; const hit = identityByFlag(man, a.slice(2)); return hit ? ["--identity", hit.id] : [a]; });
+}
+/** What `cs new` needs from its flags: the identity (required) and the profiles — given, else the identity's own when this
+ *  machine has that profile, else all of this machine's. */
+export function newProjectOptions(man: Manifest, m: Machine, o: { identity?: string; profiles: string[] }): { ident: Identity; profiles: string[] } {
+  if (!o.identity) throw new Error(`cs: which identity? use one of ${Object.keys(man.identities).map((i) => "--" + i).join(", ")} (or --identity <id>)`);
+  const ident = man.identities[o.identity] ?? identityByFlag(man, o.identity); if (!ident) throw new Error(`cs: unknown identity '${o.identity}'`);
+  const profiles = o.profiles.length ? o.profiles : m.profiles.includes(ident.id) ? [ident.id] : [...m.profiles];
+  return { ident, profiles };
+}
 /** cs new <name>: empty directory → git repo with a private GitHub remote, registered, project state placed. */
 export async function create(repo: string, m: Machine, man: Manifest, name: string, ident: Identity, o: { profiles: string[]; description?: string; priv?: boolean }): Promise<number> {
   if (!NAME_RE.test(name)) throw new Error(`cs: '${name}' is not a valid project name`);

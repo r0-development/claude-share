@@ -4,6 +4,7 @@ import { mergeLayers, diffKeys } from "../src/jsonmerge.ts";
 import { parseManifest, validate, selected, identityForUrl, projectBlock, globs, globMatch, hasRemote } from "../src/manifest.ts";
 import { canonicalGithub } from "../src/git.ts";
 import { parseRepoUrl } from "../src/sharekey.ts";
+import { newProjectOptions, rewriteIdentityFlags } from "../src/projects.ts";
 import { envVarName } from "../src/import.ts";
 import { parseDotenv, dumpDotenv } from "../src/secrets/index.ts";
 import { plan, status, type Facts } from "../src/plan.ts";
@@ -38,6 +39,18 @@ test("manifest: parse, validate, select, identity globs, block round-trip", () =
   assert.ok(validate(bad).some((e) => e.includes("does not match identity")));
   const again = parseManifest(TOML + "\n" + projectBlock({ name: "x", url: "git@github.com:acme/x.git", identity: "work", profiles: ["work"], machines: [], layout: "worktrees", handoff: {} })).projects.x;
   assert.deepEqual([again.url, again.identity, again.layout, again.profiles], ["git@github.com:acme/x.git", "work", "worktrees", ["work"]]);
+});
+test("cs new: --<id> / --<owner> become --identity; profiles default to the identity's own when the machine has it, else the machine's", () => {
+  const m = parseManifest(TOML);
+  const mach = (profiles: string[]) => ({ name: "m1", profiles, exclude: [], secretsBackend: "sops" as const });
+  assert.deepEqual(rewriteIdentityFlags(["new", "x", "--work", "--public"], m), ["new", "x", "--identity", "work", "--public"]);
+  assert.deepEqual(rewriteIdentityFlags(["new", "x", "--acme", "--profiles=work"], m), ["new", "x", "--identity", "work", "--profiles=work"]);
+  assert.deepEqual(rewriteIdentityFlags(["new", "x", "--nope"], m), ["new", "x", "--nope"]);
+  assert.deepEqual(newProjectOptions(m, mach(["work", "all"]), { identity: "work", profiles: [] }), { ident: m.identities.work, profiles: ["work"] });
+  assert.deepEqual(newProjectOptions(m, mach(["all"]), { identity: "acme", profiles: [] }).profiles, ["all"]);
+  assert.deepEqual(newProjectOptions(m, mach(["all"]), { identity: "work", profiles: ["p", "q"] }).profiles, ["p", "q"]);
+  assert.throws(() => newProjectOptions(m, mach(["all"]), { profiles: [] }), /which identity\? use one of --work/);
+  assert.throws(() => newProjectOptions(m, mach(["all"]), { identity: "nope", profiles: [] }), /unknown identity 'nope'/);
 });
 test("git: canonical GitHub url forms collapse", () => {
   for (const u of ["git@github.com:org/repo", "git@github-personal:org/repo.git", "https://github.com/org/repo", "ssh://git@github.com/org/repo.git"]) assert.equal(canonicalGithub(u), "git@github.com:org/repo.git", u);

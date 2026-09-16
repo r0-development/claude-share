@@ -1,5 +1,5 @@
 /** GitHub REST API with a per-owner fine-grained token (no gh CLI). Tokens: ~/.config/claude-share/tokens/<owner>. */
-import { chmodSync, existsSync, mkdirSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, readdirSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { csConfigDir } from "./paths.js";
 import * as ui from "./ui.js";
@@ -24,6 +24,8 @@ export async function setToken(owner: string, token?: string) {
   return f;
 }
 export function rmToken(owner: string) { const f = tokenFile(owner); if (existsSync(f)) unlinkSync(f); }
+/** The owners a token is stored for. */
+export function listTokens(): string[] { const d = join(csConfigDir(), "tokens"); return existsSync(d) ? readdirSync(d).sort() : []; }
 export async function api<T = any>(method: string, path: string, token: string, body?: unknown): Promise<T> {
   let r: Response;
   try {

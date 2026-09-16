@@ -1,13 +1,13 @@
 /** cs — command tree (commander). One subcommand → one module. Visible tier = what a user must know; the rest is hidden. */
 import { Command, Option } from "commander";
-import { existsSync, unlinkSync, readdirSync, readFileSync, writeFileSync, mkdirSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import * as ui from "./ui.js";
 import * as platform from "./platform.js";
 import { loadMachine, machineExists, shareDir, type Machine } from "./machine.js";
-import { identityByFlag, loadManifest, projectForPath, type Manifest } from "./manifest.js";
-import { csConfigDir, stateDir, toolRoot } from "./paths.js";
-import * as git from "./git.js";
+import { loadManifest, projectForPath, type Manifest } from "./manifest.js";
+import { toolRoot } from "./paths.js";
+import { behindCount, behindHint, startUpdateCheck } from "./update.js";
 
 const pkg = JSON.parse(readFileSync(join(toolRoot(), "package.json"), "utf8")) as { version: string };
 const csv = (s?: string) => (s ? s.split(",").map((x) => x.trim()).filter(Boolean) : []);
@@ -51,11 +51,9 @@ shareSyncOpts(program.command("share-sync", HIDDEN).description("commit / pull -
 // ------------------------------------------------------------------ occasionally
 program.command("new <name>").description("create a project: dir, git, private GitHub repo, first push, registered, Claude wired in")
   .option("--identity <id>", "identity id (or --<id> / --<github-owner>, e.g. --personal)").option("--profiles <list>").option("-d, --description <text>", "", "").option("--public")
-  .action(async (name, o) => { const { repo, m, man } = ctx(); let id = o.identity;
-    if (!id) throw new Error(`cs: which identity? use one of ${Object.keys(man.identities).map((i) => "--" + i).join(", ")} (or --identity <id>)`);
-    const ident = man.identities[id] ?? identityByFlag(man, id); if (!ident) throw new Error(`cs: unknown identity '${id}'`);
-    const profiles = csv(o.profiles).length ? csv(o.profiles) : m.profiles.includes(ident.id) ? [ident.id] : [...m.profiles];
-    const { create } = await import("./projects.js"); process.exitCode = await create(repo, m, man, name, ident, { profiles, description: o.description, priv: !o.public }); });
+  .action(async (name, o) => { const { repo, m, man } = ctx(); const { create, newProjectOptions } = await import("./projects.js");
+    const { ident, profiles } = newProjectOptions(man, m, { identity: o.identity, profiles: csv(o.profiles) });
+    process.exitCode = await create(repo, m, man, name, ident, { profiles, description: o.description, priv: !o.public }); });
 program.command("add [path]").description("register an existing directory as a project (default: cwd); creates its private GitHub repo when it has no remote").option("--profiles <list>").option("--identity <id>").option("--name <name>").option("--description <text>", "", "").option("--public").option("--no-commit")
   .action(async (p, o) => { const { repo, m, man } = ctx(); const { add } = await import("./projects.js"); await ui.command("cs add", () => add(repo, m, man, p, { profiles: csv(o.profiles), identity: o.identity, name: o.name, description: o.description, noCommit: !o.commit, priv: !o.public })); });
 program.command("clone [names...]").description("clone the projects selected for this machine that are missing here").option("--dry-run").action(async (names, o) => { const { repo, m, man } = ctx(); const { clone } = await import("./projects.js");
@@ -87,15 +85,7 @@ program.command("untrust <machine>", HIDDEN).description("untrust a machine: rem
 
 // ------------------------------------------------------------------ setup
 program.command("doctor").description("check this machine: tools, links, identities, remotes, hooks, timer; --fix repairs what it can").option("--fix").action(async (o) => { const { repo, m, man } = ctx(); const { runDoctor } = await import("./doctor.js"); ui.intro("cs doctor"); process.exitCode = await runDoctor(repo, m, man, o.fix); ui.outro(process.exitCode ? ui.red("problems found") : ui.green("all good")); });
-program.command("update").description("update the cs tool itself").action(async () => { await ui.command("cs update", async () => {
-  const root = toolRoot(); if (!git.isRepo(root)) throw new Error(`cs: ${root} is not a git checkout`);
-  const before = git.out(["rev-parse", "--short", "HEAD"], root);
-  const r = await ui.spin("checking for updates…", () => git.gitA(["pull", "-q", "--ff-only"], root, { check: false, timeout: 60 }));
-  if (r.code !== 0) throw new Error(`cs: update failed\n${r.err}`);
-  const after = git.out(["rev-parse", "--short", "HEAD"], root);
-  if (before === after) ui.ok(`already up to date  ${ui.dim(`(${after})`)}`); else { const n = git.out(["rev-list", "--count", `${before}..${after}`], root); ui.ok(`updated ${before} → ${after}  ${ui.dim(`${n} commit(s)`)}`); for (const l of git.out(["log", "--format=%s", `${before}..${after}`], root).split("\n").slice(0, 8)) ui.info(ui.dim("• " + l)); }
-  writeUpdateCache({ checkedAt: Date.now(), behind: 0 });
-  }, { outro: () => ui.dim(`cs ${pkg.version}`) }); });
+program.command("update").description("update the cs tool itself").action(async () => { const { runUpdate } = await import("./update.js"); await ui.command("cs update", runUpdate, { outro: () => ui.dim(`cs ${pkg.version}`) }); });
 program.command("init").description("set this machine up (wizard) — or --repo <url> / --owner <owner> for scripts")
   .option("--repo <url>", "existing share: git URL or local path").option("--owner <owner>", "GitHub user/org to create claude-share-config under")
   .option("--key <path>", "ssh key for cloning --repo (instead of the share key)").option("--non-interactive").option("--name <name>", "machine name")
@@ -122,7 +112,7 @@ const token = program.command("token", HIDDEN).description("GitHub API tokens pe
 token.command("set <owner>").action(async (o) => { const gh = await import("./github.js"); const f = await gh.setToken(o); ui.ok(`token stored in ${(await import("./paths.js")).contract(f)} (0600, not synced)`); });
 token.command("check <owner>").action(async (o) => { const gh = await import("./github.js"); const t = gh.getToken(o); if (!t) { ui.fail(`no token for '${o}'`); process.exitCode = 1; return; } try { const who = await ui.spin(`checking token for ${o}…`, async () => gh.whoami(t)); ui.ok(`token for '${o}' authenticates as ${who}`); } catch (e: any) { ui.fail(e.message); process.exitCode = 1; } });
 token.command("rm <owner>").action(async (o) => { (await import("./github.js")).rmToken(o); ui.ok("removed"); });
-token.command("ls").action(() => { const d = join(csConfigDir(), "tokens"); if (existsSync(d)) for (const f of readdirSync(d)) console.log(f); });
+token.command("ls").action(async () => { for (const o of (await import("./github.js")).listTokens()) console.log(o); });
 program.command("ssh [action]", HIDDEN).description("per-machine SSH keys: setup | check | share-key").action(async (action = "check") => { const { repo, m, man } = ctx();
   await ui.command(`cs ssh ${action}`, async () => { if (action === "share-key") process.exitCode = await (await import("./sharekey.js")).setup(repo, ui.isTTY()); else process.exitCode = await (await import("./ssh.js")).setup(repo, m, man, action === "check"); },
     { outro: () => (process.exitCode ? ui.yellow("keys still to register — re-run cs ssh check afterwards") : ui.green("all keys verified")) }); });
@@ -172,38 +162,19 @@ program.command("ui-demo", HIDDEN).description("show every UI element with fake 
   }, { outro: () => ui.dim("demo over") });
 });
 
-// ---- outdated check: at most once a day, in the background, never blocking the command
-const updateCacheFile = () => join(stateDir(), "update-check.json");
-function readUpdateCache(): { checkedAt: number; behind: number } { try { return JSON.parse(readFileSync(updateCacheFile(), "utf8")); } catch { return { checkedAt: 0, behind: 0 }; } }
-function writeUpdateCache(c: { checkedAt: number; behind: number }) { try { mkdirSync(stateDir(), { recursive: true }); writeFileSync(updateCacheFile(), JSON.stringify(c)); } catch {} }
-async function startUpdateCheck(): Promise<() => Promise<number>> {
-  const root = toolRoot(); const cache = readUpdateCache();
-  if (process.env.CS_OFFLINE || !git.isRepo(root)) return async () => 0;
-  if (Date.now() - cache.checkedAt < 24 * 3600 * 1000) return async () => cache.behind;
-  const { exec } = await import("./proc.js");
-  const run = exec("git", ["fetch", "-q", "origin"], { cwd: root, timeout: 3 }).then((r) => {
-    if (r.code !== 0) return cache.behind;
-    const branch = git.currentBranch(root) || "master";
-    const behind = parseInt(git.out(["rev-list", "--count", `HEAD..origin/${branch}`], root, "0"), 10) || 0;
-    writeUpdateCache({ checkedAt: Date.now(), behind }); return behind;
-  }).catch(() => 0);
-  return () => run;
-}
-
 async function main() {
   platform.refuseUnsupported();
   process.stdout.on("error", (e: any) => { if (e?.code === "EPIPE") process.exit(0); throw e; });
   const argv = process.argv.slice(2);
   // `cs new foo --personal` → `--identity personal` (identity id or GitHub owner)
-  if (argv[0] === "new" && machineExists()) { try { const { man } = ctx(); for (let i = 1; i < argv.length; i++) { const a = argv[i]; if (a.startsWith("--") && !a.includes("=")) { const hit = identityByFlag(man, a.slice(2)); if (hit) argv.splice(i, 1, "--identity", hit.id); } } process.argv = [...process.argv.slice(0, 2), ...argv]; } catch {} }
-  // bare `cs` (hidden --no-fetch for scripts): the status view, ending with the command that resolves what it found
-  if (argv.every((a) => a === "--no-fetch")) { if (machineExists()) { const finish = await startUpdateCheck(); const { repo, m, man } = ctx(); const { runStatus } = await import("./status.js"); ui.intro(`claude-share  ${ui.dim(m.name)}`); const r = await runStatus(repo, m, man, !argv.length); process.exitCode = r.rc; const behind = await Promise.race([finish(), new Promise<number>((r) => setTimeout(() => r(0), 50))]);
-    const tail = [r.next ? ui.yellow(`run: ${r.next}`) : "", behind > 0 ? ui.yellow(`cs is ${behind} commit(s) behind — run cs update`) : ""].filter(Boolean); ui.outro(tail.length ? tail.join("  ·  ") : ui.dim("cs sync · cs new <project> --<identity> · cs --help")); return; } program.help(); }
+  if (argv[0] === "new" && machineExists()) { try { const { man } = ctx(); const { rewriteIdentityFlags } = await import("./projects.js"); process.argv = [...process.argv.slice(0, 2), ...rewriteIdentityFlags(argv, man)]; } catch {} }
+  // bare `cs` (hidden --no-fetch for scripts): the status view
+  if (argv.every((a) => a === "--no-fetch")) { if (!machineExists()) program.help(); const { repo, m, man } = ctx(); await (await import("./status.js")).runBare(repo, m, man, !argv.length); return; }
   const cmdName = argv.find((a) => !a.startsWith("-"));
   const wantsCheck = !["update", "ui-demo"].includes(cmdName ?? "") && !argv.includes("-q") && !argv.includes("--quiet");
   const finishCheck = wantsCheck ? await startUpdateCheck() : async () => 0;
   try { await program.parseAsync(process.argv); }
   catch (e: any) { if (e?.handled) { process.exitCode = e.code ?? 1; return; } const msg: string = e?.message ?? String(e); if (msg.startsWith("cs: ")) { const [what, ...rest] = msg.slice(4).split("\n"); ui.error(what, rest.join("\n").trim()); process.exitCode = 1; } else throw e; }
-  finally { const behind = await Promise.race([finishCheck(), new Promise<number>((r) => setTimeout(() => r(0), 50))]); if (behind > 0) console.error(ui.yellow("!") + ` cs is ${behind} commit(s) behind — run ${ui.bold("cs update")}`); }
+  finally { const hint = behindHint(await behindCount(finishCheck)); if (hint) console.error(ui.yellow("!") + " " + hint); }
 }
 main();

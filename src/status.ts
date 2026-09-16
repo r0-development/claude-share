@@ -9,6 +9,7 @@ import type { Machine } from "./machine.js";
 import { checkoutRoot, selected, workspace, type Manifest } from "./manifest.js";
 import { gather } from "./gather.js";
 import { hooksStatus } from "./hooks.js";
+import { behindCount, behindHint, startUpdateCheck } from "./update.js";
 import { ago, status, type Facts, type StatusBit } from "./plan.js";
 import * as ui from "./ui.js";
 
@@ -66,4 +67,14 @@ export async function runStatus(repo: string, m: Machine, man: Manifest, fetch =
   for (const s of envSkipped) ui.warn(s);
   for (const d of unregisteredDirs(ws, known)) { ui.warn(`${d.name}: ${d.remote ? "not registered" : "not registered, no remote"}  ${ui.dim(`cs add ${contract(join(ws, d.name))}`)}`); attention = true; }
   return { rc: pending || attention || stuck ? 1 : 0, next: pending ? "cs sync" : attention ? "cs doctor --fix" : undefined };
+}
+
+/** Bare `cs` (hidden --no-fetch for scripts): the status view, ending with the command that resolves what it found, and
+ *  whether the tool itself is behind — checked in the background while the projects are fetched. */
+export async function runBare(repo: string, m: Machine, man: Manifest, fetch: boolean): Promise<void> {
+  const finish = await startUpdateCheck();
+  ui.intro(`claude-share  ${ui.dim(m.name)}`);
+  const r = await runStatus(repo, m, man, fetch); process.exitCode = r.rc;
+  const tail = [r.next ? ui.yellow(`run: ${r.next}`) : "", behindHint(await behindCount(finish))].filter(Boolean);
+  ui.outro(tail.length ? tail.join("  ·  ") : ui.dim("cs sync · cs new <project> --<identity> · cs --help"));
 }
