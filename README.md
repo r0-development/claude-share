@@ -120,6 +120,7 @@ cs new billing-api --acme            # dir, git init -b master, private GitHub r
 cs add ~/dev/existing                # register a directory; creates its private GitHub repo when it has no remote
 cd ~/dev/thing && cs add             # default: the current directory (url, branch, identity, worktree layout inferred)
 cs clone                             # on a new machine (cs sync does this too)
+cs remove old-thing                  # out of the share: manifest entry, project state, secrets — one commit, after one confirmation
 ```
 
 `cs new` takes `--<identity>` (or `--<github-owner>`), `--profiles a,b`, `-d "description"`, `--public`; `cs add` takes
@@ -128,6 +129,13 @@ project (a machine gets the projects whose profiles intersect its own), `machine
 `layout = "worktrees"` marks a `<name>/repo` clone with sibling worktrees, `handoff = false` / `env = false` opt a
 project out of handoffs / `.env` travel, `handoff.extra`, `handoff.exclude`, `handoff.never` and `env.local` tune what
 travels (`docs/HANDOFF.md`, `docs/SECRETS.md`).
+
+`cs remove` never touches a checkout, a worktree or the GitHub repo: the checkout is just a directory again (the only thing
+tidied inside it, on every machine at its next `cs sync`, is the auto-memory pointer `cs` wrote there), and the closing
+line names the `gh repo delete` command for when the remote should go too. `--yes` skips the confirmation, `--no-commit`
+leaves the share commit to you; undo is `git revert` of that commit in the share. `cs` and `cs doctor` offer `cs remove`
+for a project that has no remote and is not on this machine, and `cs doctor` flags state or secrets left in the share
+for a name no longer registered.
 
 **Project state** — a project's `CLAUDE.md`, `.claude/**`, `.mcp.json` and auto-memory — lives in the share under
 `projects/<name>/` and is placed into every checkout and worktree by `cs sync` (hidden from git via
@@ -206,6 +214,7 @@ What `cs --help` lists; `cs <command> -h` for options.
 | `cs sync` | the daily verb: bring this machine up to date and leave nothing stale here |
 | `cs new <name>` | create a project: dir, git, private GitHub repo, first push, registered, Claude wired in |
 | `cs add [path]` | register an existing directory as a project (default: cwd); creates its private GitHub repo when it has no remote |
+| `cs remove <names...>` | take projects out of the share: manifest entry, project state, secrets; checkouts and remotes stay |
 | `cs clone [names...]` | clone the projects selected for this machine that are missing here |
 | `cs secrets` | encrypted secrets in the share: set \| get \| edit |
 | `cs identity` | git identities: who commits, with which key, under which GitHub owner |
@@ -222,7 +231,7 @@ Hidden commands: the halves `cs sync` is made of and a few helpers. They stay ca
 |---|---|
 | `cs status [--no-fetch] [--all]` | what bare `cs` shows (`--all` includes projects skipped by profile) |
 | `cs share-sync [--pull-only\|--push-only] [--resolve ours\|theirs\|newest]` | the share alone: commit / pull --rebase / push — what the hooks and the timer run. It cannot ask, so a file changed on both machines is settled newest-wins; the share is never left mid-rebase |
-| `cs handoff [-m note] [--all] [--allow <glob>] [--overwrite]` · `cs resume [--all] [--replace] [--keep-remote]` · `cs handoffs [ls\|gc\|drop]` | the handoff halves: send the cwd project's work, apply what is waiting, list / prune / delete waiting handoffs |
+| `cs handoff [-m note] [--all] [--allow <glob>] [--overwrite]` · `cs resume [--all] [--replace] [--keep-remote]` · `cs handoffs [ls\|gc\|drop]` | the handoff halves: send the cwd project's work, apply what is waiting, list / prune / drop waiting handoffs |
 | `cs note --print` | print (once) the note of the last handoff applied for the cwd project — what the SessionStart hook runs |
 | `cs apply [--check]` · `cs link [--check]` | render `~/.claude` and the git includes from the share; place project state into checkouts (`--check` reports drift, changes nothing) |
 | `cs import memory\|project\|mcp <name>` | take auto-memory, `CLAUDE.md`/`.claude/`/`.mcp.json` or MCP servers (with their secrets, as `${VAR}`) that already exist on this machine into the project state |

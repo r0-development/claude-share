@@ -45,6 +45,11 @@ _Avoid_: reconcile, push, pull, handoff (as a verb for the whole action)
 Taking Claude files, memory or MCP servers that already exist on a machine into the share.
 _Avoid_: adopt
 
+**Remove**:
+Taking a project out of the share: its manifest entry, project state and secrets go (the share's history keeps them).
+Its checkouts and its remote are never touched; a checkout left behind is just a directory again.
+_Avoid_: delete (ambiguous with deleting the checkout or the GitHub repo), forget, unregister
+
 **Trust**:
 Granting a machine access to the share's secrets. Only an already-trusted machine can do it.
 _Avoid_: enroll

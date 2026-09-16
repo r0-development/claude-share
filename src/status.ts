@@ -58,7 +58,7 @@ export async function runStatus(repo: string, m: Machine, man: Manifest, fetch =
     const root = checkoutRoot(p, ws); const kind = ui.dim(p.layout === "worktrees" ? "⑂" : "");
     const f = byName.get(p.name);
     if (!sel) rows.push([p.name, kind, "", ui.dim("skipped (profile)")]);
-    else if (!existsSync(root)) { rows.push([p.name, kind, "", p.url ? ui.red("missing here") + SYNC : ui.red("no remote, not here") + ui.dim("  cs doctor --fix on the machine that has it")]); if (p.url) pending = true; else attention = true; }
+    else if (!existsSync(root)) { rows.push([p.name, kind, "", p.url ? ui.red("missing here") + SYNC : ui.red("no remote, not here") + ui.dim(`  cs doctor --fix on the machine that has it · or cs remove ${p.name}`)]); if (p.url) pending = true; else attention = true; }
     else if (!git.isRepo(root)) { rows.push([p.name, kind, "", ui.red("not a git repo") + FIX]); attention = true; }
     else if (!f) { rows.push([p.name, kind, branchOf(root), ui.red("no remote") + FIX]); attention = true; }
     else { const line = projectLine(f, m.name); rows.push([p.name, kind, f.units[0]?.branch || ui.red("DETACHED"), line.state]); pending ||= line.pending; stuck ||= line.stuck; }

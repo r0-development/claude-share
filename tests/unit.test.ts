@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { mergeLayers, diffKeys } from "../src/jsonmerge.ts";
-import { parseManifest, validate, selected, identityForUrl, projectBlock, globs, globMatch, hasRemote } from "../src/manifest.ts";
+import { parseManifest, validate, selected, identityForUrl, projectBlock, globs, globMatch, hasRemote, removeProjectText } from "../src/manifest.ts";
 import { canonicalGithub } from "../src/git.ts";
 import { parseRepoUrl } from "../src/sharekey.ts";
 import { newProjectOptions, rewriteIdentityFlags } from "../src/projects.ts";
@@ -39,6 +39,19 @@ test("manifest: parse, validate, select, identity globs, block round-trip", () =
   assert.ok(validate(bad).some((e) => e.includes("does not match identity")));
   const again = parseManifest(TOML + "\n" + projectBlock({ name: "x", url: "git@github.com:acme/x.git", identity: "work", profiles: ["work"], machines: [], layout: "worktrees", handoff: {} })).projects.x;
   assert.deepEqual([again.url, again.identity, again.layout, again.profiles], ["git@github.com:acme/x.git", "work", "worktrees", ["work"]]);
+});
+test("manifest: removeProjectText drops the block and its sub-tables, leaves neighbours and comments byte-for-byte", () => {
+  const text = `schema_version = 1\n\n[workspace]\nroot = "~/dev"\n\n# ---- Projects\n\n[projects.a]\nurl = "git@github.com:acme/a.git"\nprofiles = ["all"]\n\n[projects.a.handoff]\nextra = ["dist/"]\n\n[projects.a-b]\nprofiles = ["all"]   # keep: a different name with the same prefix\n\n[projects.b]\nprofiles = ["work"]\n\n[projects.a.env]\nlocal = [".env.site"]\n`;
+  const r = removeProjectText(text, "a");
+  assert.ok(r.found);
+  assert.equal(r.text, `schema_version = 1\n\n[workspace]\nroot = "~/dev"\n\n# ---- Projects\n\n[projects.a-b]\nprofiles = ["all"]   # keep: a different name with the same prefix\n\n[projects.b]\nprofiles = ["work"]\n`);
+  assert.deepEqual(Object.keys(parseManifest(r.text).projects), ["a-b", "b"]);
+  // the last block: the blank lines that separated it from its predecessor go with it
+  const last = removeProjectText(`[workspace]\nroot = "~/dev"\n\n[projects.z]\nprofiles = ["all"]\n`, "z");
+  assert.equal(last.text, `[workspace]\nroot = "~/dev"\n`);
+  // absent name: nothing changes, reported as not found
+  const none = removeProjectText(text, "nope");
+  assert.ok(!none.found && none.text === text);
 });
 test("cs new: --<id> / --<owner> become --identity; profiles default to the identity's own when the machine has it, else the machine's", () => {
   const m = parseManifest(TOML);
