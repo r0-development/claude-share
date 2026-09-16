@@ -3,9 +3,10 @@ import assert from "node:assert/strict";
 import { mergeLayers, diffKeys } from "../src/jsonmerge.ts";
 import { parseManifest, validate, selected, identityForUrl, projectBlock, globs, globMatch, hasRemote } from "../src/manifest.ts";
 import { canonicalGithub } from "../src/git.ts";
-import { parseRepoUrl } from "../src/master.ts";
-import { envVarName } from "../src/adopt.ts";
+import { parseRepoUrl } from "../src/sharekey.ts";
+import { envVarName } from "../src/import.ts";
 import { parseDotenv, dumpDotenv } from "../src/secrets/index.ts";
+import { plan, type Facts } from "../src/plan.ts";
 
 test("jsonmerge: dicts recurse, scalars override, permission lists union, plain lists replace", () => {
   assert.deepEqual(mergeLayers({ a: { x: 1 } }, { a: { y: 2 } }), { a: { x: 1, y: 2 } });
@@ -39,13 +40,50 @@ test("manifest: parse, validate, select, identity globs, block round-trip", () =
 test("git: canonical GitHub url forms collapse", () => {
   for (const u of ["git@github.com:org/repo", "git@github-personal:org/repo.git", "https://github.com/org/repo", "ssh://git@github.com/org/repo.git"]) assert.equal(canonicalGithub(u), "git@github.com:org/repo.git", u);
 });
-test("master: repo url parsing", () => {
+test("sharekey: repo url parsing", () => {
   for (const u of ["https://github.com/o/r", "https://github.com/o/r.git", "https://github.com/o/r/", "github.com/o/r", "git@github.com:o/r", "ssh://git@github.com/o/r.git", "https://www.github.com/o/r"]) assert.deepEqual(parseRepoUrl(u), ["git@github.com:o/r.git", ["o", "r"]], u);
   assert.deepEqual(parseRepoUrl("git@gitea.local:me/cfg.git"), ["git@gitea.local:me/cfg.git", undefined]);
 });
-test("adopt: env var names; dotenv round trip", () => {
+test("import: env var names; dotenv round trip", () => {
   assert.equal(envVarName("coolify-teido", "COOLIFY_BASE_URL"), "COOLIFY_TEIDO_BASE_URL");
   assert.equal(envVarName("coolify", "COOLIFY_ACCESS_TOKEN"), "COOLIFY_ACCESS_TOKEN");
   const v = { A: "1", B: "with space", C: "q\"uote" };
   assert.deepEqual(parseDotenv(dumpDotenv(v)), v);
+});
+
+// cs sync plan: facts (what was observed) → actions with defaults + questions for a human. No I/O.
+const facts = (over: Partial<Facts>): Facts => ({ project: "p", layout: "plain", units: [{ rel: ".", branch: "main", dirty: 0, unpushed: 0 }], waiting: [], ...over });
+const w = (branch: string, machine: string) => ({ branch, machine, when: "2026-09-16T08:00:00+00:00", note: "", ref: `wip/u/${branch}` });
+test("plan: table of facts → actions", () => {
+  const cases: [string, Facts, { actions: string[]; checked?: boolean[]; questions?: string[]; skipped?: number }][] = [
+    ["clean, nothing waiting", facts({}), { actions: [] }],
+    ["dirty → send, checked", facts({ units: [{ rel: ".", branch: "main", dirty: 3, unpushed: 0 }] }), { actions: ["send:p:main"], checked: [true] }],
+    ["unpushed commits only → send (the handoff carries them)", facts({ units: [{ rel: ".", branch: "main", dirty: 0, unpushed: 2 }] }), { actions: ["send:p:main"] }],
+    ["clean + waiting from another machine → apply, checked", facts({ waiting: [w("main", "laptop")] }), { actions: ["apply:p:main"], checked: [true] }],
+    ["clean + waiting on another branch (plain layout) → apply (checks the branch out)", facts({ waiting: [w("feat", "laptop")] }), { actions: ["apply:p:feat"] }],
+    ["dirty + waiting from another machine, same branch → question, no actions", facts({ units: [{ rel: ".", branch: "main", dirty: 1, unpushed: 0 }], waiting: [w("main", "laptop")] }), { actions: [], questions: ["dirty-vs-waiting"] }],
+    ["dirty + waiting for another branch (plain) → the dirty work is sent; applying needs a clean root → question", facts({ units: [{ rel: ".", branch: "main", dirty: 1, unpushed: 0 }], waiting: [w("feat", "laptop")] }), { actions: ["send:p:main"], questions: ["dirty-vs-waiting"] }],
+    ["dirty + my own earlier handoff waiting → send again (replaces it), no apply", facts({ units: [{ rel: ".", branch: "main", dirty: 1, unpushed: 0 }], waiting: [w("main", "desk")] }), { actions: ["send:p:main"] }],
+    ["clean + my own handoff waiting → apply it (the work comes back)", facts({ waiting: [w("main", "desk")] }), { actions: ["apply:p:main"] }],
+    ["worktrees: waiting for a branch with no worktree → apply; dirty worktree on another branch is sent", facts({ layout: "worktrees", units: [{ rel: "wt-a", branch: "a", dirty: 2, unpushed: 0 }], waiting: [w("b", "laptop")] }), { actions: ["apply:p:b", "send:p:a"] }],
+    ["worktrees: waiting for a branch whose worktree is dirty → question", facts({ layout: "worktrees", units: [{ rel: "wt-b", branch: "b", dirty: 2, unpushed: 0 }], waiting: [w("b", "laptop")] }), { actions: [], questions: ["dirty-vs-waiting"] }],
+    ["detached / on a handoff ref → skipped with a reason", facts({ units: [{ rel: ".", branch: "", dirty: 1, unpushed: 0, skip: "detached HEAD" }] }), { actions: [], skipped: 1 }],
+    ["files that look secret → not sent, skipped with the files", facts({ units: [{ rel: ".", branch: "main", dirty: 1, unpushed: 0, secrets: ["api.key"] }] }), { actions: [], skipped: 1 }],
+    ["remote unreachable → nothing planned, one skipped line", facts({ offline: true, units: [{ rel: ".", branch: "main", dirty: 1, unpushed: 0 }], waiting: [w("main", "laptop")] }), { actions: [], skipped: 1 }],
+    ["handoff disabled for the project → skipped", facts({ disabled: true, units: [{ rel: ".", branch: "main", dirty: 1, unpushed: 0 }] }), { actions: [], skipped: 1 }],
+  ];
+  for (const [name, f, want] of cases) {
+    const pl = plan([f], "desk");
+    assert.deepEqual(pl.actions.map((a) => a.id), want.actions, name);
+    if (want.checked) assert.deepEqual(pl.actions.map((a) => a.checked), want.checked, name);
+    assert.deepEqual(pl.questions.map((q) => q.kind), want.questions ?? [], name);
+    assert.equal(pl.skipped.length, want.skipped ?? 0, name + " (skipped: " + pl.skipped.join("; ") + ")");
+  }
+});
+test("plan: apply and send never both for one branch; two projects keep their order; labels name project and branch", () => {
+  const pl = plan([facts({ project: "a", units: [{ rel: ".", branch: "main", dirty: 0, unpushed: 1 }], waiting: [w("main", "laptop")] }), facts({ project: "b", units: [{ rel: ".", branch: "x", dirty: 1, unpushed: 0 }] })], "desk");
+  assert.deepEqual(pl.actions.map((a) => a.id), ["apply:a:main", "send:b:x"]);
+  assert.ok(pl.actions[0].label.includes("a") && pl.actions[0].hint.includes("laptop") && pl.actions[1].hint.includes("1 change"));
+  const q = plan([facts({ units: [{ rel: ".", branch: "main", dirty: 1, unpushed: 0 }], waiting: [w("main", "laptop")] })], "desk").questions[0];
+  assert.ok(q.why.includes("laptop") && q.project === "p" && q.branch === "main");
 });

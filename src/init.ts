@@ -157,7 +157,7 @@ async function finish(repo: string, m: Machine, interactive: boolean, skip: stri
   if (!skip.includes("link")) await ui.group("project files linked", () => runLink(repo, m, man), { done: "already in sync" });
   let secretsOk = true;
   if (!skip.includes("secrets") && m.secretsBackend !== "none") { const sc = await import("./secretscmd.js"); await ui.group("secrets", () => sc.init(repo, m, interactive)); secretsOk = await sc.ensureRecipient(repo, m, interactive); }
-  if (!skip.includes("hooks")) await ui.group("automatic sync", async () => { (await import("./hooks.js")).runHooks(repo, m, "install"); runApply(repo, m, loadManifest(repo)); });
+  if (!skip.includes("hooks")) await ui.group("automatic sync", async () => { await (await import("./hooks.js")).runHooks(repo, m, "install"); runApply(repo, m, loadManifest(repo)); });
   await ui.group("share", () => push(repo), { done: "nothing to push" });
   let rc = 0; if (!skip.includes("doctor")) rc = await ui.group("doctor", () => runDoctor(repo, m, loadManifest(repo), false, true), { done: "all checks passed" });
   const ws = workspace(man, m); const missing = selectedProjects(man, m).filter((p) => p.url && !existsSync(checkoutRoot(p, ws)));

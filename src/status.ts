@@ -44,7 +44,7 @@ export async function runStatus(repo: string, m: Machine, man: Manifest, fetch =
       const ident = p.identity ? man.identities[p.identity] : undefined; const email = git.configGet(root, "user.email");
       if (ident && email && email !== ident.email) { s += "  " + ui.red(`identity ${email}`); att = true; } else if (ident && !email) { s += "  " + ui.red("identity unset"); att = true; }
       if (p.layout === "worktrees") s += "  " + ui.dim(`${git.worktrees(root).length} worktrees`);
-      if (pend[p.name]) s += "  " + ui.yellow("uncommitted work — cs handoff");
+      if (pend[p.name]) s += "  " + ui.yellow("uncommitted work — cs sync");
       if (att) rc = 1; rows.push([p.name, kind, b, s]);
     } else { rows.push([p.name, kind, "", ui.red("not a git repo") + ui.dim("  cs doctor --fix")]); rc = 1; }
   }

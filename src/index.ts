@@ -1,5 +1,5 @@
 /** cs — command tree (commander). One subcommand → one module. Visible tier = what a user must know; the rest is hidden. */
-import { Command } from "commander";
+import { Command, Option } from "commander";
 import { existsSync, unlinkSync, readdirSync, readFileSync, writeFileSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
 import * as ui from "./ui.js";
@@ -38,7 +38,14 @@ const shareSyncAction = (title: string) => async (o: any) => { const { repo, m, 
     if (o.quiet || program.opts().quiet) { process.exitCode = await runShareSync(repo, m, man, opts); return; }
     await ui.command(title, async () => { process.exitCode = await runShareSync(repo, m, man, opts); }, { outro: () => (process.exitCode ? ui.red("blocked — see above") : ui.dim("in sync")) }); };
 const shareSyncOpts = (c: Command) => c.option("--pull-only").option("--push-only").option("--timeout <s>", "", "20").option("--resolve <ours|theirs>").option("--debounce <s>", "skip if a sync ran less than N seconds ago", "0").option("-q, --quiet");
-shareSyncOpts(program.command("sync").description("the daily verb: bring this machine up to date and leave nothing stale here")).action(shareSyncAction("cs sync"));
+program.command("sync").description("the daily verb: bring this machine up to date and leave nothing stale here")
+  .option("-m, --note <text>", "note carried by the handoffs sent (shown where the work is resumed)").option("--resolve <ours|theirs>", "unblock the share after a conflict: keep this machine's (ours) or the other machine's (theirs) version")
+  .addOption(new Option("--timeout <s>", "").default("20").hideHelp()).addOption(new Option("-q, --quiet").hideHelp())
+  // hooks installed before cs sync became the daily verb call `cs sync --push-only|--pull-only`; those stay the share-only sync (ADR-0002: never a project remote unattended)
+  .addOption(new Option("--pull-only").hideHelp()).addOption(new Option("--push-only").hideHelp()).addOption(new Option("--debounce <s>").default("0").hideHelp())
+  .action(async (o) => { if (o.pullOnly || o.pushOnly) return shareSyncAction("cs sync")(o);
+    const { repo, m, man } = ctx(); const { runSync } = await import("./sync.js");
+    await ui.command(`cs sync  ${ui.dim(m.name)}`, async () => { const r = await runSync(repo, m, man, { note: o.note, resolve: o.resolve, timeout: +o.timeout }); process.exitCode = r.rc; return r.summary; }, { outro: (s) => s }); });
 shareSyncOpts(program.command("share-sync", HIDDEN).description("commit / pull --rebase / push the share only (what hooks and the timer run)")).action(shareSyncAction("cs share-sync"));
 
 // ------------------------------------------------------------------ occasionally
@@ -109,7 +116,7 @@ program.command("import <what> [names...]", HIDDEN).description("take existing l
     if (o.show) { runImport(repo, m, man, what, targets, o.check, true); return; }
     await ui.command(`cs import ${what}`, async () => { for (const n of targets) await ui.group(n, () => runImport(repo, m, man, what, [n], o.check, false), { done: "nothing to import" }); }); });
 program.command("hooks [action]", HIDDEN).description("automatic share sync: install | remove | status").option("--no-timer").action(async (action = "status", o) => { const { repo, m } = ctx(); const { runHooks } = await import("./hooks.js");
-  if (action === "status") { ui.intro("cs hooks"); process.exitCode = runHooks(repo, m, action, o.timer); ui.outro(ui.dim("cs hooks install · cs hooks remove")); return; }
+  if (action === "status") { ui.intro("cs hooks"); process.exitCode = await runHooks(repo, m, action, o.timer); ui.outro(ui.dim("cs hooks install · cs hooks remove")); return; }
   await ui.command(`cs hooks ${action}`, async () => { process.exitCode = await ui.group(action === "remove" ? "removed" : "installed", () => runHooks(repo, m, action, o.timer)); }); });
 const token = program.command("token", HIDDEN).description("GitHub API tokens per owner (local, never synced)");
 token.command("set <owner>").action(async (o) => { const gh = await import("./github.js"); const f = await gh.setToken(o); ui.ok(`token stored in ${(await import("./paths.js")).contract(f)} (0600, not synced)`); });

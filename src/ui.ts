@@ -21,10 +21,10 @@ export const c = pc;
 export const dim = pc.dim, bold = pc.bold, green = pc.green, yellow = pc.yellow, red = pc.red, cyan = pc.cyan, gray = pc.gray, magenta = pc.magenta;
 
 // ---------------------------------------------------------------- messages
-export function info(msg = "") { if (collecting) { if (msg) collecting.push(msg); return; } if (!quiet) p.log.message(msg); }
-export function ok(msg: string) { if (collecting) { collecting.push(msg); return; } if (!quiet) p.log.success(msg); }
-export function step(msg: string) { if (collecting) { collecting.push(msg); return; } if (!quiet) p.log.step(msg); }
-export function skip(msg: string) { if (collecting) return; if (!quiet) p.log.message(pc.dim("○ " + msg)); }
+export function info(msg = "") { if (quiet) return; if (collecting) { if (msg) collecting.push(msg); return; } p.log.message(msg); }
+export function ok(msg: string) { if (quiet) return; if (collecting) { collecting.push(msg); return; } p.log.success(msg); }
+export function step(msg: string) { if (quiet) return; if (collecting) { collecting.push(msg); return; } p.log.step(msg); }
+export function skip(msg: string) { if (quiet || collecting) return; p.log.message(pc.dim("○ " + msg)); }
 
 let activeSpinner: { message: (s: string) => void } | null = null;
 const width = () => Math.max(40, (process.stdout.columns || 100) - 6);
@@ -64,8 +64,8 @@ export function note(lines: string[], title?: string) { if (!quiet) p.note(lines
 export function kv(key: string, value: string, width = 14) { info(`${pc.dim(key.padEnd(width))} ${value}`); }
 
 export function table(rows: string[][], header?: string[]) {
-  if (collecting) { for (const r of rows) collecting.push(r.join("  ")); return; }
   if (quiet || !rows.length) return;
+  if (collecting) { for (const r of rows) collecting.push(r.join("  ")); return; }
   const all = header ? [header, ...rows] : rows;
   const ncol = Math.max(...all.map((r) => r.length));
   const vis = (s: string) => s.replace(/\x1b\[[0-9;]*m/g, "").length;

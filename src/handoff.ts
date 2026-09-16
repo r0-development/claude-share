@@ -19,20 +19,20 @@ const SIDE = ".cs-handoff";
 /** Remote ref namespace handoffs live under (on-disk name; see the migration notes before changing it). */
 export const REF_NS = "wip";
 
-interface Handoff { ref: string; sha: string; branch: string; base: string; machine: string; worktree: string; note: string; when: string }
-interface Unit { path: string; branch: string; rel: string }
+export interface Handoff { ref: string; sha: string; branch: string; base: string; machine: string; worktree: string; note: string; when: string }
+export interface Unit { path: string; branch: string; rel: string }
 
-const userSlug = (p: string) => git.slug(git.configGet(p, "user.name") || userInfo().username);
+export const userSlug = (p: string) => git.slug(git.configGet(p, "user.name") || userInfo().username);
 const handoffRef = (user: string, branch: string) => `${REF_NS}/${user}/${git.slug(branch)}`;
 const refspec = (user: string) => `+refs/heads/${REF_NS}/${user}/*:refs/remotes/origin/${REF_NS}/${user}/*`;
 const hoff = (p: Project): Record<string, any> => (p.handoff ?? {}) as Record<string, any>;
-const enabled = (p: Project) => (p.handoff as any) !== false && hoff(p).enabled !== false;
+export const enabled = (p: Project) => (p.handoff as any) !== false && hoff(p).enabled !== false;
 
-function units(p: Project, ws: string): Unit[] {
+export function units(p: Project, ws: string): Unit[] {
   const cont = container(p, ws);
   return checkouts(p, ws).filter((c) => git.isRepo(c) || existsSync(join(c, ".git"))).map((c) => ({ path: c, branch: git.currentBranch(c), rel: relative(cont, c) || "." }));
 }
-function denyHits(unit: string, p: Project, allow: string[]): string[] {
+export function denyHits(unit: string, p: Project, allow: string[]): string[] {
   const changed = [...git.out(["ls-files", "-o", "--exclude-standard"], unit).split("\n"), ...git.out(["diff", "--name-only", "HEAD"], unit).split("\n")].filter(Boolean);
   const pats = [...DENY, ...((hoff(p).never as string[]) ?? [])];
   return changed.filter((f) => pats.some((g) => globMatch(g, f) || globMatch(g, basename(f))) && !allow.some((g) => globMatch(g, f)));
@@ -66,7 +66,8 @@ export const pendingFile = () => join(handoffStateDir(), "pending");
 function saveState(p: Project, data: unknown) { mkdirSync(handoffStateDir(), { recursive: true }); writeFileSync(stateFile(p), JSON.stringify(data, null, 2)); }
 export function loadState(p: Project): any { try { return JSON.parse(readFileSync(stateFile(p), "utf8")); } catch { return undefined; } }
 
-export async function handoff(repo: string, m: Machine, man: Manifest, projects: Project[], o: { note?: string; dryRun?: boolean; allow?: string[]; overwrite?: boolean }): Promise<number> {
+/** `branches` limits the run to those units (cs sync sends what the plan screen confirmed); `onDone` is called per handoff that reached the remote. */
+export async function handoff(repo: string, m: Machine, man: Manifest, projects: Project[], o: { note?: string; dryRun?: boolean; allow?: string[]; overwrite?: boolean; branches?: string[]; onDone?: (project: string, branch: string) => void }): Promise<number> {
   const ws = workspace(man, m); let rc = 0; let pushed = 0;
   for (const p of projects) {
     if (!enabled(p)) { ui.skip(`${p.name}: handoff disabled`); continue; }
@@ -74,6 +75,7 @@ export async function handoff(repo: string, m: Machine, man: Manifest, projects:
     const results: any[] = [];
     for (const u of units(p, ws)) {
       const label = `${p.name}${u.rel === "." ? "" : "/" + u.rel}`;
+      if (o.branches && !o.branches.includes(u.branch)) continue;
       if (!u.branch || u.branch.startsWith(`${REF_NS}/`)) { ui.skip(`${label}: detached or on a handoff ref`); continue; }
       if (!git.remoteUrl(u.path)) { ui.skip(`${label}: no origin`); continue; }
       const ab = git.aheadBehind(u.path); const dirty = git.isDirty(u.path);
@@ -84,14 +86,17 @@ export async function handoff(repo: string, m: Machine, man: Manifest, projects:
       if (o.dryRun) { ui.step(`${label}: would push ${git.dirtyCount(u.path)} change(s) on ${u.branch} → ${ref}`); continue; }
       await ui.spin(`${label}: fetching ${ref}…`, () => git.gitA(["fetch", "-q", "--prune", "origin", refspec(user)], u.path, { check: false, timeout: 60 }));
       const lease = git.out(["rev-parse", "--verify", "-q", `refs/remotes/origin/${ref}`], u.path);
-      if (lease && !o.overwrite) { const t = git.trailers(u.path, lease); if (t["Cs-Machine"] && t["Cs-Machine"] !== m.name) { ui.fail(`${label}: a handoff from ${t["Cs-Machine"]} is waiting on ${ref} — run cs resume there first, or --overwrite`); rc = 1; continue; } }
-      const { sha, files } = await ui.spin(`${label}: snapshotting…`, () => buildSnapshot(u, p, m, o.note ?? "", (hoff(p).extra as string[]) ?? [], (hoff(p).exclude as string[]) ?? []));
+      let note = o.note ?? "";
+      if (lease) { const t = git.trailers(u.path, lease);
+        if (t["Cs-Machine"] && t["Cs-Machine"] !== m.name && !o.overwrite) { ui.fail(`${label}: a handoff from ${t["Cs-Machine"]} is waiting on ${ref} — run cs resume there first, or --overwrite`); rc = 1; continue; }
+        if (!note && t["Cs-Machine"] === m.name) note = git.out(["show", `${lease}:${SIDE}/NOTE.md`], u.path); }   // replacing my own earlier handoff: its note stays unless a new one is given
+      const { sha, files } = await ui.spin(`${label}: snapshotting…`, () => buildSnapshot(u, p, m, note, (hoff(p).extra as string[]) ?? [], (hoff(p).exclude as string[]) ?? []));
       git.git(["update-ref", `refs/heads/${ref}`, sha], u.path);
       const push = await ui.spin(`${label}: pushing ${ref}…`, () => git.gitA(["push", "-q", `--force-with-lease=refs/heads/${ref}:${lease || ""}`, "origin", `refs/heads/${ref}:refs/heads/${ref}`], u.path, { check: false, timeout: 120 }));
       if (push.code !== 0) { ui.fail(`${label}: push rejected — ${push.err.split("\n").pop()}`); rc = 1; continue; }
       git.git(["update-ref", "-d", `refs/heads/${ref}`], u.path, { check: false });
-      results.push({ ref, sha, branch: u.branch, worktree: u.rel, at: new Date().toISOString() }); pushed++;
-      ui.step(`${label}: ${u.branch} → ${ref}  ${ui.dim(`${files} file(s)${ab && ab[0] ? ` + ${ab[0]} unpushed commit(s)` : ""}${o.note ? " · note" : ""}`)}`);
+      results.push({ ref, sha, branch: u.branch, worktree: u.rel, at: new Date().toISOString() }); pushed++; o.onDone?.(p.name, u.branch);
+      ui.step(`${label}: ${u.branch} → ${ref}  ${ui.dim(`${files} file(s)${ab && ab[0] ? ` + ${ab[0]} unpushed commit(s)` : ""}${note ? " · note" : ""}`)}`);
     }
     if (results.length) saveState(p, { handedOff: results, machine: m.name });
   }
@@ -99,12 +104,15 @@ export async function handoff(repo: string, m: Machine, man: Manifest, projects:
   return rc;
 }
 
-async function fetchWaiting(root: string, user: string): Promise<Handoff[]> {
-  await git.gitA(["fetch", "-q", "--prune", "origin", refspec(user)], root, { check: false, timeout: 60 });
+/** Fetch the handoff refs of `user` from origin and describe what is waiting. `ok` is false when the fetch failed (offline). */
+export async function fetchHandoffs(root: string, user: string, timeout = 60): Promise<{ ok: boolean; list: Handoff[] }> {
+  const r = await git.gitA(["fetch", "-q", "--prune", "origin", refspec(user)], root, { check: false, timeout });
   const refs = git.out(["for-each-ref", "--format=%(refname:short) %(objectname)", `refs/remotes/origin/${REF_NS}/${user}/`], root).split("\n").filter(Boolean);
-  return refs.map((l) => { const [full, sha] = l.split(" "); const t = git.trailers(root, sha); const ref = full.replace(/^origin\//, "");
+  const list = refs.map((l) => { const [full, sha] = l.split(" "); const t = git.trailers(root, sha); const ref = full.replace(/^origin\//, "");
     return { ref, sha, branch: t["Cs-Branch"] ?? "", base: t["Cs-Base"] ?? "", machine: t["Cs-Machine"] ?? "?", worktree: t["Cs-Worktree"] ?? ".", note: t["Cs-Note"] ?? "", when: git.out(["log", "-1", "--format=%cI", sha], root) }; }).filter((x) => x.branch);
+  return { ok: r.code === 0, list };
 }
+const fetchWaiting = async (root: string, user: string) => (await fetchHandoffs(root, user)).list;
 
 function findOrCreateUnit(p: Project, ws: string, handoff: Handoff): { path: string; created: boolean } | undefined {
   const root = checkoutRoot(p, ws);
@@ -122,15 +130,18 @@ function findOrCreateUnit(p: Project, ws: string, handoff: Handoff): { path: str
   return { path: root, created: false };
 }
 
-export async function resume(repo: string, m: Machine, man: Manifest, projects: Project[], o: { replace?: boolean; keepRemote?: boolean; dryRun?: boolean }): Promise<number> {
+/** `branches` limits the run to those handoffs; `waiting` skips the fetch when the caller (cs sync) already has the list;
+ *  `onNote` receives each handoff note instead of it being printed here (cs sync prints them after its spinner); `onDone` is called per handoff applied. */
+export async function resume(repo: string, m: Machine, man: Manifest, projects: Project[], o: { replace?: boolean; keepRemote?: boolean; dryRun?: boolean; branches?: string[]; waiting?: Record<string, Handoff[]>; onNote?: (project: string, from: string, note: string) => void; onDone?: (project: string, branch: string) => void }): Promise<number> {
   const ws = workspace(man, m); let rc = 0;
   for (const p of projects) {
     if (!enabled(p)) continue;
     const root = checkoutRoot(p, ws); if (!existsSync(root) || !git.remoteUrl(root)) continue;
     const user = userSlug(root);
-    const handoffs = await ui.spin(`${p.name}: looking for handoffs…`, () => fetchWaiting(root, user));
+    const handoffs = o.waiting?.[p.name] ?? (await ui.spin(`${p.name}: looking for handoffs…`, () => fetchWaiting(root, user)));
     if (!handoffs.length) { ui.skip(`${p.name}: nothing to resume`); continue; }
     for (const pc of handoffs) {
+      if (o.branches && !o.branches.includes(pc.branch)) continue;
       const label = `${p.name} · ${pc.branch}`;
       if (o.dryRun) { ui.step(`${label}: handoff from ${pc.machine} (${pc.when.slice(0, 16)})${pc.note ? " — " + pc.note : ""}`); continue; }
       const unit = findOrCreateUnit(p, ws, pc); if (!unit) { rc = 1; continue; }
@@ -152,9 +163,9 @@ export async function resume(repo: string, m: Machine, man: Manifest, projects: 
       const wasQuiet = ui.isQuiet(); ui.setQuiet(true); try { runLink(repo, m, man, [p.name]); } finally { ui.setQuiet(wasQuiet); }
       if (!o.keepRemote) { await ui.spin(`${label}: removing ${pc.ref} from origin…`, () => git.gitA(["push", "-q", "origin", "--delete", pc.ref], unit.path, { check: false, timeout: 60 })); git.git(["update-ref", "-d", `refs/remotes/origin/${pc.ref}`], unit.path, { check: false }); }
       if (note) { mkdirSync(handoffStateDir(), { recursive: true }); writeFileSync(noteFile(p), note); }
-      saveState(p, { resumed: { branch: pc.branch, from: pc.machine, at: new Date().toISOString(), path: unit.path } });
+      saveState(p, { resumed: { branch: pc.branch, from: pc.machine, at: new Date().toISOString(), path: unit.path } }); o.onDone?.(p.name, pc.branch);
       ui.step(`${label}: restored in ${contract(unit.path)}${unit.created ? ui.dim(" (worktree created)") : ""}  ${ui.dim(`${git.dirtyCount(unit.path)} change(s) from ${pc.machine}`)}`);
-      if (note) ui.note(note.trim().split("\n"), `note from ${pc.machine}`);
+      if (note) o.onNote ? o.onNote(p.name, pc.machine, note) : ui.note(note.trim().split("\n"), `note from ${pc.machine}`);
     }
   }
   return rc;

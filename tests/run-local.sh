@@ -356,4 +356,89 @@ git -C "$A2" for-each-ref refs/cs/backup | grep -q backup || die "backup ref kep
 [ "$(cat "$A2/notes.txt")" = "new file" ] || die "parcel applied over local edit"
 pass handoff-resume
 
+# --- cs sync: leave → arrive with one verb. Two fresh machines (desk, laptop), a fresh share, one project; nothing but cs sync is used.
+S="$(mktemp -d)"
+git init -q -b main "$S/one-src" && (cd "$S/one-src" && echo hello > README && git add . && git commit -qm init) && git clone -q --bare "$S/one-src" "$S/one.git"
+$CS share new "$S/share-src" >/dev/null
+cat >> "$S/share-src/projects.toml" <<TOML
+
+[identities.test]
+name = "Test User"
+email = "test@example.com"
+owner = "test"
+url_globs = ["$S/*.git"]
+
+[projects.one]
+url = "$S/one.git"
+identity = "test"
+branch = "main"
+profiles = ["all"]
+TOML
+(cd "$S/share-src" && git add -A && git commit -qm "share for sync") && git clone -q --bare "$S/share-src" "$S/share.git"
+export HOME6="$(mktemp -d)" HOME7="$(mktemp -d)"
+desk()   { ( export HOME="$HOME6" CLAUDE_CONFIG_DIR="$HOME6/.claude" XDG_STATE_HOME="$HOME6/.local/state" CS_CONFIG_DIR="$HOME6/.config/claude-share" SOPS_AGE_KEY_FILE="$HOME6/.config/sops/age/keys.txt"; "$@" ); }
+laptop() { ( export HOME="$HOME7" CLAUDE_CONFIG_DIR="$HOME7/.claude" XDG_STATE_HOME="$HOME7/.local/state" CS_CONFIG_DIR="$HOME7/.config/claude-share" SOPS_AGE_KEY_FILE="$HOME7/.config/sops/age/keys.txt"; "$@" ); }
+mkdir -p "$HOME6/dev" "$HOME7/dev"
+desk   $CS init --repo "$S/share.git" --name desk   --profiles work --skip deps,ssh,secrets,hooks,doctor >/dev/null || die "desk init"
+laptop $CS init --repo "$S/share.git" --name laptop --profiles work --skip deps,ssh,secrets,hooks,doctor >/dev/null || die "laptop init"
+# first run on desk: nothing here yet → the missing project is cloned, hooks and timer installed, no plan screen (CS_ANSWERS=[] would throw at any prompt)
+CS_ANSWERS='[]' desk $CS sync > "$HOME6/sync1.log" 2>&1 || { cat "$HOME6/sync1.log"; die "desk sync 1"; }
+[ -d "$HOME6/dev/one/.git" ] || die "cs sync cloned the missing project"
+grep -q "one" "$HOME6/sync1.log" && grep -q "nothing to move" "$HOME6/sync1.log" || die "sync 1 output: clone line + nothing to move"
+grep -q 'cs share-sync --push-only' "$HOME6/.config/claude-share/repo/claude/settings.base.json" || die "hooks installed by self-heal"
+[ -f "$HOME6/.config/systemd/user/cs-sync.timer" ] || die "timer installed by self-heal"
+git -C "$HOME6/dev/one" config user.name "Test User"
+# leave desk: dirty tree + a note; no CS_ANSWERS and no terminal → the plan's defaults (send) are taken
+echo "changed on desk" >> "$HOME6/dev/one/README"; echo "new" > "$HOME6/dev/one/notes.txt"
+BEFORE="$(git -C "$HOME6/dev/one" status --porcelain | sort)"
+desk $CS sync -m "carry on with the notes" > "$HOME6/sync2.log" 2>&1 || { cat "$HOME6/sync2.log"; die "desk sync 2"; }
+git -C "$S/one.git" show-ref | grep -q "wip/test-user/main" || die "handoff sent by cs sync"
+[ "$(git -C "$HOME6/dev/one" status --porcelain | sort)" = "$BEFORE" ] || die "desk tree untouched after sending"
+grep -q "handoffs sent" "$HOME6/sync2.log" && grep -q "1 handoff(s) sent" "$HOME6/sync2.log" || die "sync 2 output: sent + summary"
+[ "$(git -C "$S/share.git" rev-parse HEAD)" = "$(git -C "$HOME6/.config/claude-share/repo" rev-parse HEAD)" ] || die "share pushed at the end of the run"
+# a second concurrent cs sync is refused; a lock left by a dead process is not
+echo $$ > "$HOME6/.local/state/cs/sync.lock"
+desk $CS sync > "$HOME6/sync-locked.log" 2>&1 && die "concurrent sync must be refused" || true
+grep -q "another cs sync is running" "$HOME6/sync-locked.log" || die "refusal message"
+echo 999999 > "$HOME6/.local/state/cs/sync.lock"
+CS_ANSWERS='["<default>","done"]' desk $CS sync >/dev/null 2>&1 || die "stale lock is taken over"
+# arrive on laptop: one run clones the project, applies the handoff (scripted plan screen), prints the note, pushes the share
+CS_ANSWERS='["<default>","done"]' laptop $CS sync > "$HOME7/sync1.log" 2>&1 || { cat "$HOME7/sync1.log"; die "laptop sync"; }
+[ "$(git -C "$HOME7/dev/one" status --porcelain | sort)" = "$BEFORE" ] || die "uncommitted changes arrived on laptop"
+grep -q "changed on desk" "$HOME7/dev/one/README" && [ "$(cat "$HOME7/dev/one/notes.txt")" = "new" ] || die "contents arrived"
+grep -q "carry on with the notes" "$HOME7/sync1.log" || die "note shown on arrival"
+grep -q "1 handoff(s) applied" "$HOME7/sync1.log" || die "laptop summary"
+! git -C "$S/one.git" show-ref | grep -q "wip/test-user/main" || die "handoff deleted from the remote after applying"
+(cd "$HOME7/dev/one" && laptop $CS note --print | grep -q "carry on with the notes") || die "note kept for the session-start hook"
+[ "$(git -C "$S/share.git" rev-parse HEAD)" = "$(git -C "$HOME7/.config/claude-share/repo" rev-parse HEAD)" ] || die "laptop pushed the share"
+# back on desk, work finished there (tree clean): nothing to do → no plan screen, "nothing to move"; the share is updated on both
+(cd "$HOME6/dev/one" && git checkout -q -- . && git clean -qfd)
+CS_ANSWERS='[]' desk $CS sync > "$HOME6/sync3.log" 2>&1 || { cat "$HOME6/sync3.log"; die "desk sync 3"; }
+grep -q "nothing to move" "$HOME6/sync3.log" || die "nothing to move line"
+[ "$(git -C "$S/share.git" rev-parse HEAD)" = "$(git -C "$HOME6/.config/claude-share/repo" rev-parse HEAD)" ] || die "share updated on both"
+# self-heal: hooks, timer and a ~/.claude link removed → restored without a prompt
+python3 - "$HOME6/.config/claude-share/repo/claude/settings.base.json" <<'PY'
+import json,sys; f=sys.argv[1]; d=json.load(open(f)); d.pop("hooks",None); json.dump(d,open(f,"w"))
+PY
+(cd "$HOME6/.config/claude-share/repo" && git add -A && git commit -qm "hooks removed")
+rm -f "$HOME6/.config/systemd/user/cs-sync.timer" "$HOME6/.config/systemd/user/cs-sync.service" "$HOME6/.claude/CLAUDE.md"
+CS_ANSWERS='[]' desk $CS sync > "$HOME6/sync4.log" 2>&1 || { cat "$HOME6/sync4.log"; die "desk sync 4"; }
+grep -q 'cs share-sync --push-only' "$HOME6/.config/claude-share/repo/claude/settings.base.json" || die "hooks restored"
+[ -f "$HOME6/.config/systemd/user/cs-sync.timer" ] || die "timer restored"
+[ -L "$HOME6/.claude/CLAUDE.md" ] || die "link restored"
+grep -q "repaired" "$HOME6/sync4.log" && grep -q "hooks re-installed" "$HOME6/sync4.log" || die "repairs reported"
+# plan screen: "Change selection" returns to the multi-select; an explicit id is honoured
+echo "again" >> "$HOME6/dev/one/README"
+CS_ANSWERS='["<default>","change","","done"]' desk $CS sync > "$HOME6/sync5.log" 2>&1 || { cat "$HOME6/sync5.log"; die "desk sync 5"; }
+! git -C "$S/one.git" show-ref | grep -q "wip/test-user/main" || die "nothing sent when everything is unticked"
+grep -q "0 of 1 actions" "$HOME6/sync5.log" || die "summary reflects the changed selection"
+CS_ANSWERS='["send:one:main","done"]' desk $CS sync >/dev/null 2>&1 || die "desk sync 6"
+git -C "$S/one.git" show-ref | grep -q "wip/test-user/main" || die "sent by id"
+# offline: the project remote and the share unreachable → reported, local parts still run, exit 0
+mv "$S/one.git" "$S/one.git.off"; mv "$S/share.git" "$S/share.git.off"
+CS_ANSWERS='[]' desk $CS sync > "$HOME6/sync7.log" 2>&1 || { cat "$HOME6/sync7.log"; die "offline sync must not fail"; }
+grep -q "remote unreachable" "$HOME6/sync7.log" && grep -q "offline" "$HOME6/sync7.log" || die "offline reported"
+mv "$S/one.git.off" "$S/one.git"; mv "$S/share.git.off" "$S/share.git"
+pass cs-sync
+
 echo "ALL PASS (HOME=$HOME)"

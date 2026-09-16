@@ -147,17 +147,19 @@ cs secrets recovery                        # print a recovery key once → passw
 
 ---
 
-## Handoff — uncommitted work between machines
+## `cs sync` — leaving and arriving with one verb
 
 ```sh
-cs handoff -m "where I stopped"      # snapshot the cwd project's working tree → wip/<user>/<branch> on its remote
-cs resume                            # on the other machine: back to uncommitted changes, branch deleted, note shown
-cs handoffs                               # handoffs waiting · cs handoffs gc --older-than 14
+cs sync                              # when leaving and when arriving; -m "where I stopped" sets the handoff note
 ```
 
-Manual by design — nothing is pushed to a company remote by itself; `cs status` reminds you when a session ended with
-uncommitted work. The sending machine is never touched (private index), secrets-looking files are refused, worktrees are
-created on demand. See `docs/HANDOFF.md`.
+One run: pulls the share and repairs `~/.claude`, project state, hooks and timer without asking; clones projects
+missing here; then shows **one plan screen** — handoffs to send (dirty work here) and handoffs to apply (work waiting
+for this machine), both pre-checked — and one confirmation. Nothing is written to a project remote before that screen; an
+empty plan skips it ("nothing to move"). Offline, the local parts still run. Handoffs live on `wip/<user>/<branch>` of
+the project's own remote; the sending machine is never touched (private index), secrets-looking files are refused,
+worktrees are created on demand. The manual halves (`cs handoff`, `cs resume`, `cs handoffs`) stay callable but hidden.
+See `docs/HANDOFF.md`.
 
 ---
 
@@ -165,8 +167,8 @@ created on demand. See `docs/HANDOFF.md`.
 
 | command | what it does |
 |---|---|
-| `cs sync` | commit → pull --rebase → push the share (+ `synced` projects). Memory/plan collisions union-merge; other conflicts abort cleanly: `cs sync --resolve ours\|theirs` |
-| `cs hooks install\|status\|remove` | Claude Code hooks (push after each response, pull at session start) + a 15-min timer (systemd user / launchd) |
+| `cs sync` | the daily verb (above). The share part: commit → pull --rebase → push; memory/plan collisions union-merge; other conflicts abort cleanly: `cs sync --resolve ours\|theirs` |
+| `cs share-sync` (hidden) | the share alone — what the Claude Code hooks (push after each response, pull at session start) and the 15-min timer run; `cs sync` re-installs both |
 | `cs doctor [--fix]` | platform, tools, links, settings drift, identities, remotes, leftover local-scope MCP secrets |
 | `cs deps [--install]` | prerequisites; installs age, sops, fnm, claude user-locally |
 | `cs update` | update the tool |

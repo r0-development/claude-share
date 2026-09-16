@@ -1,17 +1,23 @@
 # Handoff: moving uncommitted work between machines
 
-`cs handoff` snapshots the working tree of the project you are in and pushes it to `wip/<user>/<branch>` on the
-project's own remote; `cs resume` on another machine turns it back into uncommitted changes and deletes the branch.
-Work code never leaves its remote, and the snapshot is a plain git commit anyone can inspect.
+A handoff is a snapshot of one project's uncommitted work (and local-only commits) pushed to `wip/<user>/<branch>` on the
+project's own remote; on another machine it turns back into uncommitted changes and the branch is deleted. Work code
+never leaves its remote, and the snapshot is a plain git commit anyone can inspect.
+
+`cs sync` does both directions in one run: every dirty project here is offered as a handoff to send, every handoff waiting
+for this machine as one to apply — pre-checked on one plan screen with one confirmation. Re-running `cs sync` on the
+same machine replaces your own earlier handoff and keeps its note unless `-m` gives a new one.
 
 ```sh
 # leaving machine A
-cs handoff -m "auth flow half done, tests red"     # cwd project; --all for every selected project
+cs sync -m "auth flow half done, tests red"        # plan screen: handoffs to send, pre-checked → Enter
 
 # arriving on machine B
-cs resume                                          # cwd project; --all for every project
-claude                                             # the note is the first thing Claude sees (SessionStart hook)
+cs sync                                            # plan screen: handoffs to apply, pre-checked → Enter; note shown
+claude                                             # the note is also the first thing Claude sees (SessionStart hook)
 ```
+
+The manual halves stay callable (hidden): `cs handoff [-m note] [--all]`, `cs resume [--all]`, `cs handoffs [ls|gc|drop]`.
 
 ## What travels
 - Tracked changes, untracked files, and local-only commits on the branch — `.gitignore` is respected.
@@ -31,6 +37,7 @@ claude                                             # the note is the first thing
   `cs handoffs gc --older-than 14` prunes forgotten handoffs.
 
 ## Reminders, no automation
-Nothing is pushed by itself. When a Claude session ends with uncommitted work, a local marker is written and `cs status`
-shows `uncommitted work — cs handoff` for that project. `cs handoff` also runs `cs sync --push-only` so memory and plans
-travel in the same gesture; `cs resume` pulls them first.
+Nothing is pushed to a project remote by itself (ADR-0002): hooks and the timer sync only the share. When a Claude
+session ends with uncommitted work, a local marker is written and `cs` shows `uncommitted work — cs sync` for that
+project. A dirty tree here plus a handoff from another machine waiting for the same branch is never decided by `cs sync`;
+it says so and names the manual commands (`cs resume --replace` keeps yours in a backup ref, `cs handoffs drop` discards theirs).
