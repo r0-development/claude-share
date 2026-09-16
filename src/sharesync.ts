@@ -7,8 +7,7 @@ import { join } from "node:path";
 import * as git from "./git.js";
 import { contract, stateDir } from "./paths.js";
 import { acquire } from "./lock.js";
-import type { Machine } from "./machine.js";
-import { loadManifest, selectedProjects, workspace, type Manifest } from "./manifest.js";
+import { commit, reload, selectedProjects, workspace, type Share } from "./share.js";
 import { runApply } from "./apply.js";
 import { runLink, syncProject } from "./link.js";
 import { dirs } from "./checkout.js";
@@ -72,13 +71,14 @@ function settleRebase(repo: string, label: string, local: string, upstream: stri
 
 /** `offline`: the fetch failed, local commits are kept for a later push. `pushed`: commits that reached the remote.
  *  `conflicts`: only with `ask` — the rebase was aborted, nothing changed; call again with `resolve` set per file. */
-export async function shareGitSync(repo: string, label: string, machine: string, o: SyncOpts = {}): Promise<ShareResult> {
+export async function shareGitSync(share: Share, label: string, o: SyncOpts = {}): Promise<ShareResult> {
+  const repo = share.path;
   if (!git.isRepo(repo)) { ui.warn(`${label}: not a git repo (${contract(repo)})`); return { ok: false }; }
   const timeout = o.timeout ?? 20;
   const release = acquire(); if (!release) { ui.info(`${label}: another sync is running, skipping`); return { ok: true }; }
   try {
     if (git.rebaseInProgress(repo)) { ui.error(`${label}: a rebase is in progress in ${contract(repo)}`, "", "finish it: git rebase --continue · or drop it: git rebase --abort"); return { ok: false }; }
-    if (!o.pullOnly && git.isDirty(repo)) { const n = git.dirtyCount(repo); git.git(["add", "-A"], repo); git.commit(repo, `sync(${machine}): ${n} file(s) ${new Date().toISOString().slice(0, 16).replace("T", " ")}`, "cs", `cs@${machine}`); ui.step(`${label}: committed ${n} change(s)`); }
+    if (!o.pullOnly && git.isDirty(repo)) { const n = git.dirtyCount(repo); commit(share, `sync(${share.machine.name}): ${n} file(s) ${new Date().toISOString().slice(0, 16).replace("T", " ")}`); ui.step(`${label}: committed ${n} change(s)`); }
     if (!git.remoteUrl(repo)) { ui.ok(`${label}: no remote configured; local only`); return { ok: true }; }
     if (o.commitOnly) return { ok: true, offline: true };
     const f = await ui.spin(`${label}: fetching…`, () => git.gitA(["fetch", "-q", "--prune", "origin"], repo, { check: false, timeout }));
@@ -105,23 +105,23 @@ export async function shareGitSync(repo: string, label: string, machine: string,
     }
     let pushed = 0;
     if (!o.pullOnly) { const ab = git.aheadBehind(repo); if (ab && ab[0]) { const pr = await ui.spin(`${label}: pushing…`, () => git.gitA(["push", "-q", "origin", branch], repo, { check: false, timeout }));
-      if (pr.code !== 0) { ui.warn(`${label}: push rejected, retrying once`); release(); return shareGitSync(repo, label, machine, o); } pushed = ab[0]; ui.ok(`${label}: pushed ${ab[0]} commit(s)`); } }
+      if (pr.code !== 0) { ui.warn(`${label}: push rejected, retrying once`); release(); return shareGitSync(share, label, o); } pushed = ab[0]; ui.ok(`${label}: pushed ${ab[0]} commit(s)`); } }
     markSync(new Date().toISOString());
     return { ok: true, pushed };
   } finally { release(); }
 }
 /** The hidden `cs share-sync` (hooks, timer): cannot ask, so conflicts are settled newest-wins per file unless --resolve says otherwise. */
-export async function runShareSync(repo: string, m: Machine, man: Manifest, o: SyncOpts & { debounce?: number } = {}): Promise<number> {
-  const ws = workspace(man, m); let rc = 0;
+export async function runShareSync(share: Share, o: SyncOpts & { debounce?: number } = {}): Promise<number> {
+  const repo = share.path, ws = workspace(share); let rc = 0;
   if (o.debounce && existsSync(lastSyncFile()) && Date.now() - statSync(lastSyncFile()).mtimeMs < o.debounce * 1000) return 0;
   const before = git.out(["rev-parse", "HEAD"], repo);
-  if (!o.pullOnly) for (const p of selectedProjects(man, m)) if (dirs(p, ws).length) syncProject(repo, p, ws);
-  if (!(await shareGitSync(repo, "share", m.name, { ...o, resolve: o.resolve ?? "newest", ask: false })).ok) rc = 2;
+  if (!o.pullOnly) for (const p of selectedProjects(share)) if (dirs(p, ws).length) syncProject(repo, p, ws);
+  if (!(await shareGitSync(share, "share", { ...o, resolve: o.resolve ?? "newest", ask: false })).ok) rc = 2;
   const after = git.out(["rev-parse", "HEAD"], repo);
   if (after !== before || o.pullOnly) {
     const changed = before ? git.out(["diff", "--name-only", before, after], repo) : "";
-    if (o.pullOnly || changed.split("\n").some((x) => x.startsWith("claude/") || x.startsWith("projects.toml") || x.startsWith("plans/"))) runApply(repo, m, man);
-    runLink(repo, m, loadManifest(repo));
+    if (o.pullOnly || changed.split("\n").some((x) => x.startsWith("claude/") || x.startsWith("projects.toml") || x.startsWith("plans/"))) runApply(share);
+    runLink(reload(share));
   }
   return rc;
 }

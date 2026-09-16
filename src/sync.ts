@@ -3,8 +3,7 @@
  *  the share → summary. Direction is never asked: waiting handoffs are applied and dirty work is sent in the same run.
  *  Only the plan screen touches a project remote (ADR-0002). */
 import { acquire } from "./lock.js";
-import type { Machine } from "./machine.js";
-import { loadManifest, selectedProjects, workspace, type Manifest } from "./manifest.js";
+import { reload, selectedProjects, workspace, type Share } from "./share.js";
 import { applyGit, applyLinks, applySettings, applyShellRc } from "./apply.js";
 import { runLink, sweepRemoved, syncProject } from "./link.js";
 import { hooksStatus, installHooks, installTimer } from "./hooks.js";
@@ -49,8 +48,8 @@ async function planScreen(pl: Plan): Promise<Action[]> {
 }
 
 // ---------------------------------------------------------------- share conflicts: asked per file, outside the spinner, then the rebase is settled and finished
-async function syncShare(repo: string, m: Machine, title: string, done: string, copyBack: () => void, opts: ShareOpts) {
-  const once = (t: string, extra: ShareOpts) => ui.group(t, async () => { copyBack(); const r = await shareGitSync(repo, "share", m.name, { ...opts, ...extra, ask: ui.canAsk() }); if (r.offline) ui.step("offline — local changes wait for the next sync"); return r; }, { done });
+async function syncShare(share: Share, title: string, done: string, copyBack: () => void, opts: ShareOpts) {
+  const once = (t: string, extra: ShareOpts) => ui.group(t, async () => { copyBack(); const r = await shareGitSync(share, "share", { ...opts, ...extra, ask: ui.canAsk() }); if (r.offline) ui.step("offline — local changes wait for the next sync"); return r; }, { done });
   let r = await once(title, {}); const answers: Record<string, Side> = {};
   while (r.conflicts?.length) {   // memory/plan *.md never get here (merge=union); the rebase was aborted, nothing changed yet
     for (const c of r.conflicts) answers[c.file] = await ui.select(`${c.file} changed on both machines — keep which version?`,
@@ -95,37 +94,38 @@ async function askEnvKeys(qs: EnvQuestion[]): Promise<Map<EnvState, Partial<Reco
 }
 
 // ---------------------------------------------------------------- the run
-export async function runSync(repo: string, m: Machine, man: Manifest, o: SyncOpts = {}): Promise<SyncResult> {
+export async function runSync(share: Share, o: SyncOpts = {}): Promise<SyncResult> {
+  const repo = share.path, m = share.machine;
   // one cs sync at a time (a timer tick and a manual run must never race); released on exit, which Ctrl-C at a prompt also is
   const release = acquire(); if (!release) throw new Error("cs: another cs sync is running here (or the hooks' share sync, a few seconds) — wait for it to finish");
   process.on("exit", release);
   const timeout = o.timeout ?? 20; let rc = 0;
-  const copyBack = () => { const ws = workspace(man, m); for (const p of selectedProjects(man, m)) if (dirs(p, ws).length) syncProject(repo, p, ws); };
+  const copyBack = () => { const ws = workspace(share); for (const p of selectedProjects(share)) if (dirs(p, ws).length) syncProject(repo, p, ws); };
 
   // 1. the share: newest memory/plans/settings in, other machines' changes out
-  const first = await syncShare(repo, m, "share synced", "already in sync", copyBack, { timeout });
+  const first = await syncShare(share, "share synced", "already in sync", copyBack, { timeout });
   if (!first.ok) rc = 2;
-  man = loadManifest(repo); const ws = workspace(man, m);   // the pull may have changed the manifest
+  const man = reload(share).manifest; const ws = workspace(share);   // the pull may have changed the manifest
 
   // 2. self-heal, never a question: hooks, timer, ~/.claude, git includes, shell rc, project state in every checkout
   await ui.group("repaired", async () => {
     const hs = hooksStatus(repo);
-    if (!hs.complete) { installHooks(repo, m); ui.step("Claude Code hooks re-installed"); }
+    if (!hs.complete) { installHooks(share); ui.step("Claude Code hooks re-installed"); }
     if (!hs.timerFiles || (hs.timerSupported && !hs.timerActive)) ui.step(`timer: ${await installTimer()}`);
-    const changes: string[] = []; applySettings(repo, m, false, changes); applyLinks(repo, false, changes); applyGit(man, false, changes); applyShellRc(false, changes);
-    for (const p of selectedProjects(man, m)) if (dirs(p, ws).length) for (const c of syncProject(repo, p, ws)) changes.push(`${p.name}: ${c}`);
+    const changes: string[] = []; applySettings(share, false, changes); applyLinks(repo, false, changes); applyGit(man, false, changes); applyShellRc(false, changes);
+    for (const p of selectedProjects(share)) if (dirs(p, ws).length) for (const c of syncProject(repo, p, ws)) changes.push(`${p.name}: ${c}`);
     changes.push(...sweepRemoved(man, ws));   // a project removed from the share on another machine: its checkout here loses the pointer we wrote
     for (const c of changes) ui.step(c);
   }, { done: "nothing to repair" });
 
   // 3. projects selected for this machine that are not here yet
-  const missing = (): Set<string> => new Set(selectedProjects(man, m).filter((p) => { const c = locate(p, ws); return !present(c) && c.why === "missing"; }).map((p) => p.name));
+  const missing = (): Set<string> => new Set(selectedProjects(share).filter((p) => { const c = locate(p, ws); return !present(c) && c.why === "missing"; }).map((p) => p.name));
   const before = missing();
-  if (await ui.group("cloned", () => clone(repo, m, man, []), { done: "nothing missing" })) rc = rc || 1;
+  if (await ui.group("cloned", () => clone(share, []), { done: "nothing missing" })) rc = rc || 1;
   const after = missing(); const cloned = [...before].filter((n) => !after.has(n)).length;
 
   // 4. gather → 5. plan → 6. plan screen
-  const { facts, envSkipped } = await ui.group("projects checked", async () => { const g = await gather(repo, m, man, { timeout }); report(g.facts); return g; }, { done: "all clean, nothing waiting" });
+  const { facts, envSkipped } = await ui.group("projects checked", async () => { const g = await gather(share, { timeout }); report(g.facts); return g; }, { done: "all clean, nothing waiting" });
   const pl = plan(facts, m.name);
   for (const s of pl.skipped) ui.skip(s);
   for (const s of envSkipped) ui.skip(s);
@@ -151,7 +151,7 @@ export async function runSync(repo: string, m: Machine, man: Manifest, o: SyncOp
   if (applies.length || replace.length) await ui.group("handoffs applied", async () => {
     const one = async (a: { checkout: Facts["checkout"]; handoff: HandoffQuestion["handoff"] }, replace: boolean) => {
       const r = await apply(a.checkout, a.handoff, m, { replace }); if (!r.ok) return; applied++;
-      const wasQuiet = ui.isQuiet(); ui.setQuiet(true); try { runLink(repo, m, man, [a.checkout.project.name]); } finally { ui.setQuiet(wasQuiet); }   // project state into the unit (a new worktree has none yet)
+      const wasQuiet = ui.isQuiet(); ui.setQuiet(true); try { runLink(share, [a.checkout.project.name]); } finally { ui.setQuiet(wasQuiet); }   // project state into the unit (a new worktree has none yet)
       if (r.note) notes.push([`${a.checkout.project.name} — note from ${a.handoff.machine}`, ...r.note.trim().split("\n")]);
     };
     for (const a of applies) await one(a, false);
@@ -169,7 +169,7 @@ export async function runSync(repo: string, m: Machine, man: Manifest, o: SyncOp
   if (envRows.length || keysOnly.length) await ui.group(".env files", async () => {
     const b = await getBackend(m);
     const one = async (label: string, st: EnvState, decide: Partial<Record<string, EnvSide>>) => {
-      try { const r = await applyEnv(repo, b, st, decide); envDone++;
+      try { const r = await applyEnv(share, b, st, decide); envDone++;
         ui.step(`${label}: ${[r.stored ? `${count(r.stored, "key")} stored` : "", r.local ? `${count(r.local, "key")} taken${st.storedFrom ? ` from ${st.storedFrom}` : ""}` : ""].filter(Boolean).join(", ")}${r.toFill.length ? ui.yellow(` — to fill in: ${r.toFill.join(", ")}`) : ""}`); }
       catch (e: any) { ui.fail(`${label}: ${String(e?.message ?? e).replace(/^cs: /, "")}`); }
     };
@@ -181,7 +181,7 @@ export async function runSync(repo: string, m: Machine, man: Manifest, o: SyncOp
   if (failed) rc = rc || 1;
 
   // 8. the share again: what the run changed (project state, handoff notes, memory) goes out
-  const last = await syncShare(repo, m, "share pushed", first.offline ? "committed locally — offline, pushed by the next sync" : "already in sync", copyBack, { timeout, commitOnly: first.offline });
+  const last = await syncShare(share, "share pushed", first.offline ? "committed locally — offline, pushed by the next sync" : "already in sync", copyBack, { timeout, commitOnly: first.offline });
   if (!last.ok) rc = 2;
 
   const bits = [applied ? `${applied} handoff(s) applied` : "", sent ? `${sent} handoff(s) sent` : "", pushed ? `${pushed} branch(es) pushed` : "", envDone ? `${envDone} .env file(s) merged` : "", cloned ? `${cloned} project(s) cloned` : "", kept ? ui.yellow(`${kept} handoff(s) left waiting — see above`) : ""].filter(Boolean);

@@ -1,12 +1,11 @@
 /** cs remove <names...>: take projects out of the share — manifest entry, project state, secrets — in one share commit, after
  *  one confirmation that lists exactly what goes. Checkouts and remotes are never touched; the only tidy-up inside a
  *  checkout is the auto-memory pointer cs wrote there. The share's history keeps everything (undo: git revert). */
-import { existsSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, rmSync } from "node:fs";
 import { join, relative } from "node:path";
-import * as git from "./git.js";
 import { contract } from "./paths.js";
-import type { Machine } from "./machine.js";
-import { NAME_RE, projectTableRe, removeProjectText, workspace, type Manifest, type Project } from "./manifest.js";
+import { NAME_RE, projectTableRe, type Project } from "./manifest.js";
+import { commit, removeProject, workspace, type Share } from "./share.js";
 import { dirs, fetchWaiting, locate, present } from "./checkout.js";
 import { dropPlacedRecord, stripPointer } from "./link.js";
 import { fileOf } from "./env.js";
@@ -17,13 +16,13 @@ const secretsDir = (repo: string) => join(repo, "secrets", "projects");
 /** Entries under secrets/projects/ (`<entry>.env`), by name. */
 const secretEntries = (repo: string): string[] => (existsSync(secretsDir(repo)) ? readdirSync(secretsDir(repo)).filter((f) => f.endsWith(".env")).map((f) => f.slice(0, -4)).sort() : []);
 /** The entries that belong to `name`: its `.env` and its `.env.<suffix>` files (src/env.ts's naming) — unless the entry is a registered project of its own. */
-export function secretsFiles(repo: string, man: Manifest, name: string): string[] {
-  return secretEntries(repo).filter((e) => fileOf(name, e) && (e === name || !man.projects[e])).map((e) => join(secretsDir(repo), `${e}.env`));
+export function secretsFiles(share: Share, name: string): string[] {
+  return secretEntries(share.path).filter((e) => fileOf(name, e) && (e === name || !share.manifest.projects[e])).map((e) => join(secretsDir(share.path), `${e}.env`));
 }
 /** Names that have project state or secrets in the share but no manifest entry — leftovers cs doctor points at cs remove for.
  *  An entry that reads as another orphan's `.env.<suffix>` is folded into that orphan: one `cs remove <name>` takes both. */
-export function orphans(repo: string, man: Manifest): string[] {
-  const names = new Set<string>(), state = new Set<string>(); const registered = Object.keys(man.projects);
+export function orphans(share: Share): string[] {
+  const repo = share.path, man = share.manifest; const names = new Set<string>(), state = new Set<string>(); const registered = Object.keys(man.projects);
   const st = join(repo, "projects");
   if (existsSync(st)) for (const e of readdirSync(st, { withFileTypes: true })) if (e.isDirectory() && !man.projects[e.name]) { names.add(e.name); state.add(e.name); }
   for (const e of secretEntries(repo)) if (!registered.some((p) => fileOf(p, e))) names.add(e);
@@ -35,13 +34,14 @@ const countFiles = (dir: string): number => readdirSync(dir, { withFileTypes: tr
 const subTables = (text: string, name: string) => [...text.matchAll(projectTableRe(name, "gm"))].map((m) => m[0].replace(/\s*(#.*)?$/, ""));
 
 /** A name is accepted when any of the three exists; unknown when none does. */
-function resolve(repo: string, m: Machine, man: Manifest, names: string[]): Target[] {
-  const known = [...new Set([...Object.keys(man.projects), ...orphans(repo, man)])].sort();
-  const ws = workspace(man, m);
+function resolve(share: Share, names: string[]): Target[] {
+  const repo = share.path, man = share.manifest;
+  const known = [...new Set([...Object.keys(man.projects), ...orphans(share)])].sort();
+  const ws = workspace(share);
   return names.map((name) => {
     if (!NAME_RE.test(name)) throw new Error(`cs: '${name}' is not a project name`);
     const project = man.projects[name]; const state = join(repo, "projects", name);
-    const t: Target = { name, project, state: existsSync(state) ? state : undefined, secrets: secretsFiles(repo, man, name), here: project ? dirs(project, ws) : [] };
+    const t: Target = { name, project, state: existsSync(state) ? state : undefined, secrets: secretsFiles(share, name), here: project ? dirs(project, ws) : [] };
     if (!t.project && !t.state && !t.secrets.length) throw new Error(`cs: unknown project '${name}'\nknown: ${known.join(", ") || "(none)"}`);
     return t;
   });
@@ -67,9 +67,9 @@ function summary(t: Target, manifestText: string) {
   return lines;
 }
 
-export async function remove(repo: string, m: Machine, man: Manifest, names: string[], o: { yes?: boolean; noCommit?: boolean } = {}): Promise<string> {
-  const targets = resolve(repo, m, man, [...new Set(names)]); const ws = workspace(man, m);
-  const manifestFile = join(repo, "projects.toml"); let text = readFileSync(manifestFile, "utf8");
+export async function remove(share: Share, names: string[], o: { yes?: boolean; noCommit?: boolean } = {}): Promise<string> {
+  const repo = share.path; const targets = resolve(share, [...new Set(names)]); const ws = workspace(share);
+  const text = readFileSync(join(repo, "projects.toml"), "utf8");
   for (const t of targets) ui.note(summary(t, text), t.name);
   for (const t of targets) await warnings(t, ws);
   const label = targets.map((t) => t.name).join(", ");
@@ -79,18 +79,14 @@ export async function remove(repo: string, m: Machine, man: Manifest, names: str
   }
   const paths: string[] = [];
   for (const t of targets) {
-    const r = removeProjectText(text, t.name); if (r.found) { text = r.text; paths.push("projects.toml"); }
+    if (removeProject(share, t.name)) paths.push("projects.toml");
     if (t.state) { rmSync(t.state, { recursive: true, force: true }); paths.push(relative(repo, t.state)); }
     for (const f of t.secrets) { rmSync(f, { force: true }); paths.push(relative(repo, f)); }
     for (const c of t.here) if (stripPointer(c)) ui.step(`${t.name}: auto-memory pointer removed from ${contract(c)}`);
     dropPlacedRecord(t.name);
   }
-  if (paths.includes("projects.toml")) writeFileSync(manifestFile, text);
-  let sha = "";
-  if (!o.noCommit && git.isRepo(repo)) {   // exactly the removal — nothing else the share may have pending — so one git revert brings it all back
-    for (const p of new Set(paths)) git.git(["add", "-A", "--", p], repo, { check: false });   // a state dir never committed matches nothing: fine
-    if (git.git(["diff", "--cached", "--quiet"], repo, { check: false }).code !== 0) { git.commit(repo, `remove ${label}`, "cs", `cs@${m.name}`); sha = git.out(["rev-parse", "--short", "HEAD"], repo); }
-  }
+  // exactly the removal — nothing else the share may have pending — so one git revert brings it all back
+  const sha = o.noCommit ? "" : commit(share, `remove ${label}`, [...new Set(paths)]) ?? "";
   ui.ok(`removed ${label} from the share${sha ? `  ${ui.dim(`commit ${sha}`)}` : ui.dim(o.noCommit ? "  (not committed: --no-commit)" : "  (nothing to commit — the share had none of it committed)")}`);
   for (const t of targets) {
     for (const c of t.here) ui.info(`${t.name}: checkout kept at ${contract(c)} — just a directory now, yours to keep or rm`);

@@ -1,10 +1,11 @@
 /** Secrets backends: sops (default) | none. */
 import { join } from "node:path";
 import type { Machine } from "../machine.js";
+import type { Share } from "../share.js";
 
 export interface Backend {
   name: string;
-  init(repo: string, m: Machine, interactive: boolean): Promise<void>;
+  init(share: Share, interactive: boolean): Promise<void>;
   ready(repo: string): boolean;
   loadEnv(repo: string, name: string): Record<string, string>;
   writeEnv(repo: string, name: string, values: Record<string, string>): string;
@@ -12,7 +13,7 @@ export interface Backend {
   loadEnvA(repo: string, name: string): Promise<Record<string, string>>;
   writeEnvA(repo: string, name: string, values: Record<string, string>): Promise<string>;
   edit(repo: string, name: string): void;
-  status(repo: string, m: Machine): void;
+  status(share: Share): void;
 }
 export async function getBackend(m: Machine): Promise<Backend> {
   if (m.secretsBackend === "sops") return (await import("./sops.js")).SopsBackend;

@@ -2,12 +2,11 @@
 import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { spawnSync } from "node:child_process";
-import * as git from "./git.js";
 import * as github from "./github.js";
 import { expand, home, contract } from "./paths.js";
 import * as platform from "./platform.js";
-import type { Machine } from "./machine.js";
-import { keyPath, type Identity, type Manifest } from "./manifest.js";
+import { keyPath, type Identity } from "./manifest.js";
+import { commit, type Share } from "./share.js";
 import * as ui from "./ui.js";
 
 const MARK = "# >>> claude-share >>>", END = "# <<< claude-share <<<";
@@ -32,21 +31,21 @@ async function register(i: Identity, pub: string, title: string): Promise<string
     await github.api("POST", "/user/keys", tok, { title, key: pub }); return "registered on GitHub";
   } catch (e: any) { return /403|404/.test(e.message) ? "token lacks 'Git SSH keys: write' — add manually: https://github.com/settings/ssh/new" : e.message; }
 }
-export async function setup(repo: string, m: Machine, man: Manifest, checkOnly = false): Promise<number> {
-  const ids = Object.values(man.identities); if (!ids.length) { ui.warn("no identities yet (cs identity add …)"); return 0; }
+export async function setup(share: Share, checkOnly = false): Promise<number> {
+  const repo = share.path, m = share.machine; const ids = Object.values(share.manifest.identities); if (!ids.length) { ui.warn("no identities yet (cs identity add …)"); return 0; }
   const rows: string[][] = []; let published = false; const unregistered: Identity[] = [];
   for (const i of ids) {
     const key = expand(keyPath(i)), pubf = key + ".pub"; const state: string[] = [];
     if (!existsSync(key)) { if (checkOnly) { rows.push([i.id, keyPath(i), ui.red("missing")]); unregistered.push(i); continue; } keygen(key, `cs:${m.name}:${i.id}`); state.push(ui.green("generated")); }
     const pub = readFileSync(pubf, "utf8").trim(); const dest = join(repo, "machines", m.name, "ssh", `${i.id}.pub`);
-    if (!checkOnly && (!existsSync(dest) || readFileSync(dest, "utf8").trim() !== pub)) { mkdirSync(dirname(dest), { recursive: true }); writeFileSync(dest, pub + "\n"); git.git(["add", dest], repo); published = true; }
+    if (!checkOnly && (!existsSync(dest) || readFileSync(dest, "utf8").trim() !== pub)) { mkdirSync(dirname(dest), { recursive: true }); writeFileSync(dest, pub + "\n"); published = true; }
     let user = await ui.spin(`verifying ${i.id} key on GitHub…`, () => githubUserForKey(key));
     if (user) state.push(ui.green(`github: ${user}`));
     else if (!checkOnly) { const r = await ui.spin(`registering ${i.id} key…`, () => register(i, pub, `cs:${m.name}:${i.id}`)); user = await githubUserForKey(key); if (user) state.push(ui.green(`github: ${user}`)); else { state.push(ui.yellow(r.startsWith("registered") ? "registered, not verified yet" : "needs registering")); unregistered.push(i); } }
     else { state.push(ui.yellow("not accepted by GitHub yet")); unregistered.push(i); }
     rows.push([i.id, keyPath(i), state.join("  ")]);
   }
-  if (published) git.commit(repo, `machines: ${m.name} ssh public keys`, "cs", `cs@${m.name}`);
+  if (published) commit(share, `machines: ${m.name} ssh public keys`, [join(repo, "machines", m.name, "ssh")]);
   if (!checkOnly && writeSshConfig()) ui.step("~/.ssh/config: managed block (IdentitiesOnly, AddKeysToAgent)");
   ui.table(rows, ["identity", "key", "state"]);
   for (const i of unregistered) { const pubf = expand(keyPath(i)) + ".pub"; if (!existsSync(pubf)) continue;

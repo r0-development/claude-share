@@ -7,7 +7,8 @@ import * as sharekey from "./sharekey.js";
 import { contract, expand, home, shareDirDefault, templatesDir } from "./paths.js";
 import * as platform from "./platform.js";
 import { loadMachine, machineExists, saveMachine, type Machine } from "./machine.js";
-import { loadManifest, NAME_RE, selectedProjects, workspace, type Manifest, type Project } from "./manifest.js";
+import { loadManifest, NAME_RE, type Project } from "./manifest.js";
+import { open, selectedProjects, workspace, type Share } from "./share.js";
 import { locate, present } from "./checkout.js";
 import { runApply } from "./apply.js";
 import { runLink } from "./link.js";
@@ -127,23 +128,24 @@ async function machinePhase(repo: string, nm: string, profiles: string[], ws: st
   const m: Machine = { name: nm, profiles, exclude, workspace: workspaceOverride, secretsBackend: "sops" }; saveMachine(m);
   return m;
 }
-async function firstIdentity(repo: string, m: Machine, interactive: boolean) {
-  const man = loadManifest(repo); if (Object.keys(man.identities).length) return;
+async function firstIdentity(share: Share, interactive: boolean) {
+  if (Object.keys(share.manifest.identities).length) return;
   if (!interactive) { ui.warn("no identities yet — add one with cs identity add <id> --owner <owner> --name .. --email .."); return; }
   ui.section("first identity"); ui.info("an identity = a GitHub owner (your login or an org) + the name and email you commit with there");
   const id = await ui.text("identity id", { default: "personal", validate: name }); const own = await ui.text("GitHub owner (your login or an org)", { validate: owner });
   const nm = await ui.text("git user.name", { validate: (v) => (v ? undefined : "required") }); const em = await ui.text("git user.email", { validate: email });
-  await identity.add(repo, m, man, id, { owner: own, name: nm, email: em, noToken: true });
+  await identity.add(share, id, { owner: own, name: nm, email: em, noToken: true });
 }
-async function keysAndTokens(repo: string, m: Machine, interactive: boolean, skip: string[]) {
-  const full = loadManifest(repo); if (!Object.keys(full.identities).length) return;
+async function keysAndTokens(share: Share, interactive: boolean, skip: string[]) {
+  const full = share.manifest; if (!Object.keys(full.identities).length) return;
   // only the identities the selected projects actually use (all of them when nothing is selected yet, e.g. a new share)
-  const used = new Set(selectedProjects(full, m).map((p) => p.identity).filter(Boolean));
-  const man: Manifest = used.size ? { ...full, identities: Object.fromEntries(Object.entries(full.identities).filter(([id]) => used.has(id))) } : full;
+  const used = new Set(selectedProjects(share).map((p) => p.identity).filter(Boolean));
+  const man = used.size ? { ...full, identities: Object.fromEntries(Object.entries(full.identities).filter(([id]) => used.has(id))) } : full;
+  const narrowed: Share = { ...share, manifest: man };   // a read-only view for the ssh setup: nothing below writes the manifest
   const skipped = Object.keys(full.identities).filter((id) => !(id in man.identities));
   if (skipped.length) ui.skip(`identities not needed by the selected projects: ${skipped.join(", ")}`);
-  if (!skip.includes("ssh")) { ui.section("identity ssh keys"); const ssh = await import("./ssh.js"); let rc = await ssh.setup(repo, m, man); let tries = 0;
-    while (rc !== 0 && interactive && tries++ < 5) { if (!(await ui.proceed("added the key(s) on GitHub?", "Done — verify", "Skip for now"))) break; rc = await ssh.setup(repo, m, man, true); } }
+  if (!skip.includes("ssh")) { ui.section("identity ssh keys"); const ssh = await import("./ssh.js"); let rc = await ssh.setup(narrowed); let tries = 0;
+    while (rc !== 0 && interactive && tries++ < 5) { if (!(await ui.proceed("added the key(s) on GitHub?", "Done — verify", "Skip for now"))) break; rc = await ssh.setup(narrowed, true); } }
   if (interactive) { const missing = Object.values(man.identities).filter((i) => i.owner && !github.getToken(i.owner));
     if (missing.length) { ui.section("GitHub tokens"); ui.info("a token per owner lets cs new --<id> create repos — optional now, cs token set <owner> later");
       for (const i of missing) if (await ui.confirm(`store a token for ${i.owner} (identity ${i.id}) now?`, false)) { try { await github.ensureToken(i.owner); ui.ok(`token for ${i.owner} stored`); } catch (e: any) { ui.warn(e.message); } } } }
@@ -152,17 +154,17 @@ function push(repo: string) {
   if (!git.remoteUrl(repo)) return; const ab = git.aheadBehind(repo);
   if (ab === undefined || ab[0]) { const r = git.git(["push", "-q", "-u", "origin", git.currentBranch(repo)], repo, { check: false, timeout: 60 }); r.code === 0 ? ui.ok("share pushed") : ui.fail(`push failed: ${r.err}`); }
 }
-async function finish(repo: string, m: Machine, interactive: boolean, skip: string[]): Promise<number> {
-  const man = loadManifest(repo);
-  if (!skip.includes("apply")) await ui.group("~/.claude applied", () => runApply(repo, m, man), { done: "already up to date" });
-  if (!skip.includes("link")) await ui.group("project files linked", () => runLink(repo, m, man), { done: "already in sync" });
+async function finish(share: Share, interactive: boolean, skip: string[]): Promise<number> {
+  const repo = share.path, m = share.machine;
+  if (!skip.includes("apply")) await ui.group("~/.claude applied", () => runApply(share), { done: "already up to date" });
+  if (!skip.includes("link")) await ui.group("project files linked", () => runLink(share), { done: "already in sync" });
   let secretsOk = true;
-  if (!skip.includes("secrets") && m.secretsBackend !== "none") { const sc = await import("./secretscmd.js"); await ui.group("secrets", () => sc.init(repo, m, interactive)); secretsOk = await sc.ensureRecipient(repo, m, interactive); }
-  if (!skip.includes("hooks")) await ui.group("automatic sync", async () => { await (await import("./hooks.js")).runHooks(repo, m, "install"); runApply(repo, m, loadManifest(repo)); });
+  if (!skip.includes("secrets") && m.secretsBackend !== "none") { const sc = await import("./secretscmd.js"); await ui.group("secrets", () => sc.init(share, interactive)); secretsOk = await sc.ensureRecipient(share, interactive); }
+  if (!skip.includes("hooks")) await ui.group("automatic sync", async () => { await (await import("./hooks.js")).runHooks(share, "install"); runApply(share); });
   await ui.group("share", () => push(repo), { done: "nothing to push" });
-  let rc = 0; if (!skip.includes("doctor")) rc = await ui.group("doctor", () => runDoctor(repo, m, loadManifest(repo), false, true), { done: "all checks passed" });
-  const ws = workspace(man, m); const missing = selectedProjects(man, m).filter((p) => { const c = locate(p, ws); return p.url && !present(c) && c.why === "missing"; });
-  if (missing.length && interactive && (await ui.confirm(`clone ${missing.length} project(s) now (${missing.slice(0, 6).map((p) => p.name).join(", ")}${missing.length > 6 ? "…" : ""})?`, true))) await ui.group(`clone ${missing.length} project(s)`, async () => (await import("./projects.js")).clone(repo, m, man, []));
+  let rc = 0; if (!skip.includes("doctor")) rc = await ui.group("doctor", () => runDoctor(share, false, true), { done: "all checks passed" });
+  const ws = workspace(share); const missing = selectedProjects(share).filter((p) => { const c = locate(p, ws); return p.url && !present(c) && c.why === "missing"; });
+  if (missing.length && interactive && (await ui.confirm(`clone ${missing.length} project(s) now (${missing.slice(0, 6).map((p) => p.name).join(", ")}${missing.length > 6 ? "…" : ""})?`, true))) await ui.group(`clone ${missing.length} project(s)`, async () => (await import("./projects.js")).clone(share, []));
   const rcFile = platform.shellRc().split("/").pop();
   ui.note([`${ui.bold("open a new terminal")} ${ui.dim(`(or: source ~/${rcFile})`)} — that gives you ${ui.bold("cs")} on PATH and the ${ui.bold("claude")} wrapper`,
     `${ui.bold("claude")}  ${ui.dim("log in once on this machine")}`, `${ui.bold("cs")}  ${ui.dim("what is waiting or stale")}`, `${ui.bold("cs sync")}  ${ui.dim("when leaving and when arriving")}`, `${ui.bold("cs new <project> --<identity>")}  ${ui.dim("start something")}`,
@@ -194,6 +196,7 @@ export async function init(o: InitOpts): Promise<number> {
     else throw new Error("cs: pass --repo <url|path> or --owner <github-owner>, or run cs init in a terminal");
   }
   const m = await machinePhase(target, nm, o.profiles ?? [], o.workspace, interactive);
-  await firstIdentity(target, m, interactive); await keysAndTokens(target, m, interactive, skip);
-  return finish(target, m, interactive, skip);
+  const share = open(m, target);   // from here on the share has a manifest: the Share holds it
+  await firstIdentity(share, interactive); await keysAndTokens(share, interactive, skip);
+  return finish(share, interactive, skip);
 }

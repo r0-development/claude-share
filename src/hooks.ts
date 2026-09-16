@@ -4,10 +4,9 @@ import { existsSync, mkdirSync, readFileSync, unlinkSync, writeFileSync } from "
 import { join } from "node:path";
 import { spawnSync } from "node:child_process";
 import { exec } from "./proc.js";
-import * as git from "./git.js";
 import { home, stateDir } from "./paths.js";
 import * as platform from "./platform.js";
-import type { Machine } from "./machine.js";
+import { commit, type Share } from "./share.js";
 import { dumps, loads } from "./jsonmerge.js";
 import { lastSync } from "./sharesync.js";
 import * as ui from "./ui.js";
@@ -21,14 +20,14 @@ const entries = (): Record<string, any[]> => ({
 export const HOOK_EVENTS = Object.keys(entries());
 /** Ours = any hook that runs cs (old `cs sync …` / SessionEnd `cs handoff --mark` hook commands included, so re-installing replaces or drops them). */
 const ours = (e: any) => (e.hooks ?? []).some((h: any) => /\bcs (share-sync|sync|handoff|note)\b/.test(String(h.command ?? "")));
-export function installHooks(repo: string, m: Machine, remove = false): boolean {
-  const f = join(repo, "claude", "settings.base.json"); const data: any = existsSync(f) ? loads(readFileSync(f, "utf8")) : {};
+export function installHooks(share: Share, remove = false): boolean {
+  const f = join(share.path, "claude", "settings.base.json"); const data: any = existsSync(f) ? loads(readFileSync(f, "utf8")) : {};
   data.hooks ??= {}; let changed = false;
   const want = entries();
   for (const ev of new Set([...Object.keys(want), ...Object.keys(data.hooks)])) { const cur = (data.hooks[ev] ?? []).filter((e: any) => !ours(e)); const next = remove ? cur : [...cur, ...(want[ev] ?? [])];
     if (JSON.stringify(next) !== JSON.stringify(data.hooks[ev] ?? [])) { data.hooks[ev] = next; changed = true; } if (!data.hooks[ev]?.length) delete data.hooks[ev]; }
   if (!Object.keys(data.hooks).length) delete data.hooks;
-  if (changed) { writeFileSync(f, dumps(data)); git.git(["add", f], repo); git.commit(repo, `claude: ${remove ? "remove" : "install"} cs share-sync hooks`, "cs", `cs@${m.name}`); }
+  if (changed) { writeFileSync(f, dumps(data)); commit(share, `claude: ${remove ? "remove" : "install"} cs share-sync hooks`, [f]); }
   return changed;
 }
 /** Async: `systemctl`/`launchctl` run under a spinner in cs init and cs sync. */
@@ -60,15 +59,15 @@ export function hooksStatus(repo: string): { events: string[]; complete: boolean
   const timerActive = platform.isMac() ? timerFiles : state === "active"; const timerSupported = platform.isMac() || state !== "";
   return { events, complete, timerActive, timerFiles, timerSupported, lastSync: lastSync() };
 }
-export async function runHooks(repo: string, m: Machine, action: string, timer = true): Promise<number> {
+export async function runHooks(share: Share, action: string, timer = true): Promise<number> {
   if (action === "status") {
-    const st = hooksStatus(repo);
+    const st = hooksStatus(share.path);
     ui.kv("hooks", st.events.length ? st.events.join(", ") + (st.complete ? "" : ui.yellow("  (outdated — cs hooks install)")) : ui.dim("not installed"));
     ui.kv("timer", st.timerActive ? ui.green("active") : ui.dim("not active"));
     ui.kv("last sync", st.lastSync ?? ui.dim("never")); return 0;
   }
   const remove = action === "remove";
-  installHooks(repo, m, remove) ? ui.ok(`${remove ? "removed" : "installed"} Claude Code hooks in claude/settings.base.json (run cs apply)`) : ui.skip(`hooks already ${remove ? "absent" : "present"}`);
+  installHooks(share, remove) ? ui.ok(`${remove ? "removed" : "installed"} Claude Code hooks in claude/settings.base.json (run cs apply)`) : ui.skip(`hooks already ${remove ? "absent" : "present"}`);
   if (timer) ui.ok(await installTimer(remove));
   return 0;
 }

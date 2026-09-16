@@ -1,5 +1,5 @@
 /** projects.toml — identities and projects. */
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { join, isAbsolute, resolve } from "node:path";
 import { parse, stringify } from "smol-toml";
 import { expand } from "./paths.js";
@@ -106,9 +106,6 @@ export function addProjectText(text: string, p: Project): string {
   if (projectTableRe(p.name, "m").test(text)) throw new Error(`cs: project '${p.name}' already registered (edit projects.toml to change it)`);
   return text.replace(/\n*$/, "\n\n") + projectBlock(p);
 }
-export function appendProject(repo: string, p: Project) {
-  const f = join(repo, "projects.toml"); writeFileSync(f, addProjectText(readFileSync(f, "utf8"), p));
-}
 /** Rewrite the main `[projects.<name>]` block in place; sub-tables (`[projects.<name>.handoff]`) are left untouched. */
 /** Rewrite the body of `[projects.<name>]` in place: the header line (its comment included) and the sub-tables
  *  (`[projects.<name>.handoff]`) are left untouched. Pure. */
@@ -120,9 +117,6 @@ export function updateProjectText(text: string, p: Project): string {
   while (end > start + 1 && lines[end - 1].trim() === "") end--;
   const body = projectBlock(p).trimEnd().split("\n").slice(1);
   return [...lines.slice(0, start + 1), ...body, ...lines.slice(end)].join("\n");
-}
-export function updateProject(repo: string, p: Project) {
-  const f = join(repo, "projects.toml"); writeFileSync(f, updateProjectText(readFileSync(f, "utf8"), p));
 }
 /** The header of `[projects.<name>]` or any `[projects.<name>.<sub>]` table, as one trimmed line (a trailing comment allowed). */
 export const projectTableRe = (name: string, flags = "") => new RegExp(`^\\[projects\\.${name.replace(/[.]/g, "\\.")}(\\.[^\\]]+)?\\]\\s*(#.*)?$`, flags);
@@ -152,7 +146,4 @@ export function addIdentityText(text: string, i: Identity): string {
 export function renameIdentityText(text: string, oldId: string, newId: string): string {
   const esc = oldId.replace(/[.]/g, "\\.");
   return text.replace(new RegExp(`^\\[identities\\.${esc}\\]`, "m"), `[identities.${newId}]`).replace(new RegExp(`^(identity\\s*=\\s*)"${esc}"`, "mg"), `$1"${newId}"`);
-}
-export function appendIdentity(repo: string, i: Identity) {
-  const f = join(repo, "projects.toml"); writeFileSync(f, addIdentityText(readFileSync(f, "utf8"), i));
 }

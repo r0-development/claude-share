@@ -3,8 +3,8 @@ import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, s
 import { dirname, join, relative } from "node:path";
 import * as git from "./git.js";
 import { contract, stateDir } from "./paths.js";
-import type { Machine } from "./machine.js";
-import { selectedProjects, workspace, type Manifest, type Project } from "./manifest.js";
+import type { Manifest, Project } from "./manifest.js";
+import { selectedProjects, workspace, type Share } from "./share.js";
 import { checkoutRoot, dirs, dirsAt, sniff } from "./checkout.js";
 import { dumps } from "./jsonmerge.js";
 import * as ui from "./ui.js";
@@ -109,13 +109,13 @@ export function syncProject(repo: string, p: Project, ws: string, check = false)
   if (!check) saveState(p, ws, final);
   return changes;
 }
-export function runLink(repo: string, m: Machine, man: Manifest, names: string[] = [], check = false): number {
-  const ws = workspace(man, m);
+export function runLink(share: Share, names: string[] = [], check = false): number {
+  const ws = workspace(share); const man = share.manifest;
   const unknown = names.filter((n) => !man.projects[n]); if (unknown.length) throw new Error(`cs: unknown project(s): ${unknown.join(", ")}`);
   let total = 0;
   if (!names.length && !check) for (const c of sweepRemoved(man, ws)) { ui.step(c); total++; }
-  for (const p of selectedProjects(man, m)) { if (names.length && !names.includes(p.name)) continue; if (!dirs(p, ws).length) continue;
-    const ch = syncProject(repo, p, ws, check); for (const c of ch) check ? ui.info(`${p.name}: ${c}`) : ui.step(`${p.name}: ${c}`); total += ch.length; }
+  for (const p of selectedProjects(share)) { if (names.length && !names.includes(p.name)) continue; if (!dirs(p, ws).length) continue;
+    const ch = syncProject(share.path, p, ws, check); for (const c of ch) check ? ui.info(`${p.name}: ${c}`) : ui.step(`${p.name}: ${c}`); total += ch.length; }
   if (!total) ui.ok("project files in sync");
   return total;
 }

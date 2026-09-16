@@ -5,8 +5,8 @@ import { existsSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import * as git from "./git.js";
 import { contract } from "./paths.js";
-import type { Machine } from "./machine.js";
-import { selected, workspace, type Manifest } from "./manifest.js";
+import { selected } from "./manifest.js";
+import { workspace, type Share } from "./share.js";
 import { locate, present, sniff } from "./checkout.js";
 import { gather } from "./gather.js";
 import { hooksStatus } from "./hooks.js";
@@ -46,14 +46,14 @@ async function shareLine(repo: string, fetch: boolean, timeout: number): Promise
 export interface StatusResult { rc: number; next?: string }
 /** `next` is the command that resolves what was found: cs sync when it would move something, cs doctor --fix for what
  *  doctor repairs. Work cs sync cannot carry (detached HEAD, files that look secret) is attention too — its line says what to do. */
-export async function runStatus(repo: string, m: Machine, man: Manifest, fetch = true, showAll = false, timeout = 10): Promise<StatusResult> {
-  const ws = workspace(man, m);
+export async function runStatus(share: Share, fetch = true, showAll = false, timeout = 10): Promise<StatusResult> {
+  const repo = share.path, m = share.machine, man = share.manifest; const ws = workspace(share);
   ui.info(`${ui.dim("profiles")} ${m.profiles.join(", ")}  ${ui.dim("workspace")} ${contract(ws)}${fetch ? "" : ui.dim("  (not fetched)")}`);
-  const share = await shareLine(repo, fetch, timeout);
-  const { facts, envSkipped } = await ui.spin("fetching projects…", () => gather(repo, m, man, { timeout, fetch }));
+  const shareRow = await shareLine(repo, fetch, timeout);
+  const { facts, envSkipped } = await ui.spin("fetching projects…", () => gather(share, { timeout, fetch }));
   const byName = new Map(facts.map((f) => [f.checkout.project.name, f]));
-  let pending = share.pending, attention = share.broken, stuck = false;
-  const rows: string[][] = [share.row]; const known = new Set<string>();
+  let pending = shareRow.pending, attention = shareRow.broken, stuck = false;
+  const rows: string[][] = [shareRow.row]; const known = new Set<string>();
   for (const p of Object.values(man.projects)) {
     known.add(p.path || p.name); const sel = selected(p, m); if (!sel && !showAll) continue;
     const kind = ui.dim(p.layout === "worktrees" ? "⑂" : "");
@@ -73,10 +73,11 @@ export async function runStatus(repo: string, m: Machine, man: Manifest, fetch =
 
 /** Bare `cs` (hidden --no-fetch for scripts): the status view, ending with the command that resolves what it found, and
  *  whether the tool itself is behind — checked in the background while the projects are fetched. */
-export async function runBare(repo: string, m: Machine, man: Manifest, fetch: boolean): Promise<void> {
+export async function runBare(share: Share, fetch: boolean): Promise<void> {
+  const m = share.machine;
   const finish = await startUpdateCheck();
   ui.intro(`claude-share  ${ui.dim(m.name)}`);
-  const r = await runStatus(repo, m, man, fetch); process.exitCode = r.rc;
+  const r = await runStatus(share, fetch); process.exitCode = r.rc;
   const tail = [r.next ? ui.yellow(`run: ${r.next}`) : "", behindHint(await behindCount(finish))].filter(Boolean);
   ui.outro(tail.length ? tail.join("  ·  ") : ui.dim("cs sync · cs new <project> --<identity> · cs --help"));
 }
