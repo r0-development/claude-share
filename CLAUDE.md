@@ -13,3 +13,17 @@
 - `cs sync` must never leave a repo mid-rebase: abort, write a `blocked-*` marker, print the resolve commands.
 - This repo is PUBLIC: no real names, emails, orgs, project names or hostnames anywhere (docs, examples, tests, commit messages) — placeholders only.
 - No AI attribution lines in commit messages.
+
+## Agent skills
+
+### Issue tracker
+
+Issues live in this repo's GitHub Issues (`gh` CLI). See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+Default vocabulary: `needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human`, `wontfix`. See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+Single-context: `CONTEXT.md` + `docs/adr/` at the repo root (created lazily by `/domain-modeling`). See `docs/agents/domain.md`.
