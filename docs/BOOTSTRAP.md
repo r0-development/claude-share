@@ -15,7 +15,7 @@ First question: what this machine is called (`desktop-work`, `laptop`, …). Eve
 (`cs:<machine>:share-key`, `cs:<machine>:<identity>`), so keys are recognizable on GitHub and revocable per machine.
 
 **Join** — paste the share URL in any form (`https://github.com/<owner>/claude-share-config` is fine).
-cs checks whether the repo exists (public or private), then makes sure this machine can reach it:
+cs checks whether the share exists on GitHub (public or private), then makes sure this machine can reach it:
 
 - a **share key** `~/.ssh/cs/share` is generated. It is this machine's key for the share *only* — separate
   from all identities and never involving a token.
@@ -23,7 +23,7 @@ cs checks whether the repo exists (public or private), then makes sure this mach
   access** (your account's SSH keys work too), choose *Done — check access*, and cs verifies it.
 - the share is cloned to `~/.config/claude-share/share`, pinned to the share key.
 
-**Create** — name the repo (default `claude-share-config`), create it *empty and private* on GitHub, paste its URL;
+**Create** — name the share's GitHub repo (default `claude-share-config`), create it *empty and private* on GitHub, paste its URL;
 same share-key step; cs initializes it from the template and pushes.
 
 ## 2. Projects and location
@@ -41,9 +41,9 @@ Then it offers to store a GitHub token per owner (needed only for `cs new`; skip
 
 On a brand-new share the wizard first asks for your first identity.
 
-## 4. Apply, link, secrets, hooks, doctor, clone
+## 4. Apply, project state, secrets, hooks, doctor, clone
 
-`~/.claude` is rendered, Claude files are linked, this machine's age key is created and published, the Claude Code
+`~/.claude` is rendered, project state is placed into every checkout, this machine's age key is created and published, the Claude Code
 hooks and the 15-minute timer are installed, doctor runs, and cs offers to clone the projects for your profiles.
 
 The secrets step asks how to enable decryption on this machine: **trust it from another machine** (the wizard
@@ -61,5 +61,5 @@ Fails with instructions instead of prompting when the share key is not yet regis
 
 ## Day to day
 
-Nothing. Hooks push after each Claude response and pull at session start; the timer syncs every 15 min.
-`cs` shows the dashboard; `cs sync` when leaving and when arriving; `cs doctor` when something feels off.
+`cs sync` when leaving and when arriving; bare `cs` shows what is waiting and what is stale; `cs doctor` when something
+feels off. The hooks and the timer keep the share itself in sync in between (README: *The daily loop*).

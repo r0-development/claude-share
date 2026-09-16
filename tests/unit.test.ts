@@ -318,3 +318,39 @@ test("env: the plan-screen hint says what moves, where from, and when a key is d
   assert.equal(describeMerge(mk({ result: {}, toStore: ["A"] })), "drop 1 key from the share");   // the file was deleted here
   assert.equal(describeMerge(mk({ result: { A: "1" }, toLocal: ["A", "B"] }), "laptop"), "take 1 key from laptop, drop 1 key here");
 });
+
+// ---------------------------------------------------------------- docs: the README and docs/ follow the glossary and the command tree
+import { readFileSync, readdirSync } from "node:fs";
+const DOCS = ["README.md", ...readdirSync("docs").filter((f) => f.endsWith(".md")).map((f) => `docs/${f}`), ...readdirSync("docs/adr").map((f) => `docs/adr/${f}`)];
+const read = (f: string) => readFileSync(f, "utf8");
+const CODE = /```[\s\S]*?```|`[^`\n]*`/g;   // fenced blocks and code spans: literal names (commands, flags, files, refs)
+const prose = (md: string) => md.replace(CODE, "");
+const code = (md: string) => [...md.matchAll(CODE)].map((m) => m[0]).join("\n");
+const INDEX = read("src/index.ts");
+test("docs: no avoided glossary term in any doc (CONTEXT.md _Avoid_ lists; literal names in code spans excepted)", () => {
+  // words the glossary avoids only in one sense and that docs need in another: process environment, git push/pull, GitHub API tokens and user accounts, the verb "store", a `<user>` ref segment
+  const otherSense = new Set(["env", "environment", "push", "pull", "tokens", "user", "account", "store", "group", "tag", "handoff"]);
+  const avoided = [...read("CONTEXT.md").matchAll(/_Avoid_: (.*)/g)].flatMap((m) => m[1].replace(/\(.*?\)/g, "").split(",").map((t) => t.trim())).filter((t) => t && !otherSense.has(t));
+  const bad: string[] = [];
+  for (const f of DOCS) {
+    const text = prose(read(f));
+    for (const t of avoided) {
+      const re = t === "repo" ? /(?<![-\w]|GitHub |git )repo\b/gi : new RegExp(`\\b${t.replace(/[-]/g, "\\-")}\\b`, "gi");   // "GitHub repo" names the remote, not the share; `--repo` is a flag
+      for (const m of text.matchAll(re)) bad.push(`${f}: "${m[0]}" …${text.slice(Math.max(0, m.index! - 30), m.index! + 30).replace(/\n/g, " ")}…`);
+    }
+  }
+  assert.deepEqual(bad, []);
+});
+test("docs: every documented cs command exists; the README's command table carries cs --help's descriptions", () => {
+  const subs: Record<string, Set<string>> = {}; let parent = "";
+  for (const m of INDEX.matchAll(/(\w+)\.command\("([a-z-]+)[^"]*"/g)) { if (m[1] === "program") { parent = m[2]; subs[parent] ??= new Set(); } else subs[parent].add(m[2]); }
+  for (const m of INDEX.matchAll(/program\.command\("([a-z]+) [[<]\w+[\]>][^"]*"[^\n]*?\.description\("[^"]*[:(] ?((?:[a-z-]+ \| )+[a-z-]+)\)?"/g)) for (const a of m[2].split(" | ")) subs[m[1]].add(a);   // `[action]` / `<what>` positionals, listed as "a | b | c" (or "(a | b | c)") in the description
+  const bad: string[] = [];
+  for (const f of DOCS) for (const m of code(read(f)).matchAll(/\bcs ([a-z][a-z-]*)(?: ([a-z][a-z-]*))?/g)) {
+    if (!(m[1] in subs)) bad.push(`${f}: cs ${m[1]}`);
+    else if (m[2] && subs[m[1]].size && !subs[m[1]].has(m[2])) bad.push(`${f}: cs ${m[1]} ${m[2]}`);
+  }
+  assert.deepEqual(bad, []);
+  const readme = read("README.md").replace(/\\([|<>])/g, "$1");
+  for (const m of INDEX.matchAll(/program\.command\("([a-z-]+)[^"]*"\)\.description\("([^"]+)"\)/g)) assert.ok(readme.includes(m[2]), `README lacks cs --help's line for cs ${m[1]}: ${m[2]}`);
+});

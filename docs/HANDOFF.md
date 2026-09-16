@@ -35,7 +35,7 @@ The manual halves stay callable (hidden): `cs handoff [-m note] [--all]`, `cs re
 - Tracked changes, untracked files, and local-only commits on the branch — `.gitignore` is respected.
 - `handoff.extra = ["local.conf"]` in `projects.toml` force-adds gitignored paths that must follow you.
 - Never: files matching the deny list (`**/.env*`, `*.pem`, `*.key`, `*token*`, `*secret*`, plus `handoff.never`) — gitignored `.env*` files travel through the share instead (`docs/SECRETS.md`);
-  a match aborts with the path (`--allow <glob>` to override). Claude files don't need to travel — they are in the project state.
+  a match aborts with the path (`--allow <glob>` to override). `CLAUDE.md`, `.claude/` and `.mcp.json` don't need to travel — they are project state.
 - `handoff.exclude = ["vendor/"]` skips paths even if dirty; `handoff = false` opts a project out.
 
 ## Guarantees

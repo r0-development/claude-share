@@ -30,8 +30,8 @@ Nothing in the share's own layout changed (`projects.toml`, `claude/`, `plans/`,
 
 ## A handoff left under the old namespace
 
-`cs doctor` asks each project remote (short time cap, offline tolerated) and shows `one: handoff wip/<user>/<branch>
-on the remote` with the command that renames it there, for example:
+`cs doctor` asks each project remote (short time cap, offline tolerated) and shows
+`one: handoff wip/<user>/<branch> on the remote` with the command that renames it there, for example:
 
 ```sh
 git -C ~/dev/one fetch origin +refs/heads/wip/<user>/<branch>:refs/remotes/origin/wip/<user>/<branch>
