@@ -99,7 +99,7 @@ program.command("update").description("update the cs tool itself").action(async 
 program.command("init").description("set this machine up (wizard) — or --repo <url> / --owner <owner> for scripts")
   .option("--repo <url>", "existing share: git URL or local path").option("--owner <owner>", "GitHub user/org to create claude-share-config under")
   .option("--key <path>", "ssh key for cloning --repo (instead of the share key)").option("--non-interactive").option("--name <name>", "machine name")
-  .option("--profiles <list>", "comma list").option("--workspace <path>").option("--skip <phases>", "comma list: deps,repo,ssh,apply,link,secrets,hooks,doctor").option("--install-deps")
+  .option("--profiles <list>", "comma list").option("--workspace <path>").option("--skip <phases>", "comma list: deps,share,ssh,apply,link,secrets,hooks,doctor").option("--install-deps")
   .action(async (o) => { const { init } = await import("./init.js"); process.exitCode = await init({ repo: o.repo, owner: o.owner, key: o.key, name: o.name, profiles: csv(o.profiles), workspace: o.workspace, skip: csv(o.skip), installDeps: o.installDeps, interactive: !o.nonInteractive && (ui.isTTY() || ui.isScripted()) }); });
 
 // ------------------------------------------------------------------ hidden: the pieces cs sync / cs init run, kept callable for debugging
@@ -137,9 +137,8 @@ proj.command("id").description("print the project name for the cwd").action(() =
 const H = () => import("./handoff.js");
 program.command("handoff [projects...]", HIDDEN).description("send a handoff: uncommitted work of the cwd project (or --all) to its remote")
   .option("-m, --note <text>", "note shown when the work is resumed").option("--all", "every selected project").option("--dry-run").option("--allow <glob>", "override the secret-file deny list", (v: string, a: string[]) => [...a, v], [] as string[]).option("--overwrite", "replace a handoff another machine left")
-  .option("--mark", "(SessionEnd hook) only remember that dirty work exists here").option("-q, --quiet")
-  .action(async (names, o) => { const { repo, m, man } = ctx(); const h = await H();
-    if (o.mark) { h.markPending(man, m); return; }
+  .addOption(new Option("--mark").hideHelp()).option("-q, --quiet")   // --mark: what the retired SessionEnd hook ran; a no-op until cs sync re-installs the hooks
+  .action(async (names, o) => { if (o.mark) return; const { repo, m, man } = ctx(); const h = await H();
     await ui.command("cs handoff", async () => { const projects = h.projectsFor(man, m, names, o.all);
       process.exitCode = await ui.group("handed off", () => h.handoff(repo, m, man, projects, { note: o.note, dryRun: o.dryRun, allow: o.allow, overwrite: o.overwrite }), { done: "nothing to hand off" });
       if (!o.dryRun) { const { runShareSync } = await import("./sharesync.js"); await ui.group("share pushed", () => runShareSync(repo, m, man, { pushOnly: true, timeout: 20 }), { done: "already in sync" }); } },

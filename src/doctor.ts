@@ -11,8 +11,9 @@ import * as ui from "./ui.js";
 import { which } from "./deps.js";
 import { unregisteredDirs } from "./status.js";
 import { ago } from "./plan.js";
-import { hooksStatus } from "./hooks.js";
+import { HOOK_EVENTS, hooksStatus } from "./hooks.js";
 import { add, fixRemote } from "./projects.js";
+import { findOldNames, migrate } from "./migrate.js";
 
 type R = ["ok" | "warn" | "fail", string];
 const LINKS = ["CLAUDE.md", "rules", "agents", "themes", "keybindings.json", "plans"];
@@ -23,7 +24,10 @@ export function remoteless(man: Manifest, m: Machine): { projects: Project[]; di
   const projects = selectedProjects(man, m).filter((p) => { const root = checkoutRoot(p, ws); return existsSync(root) && (!p.url || !git.isRepo(root) || !git.remoteUrl(root)); });
   return { projects, dirs: unregisteredDirs(ws, new Set(Object.values(man.projects).map((p) => p.path || p.name))) };
 }
-export async function fix(repo: string, m: Machine, man: Manifest) {
+/** Returns the share's path: the old-name moves may have relocated it. */
+export async function fix(repo: string, m: Machine, man: Manifest): Promise<string> {
+  const mig = migrate(repo, m, man); for (const d of mig.done) ui.ok(d);
+  if (mig.repo !== repo) { repo = mig.repo; man = loadManifest(repo); }
   const ws = workspace(man, m);
   const { projects, dirs } = remoteless(man, m);
   for (const p of projects) {
@@ -44,9 +48,10 @@ export async function fix(repo: string, m: Machine, man: Manifest) {
     if (same) { git.git(["remote", "set-url", "origin", p.url], root); ui.ok(`${p.name}: remote url ${url} → ${p.url}`); }
     else ui.warn(`${p.name}: remote ${url} is a different repo than manifest ${p.url}; not changing it`);
   }
+  return repo;
 }
 export async function runDoctor(repo: string, m: Machine, man: Manifest, doFix = false, compact = false): Promise<number> {
-  if (doFix) { await fix(repo, m, man); man = loadManifest(repo); }
+  if (doFix) { repo = await fix(repo, m, man); man = loadManifest(repo); }
   const res: R[] = [];
   platform.refuseUnsupported(); res.push(["ok", platform.describe()]);
   res.push(["ok", `node ${process.versions.node}`]);
@@ -68,7 +73,7 @@ export async function runDoctor(repo: string, m: Machine, man: Manifest, doFix =
     if (ident && email !== ident.email) idr.push(["fail", `${p.name}: user.email resolves to '${email || "UNSET"}', expected ${ident.email}`]); }
   res.push(...(idr.length ? idr : [["ok", "git identities resolve per manifest"] as R]));
   const hs = hooksStatus(repo);
-  res.push(hs.complete ? ["ok", "hooks installed (Stop, SessionStart, SessionEnd)"] : ["warn", `hooks ${hs.events.length ? "outdated" : "not installed"}  (cs sync re-installs them)`]);
+  res.push(hs.complete ? ["ok", `hooks installed (${HOOK_EVENTS.join(", ")})`] : ["warn", `hooks ${hs.events.length ? "outdated" : "not installed"}  (cs sync re-installs them)`]);
   res.push(hs.timerActive ? ["ok", "timer active (share sync every 15 min)"] : hs.timerFiles ? ["warn", "timer installed but not active  (cs sync re-installs it)"] : ["warn", "timer not installed  (cs sync installs it)"]);
   res.push(hs.lastSync ? ["ok", `last share sync ${ago(hs.lastSync)}`] : ["warn", "the share has never synced here  (cs sync)"]);
   if (m.secretsBackend !== "none" && existsSync(join(repo, ".sops.yaml"))) {
@@ -77,6 +82,9 @@ export async function runDoctor(repo: string, m: Machine, man: Manifest, doFix =
     const others = machines.filter((d) => d !== m.name && d !== "recovery");
     if (others.length) res.push(["ok", `machines trusted with the secrets: ${others.join(", ")}  (cs untrust <machine> when one is retired)`]);
   }
+  const old = findOldNames(repo, m, man);
+  for (const o of old) res.push(["warn", `old name — ${o.what}: ${o.move}${o.then ? `; ${o.then}` : ""}  ${o.apply ? "(cs doctor --fix; docs/MIGRATION.md)" : "(by hand; docs/MIGRATION.md)"}`]);
+  if (!old.length) res.push(["ok", "on-disk names current (share key, share, handoffs, state)"]);
   const rl = remoteless(man, m);
   for (const p of rl.projects) res.push(["fail", `${p.name}: no remote  (cs doctor --fix)`]);
   for (const d of rl.dirs) res.push(["warn", `${contract(join(ws, d.name))}: not registered${d.remote ? "" : ", no remote"}  (cs add ${contract(join(ws, d.name))})`]);

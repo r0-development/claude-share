@@ -1,6 +1,6 @@
 # Handoff: moving uncommitted work between machines
 
-A handoff is a snapshot of one project's uncommitted work (and local-only commits) pushed to `wip/<user>/<branch>` on the
+A handoff is a snapshot of one project's uncommitted work (and local-only commits) pushed to `handoff/<user>/<branch>` on the
 project's own remote; on another machine it turns back into uncommitted changes and the branch is deleted. Work code
 never leaves its remote, and the snapshot is a plain git commit anyone can inspect.
 

@@ -9,22 +9,23 @@ import { home, stateDir } from "./paths.js";
 import * as platform from "./platform.js";
 import type { Machine } from "./machine.js";
 import { dumps, loads } from "./jsonmerge.js";
+import { lastSync } from "./sharesync.js";
 import * as ui from "./ui.js";
 
 const STOP = "command -v cs >/dev/null 2>&1 && cs share-sync --push-only --quiet --debounce 120 || true";
 const START = "command -v cs >/dev/null 2>&1 && { cs share-sync --pull-only --quiet --timeout 5; cs note --print 2>/dev/null; } || true";
-const END = "command -v cs >/dev/null 2>&1 && cs handoff --mark --quiet || true";
 const entries = (): Record<string, any[]> => ({
   Stop: [{ hooks: [{ type: "command", command: STOP, async: true, timeout: 120 }] }],
   SessionStart: [{ matcher: "startup", hooks: [{ type: "command", command: START, timeout: 15 }] }],
-  SessionEnd: [{ hooks: [{ type: "command", command: END, timeout: 5 }] }],
 });
-/** Ours = any hook that runs cs (old `cs sync …` hook commands included, so re-installing replaces them). */
+export const HOOK_EVENTS = Object.keys(entries());
+/** Ours = any hook that runs cs (old `cs sync …` / SessionEnd `cs handoff --mark` hook commands included, so re-installing replaces or drops them). */
 const ours = (e: any) => (e.hooks ?? []).some((h: any) => /\bcs (share-sync|sync|handoff|note)\b/.test(String(h.command ?? "")));
 export function installHooks(repo: string, m: Machine, remove = false): boolean {
   const f = join(repo, "claude", "settings.base.json"); const data: any = existsSync(f) ? loads(readFileSync(f, "utf8")) : {};
   data.hooks ??= {}; let changed = false;
-  for (const [ev, es] of Object.entries(entries())) { const cur = (data.hooks[ev] ?? []).filter((e: any) => !ours(e)); const next = remove ? cur : [...cur, ...es];
+  const want = entries();
+  for (const ev of new Set([...Object.keys(want), ...Object.keys(data.hooks)])) { const cur = (data.hooks[ev] ?? []).filter((e: any) => !ours(e)); const next = remove ? cur : [...cur, ...(want[ev] ?? [])];
     if (JSON.stringify(next) !== JSON.stringify(data.hooks[ev] ?? [])) { data.hooks[ev] = next; changed = true; } if (!data.hooks[ev]?.length) delete data.hooks[ev]; }
   if (!Object.keys(data.hooks).length) delete data.hooks;
   if (changed) { writeFileSync(f, dumps(data)); git.git(["add", f], repo); git.commit(repo, `claude: ${remove ? "remove" : "install"} cs share-sync hooks`, "cs", `cs@${m.name}`); }
@@ -49,16 +50,15 @@ export async function installTimer(remove = false): Promise<string> {
   const r = await exec("systemctl", ["--user", "daemon-reload"]); if (r.code !== 0) return `systemd --user unavailable (${r.err}); timer files written, not enabled`;
   const e = await exec("systemctl", ["--user", "enable", "--now", "cs-sync.timer"]); return "systemd user timer every 15 min" + (e.code === 0 ? "" : ` (enable failed: ${e.err})`);
 }
-/** Are the hooks in the share (all three events, with the current commands), is the timer active (and can it be on this host), when did the share last sync. */
+/** Are the hooks in the share (every event, with the current commands, and no cs hook on any other event), is the timer active (and can it be on this host), when did the share last sync. */
 export function hooksStatus(repo: string): { events: string[]; complete: boolean; timerActive: boolean; timerFiles: boolean; timerSupported: boolean; lastSync?: string } {
   const f = join(repo, "claude", "settings.base.json"); const data: any = existsSync(f) ? loads(readFileSync(f, "utf8")) : {};
-  const want = entries(); const events = Object.keys(want).filter((ev) => (data.hooks?.[ev] ?? []).some(ours));
-  const complete = Object.entries(want).every(([ev, es]) => JSON.stringify((data.hooks?.[ev] ?? []).filter(ours)) === JSON.stringify(es));
+  const want = entries(); const events = Object.keys(data.hooks ?? {}).filter((ev) => (data.hooks?.[ev] ?? []).some(ours));
+  const complete = [...new Set([...Object.keys(want), ...events])].every((ev) => JSON.stringify((data.hooks?.[ev] ?? []).filter(ours)) === JSON.stringify(want[ev] ?? []));
   const timerFiles = platform.isMac() ? existsSync(join(home(), "Library", "LaunchAgents", "dev.claude-share.sync.plist")) : existsSync(join(home(), ".config", "systemd", "user", "cs-sync.timer"));
   const state = platform.isMac() ? "" : spawnSync("systemctl", ["--user", "is-active", "cs-sync.timer"], { encoding: "utf8" }).stdout?.trim() ?? "";   // instant local query; "" = no user manager to talk to
   const timerActive = platform.isMac() ? timerFiles : state === "active"; const timerSupported = platform.isMac() || state !== "";
-  const last = join(stateDir(), "last-config"); const lastSync = existsSync(last) ? readFileSync(last, "utf8").trim() : undefined;
-  return { events, complete, timerActive, timerFiles, timerSupported, lastSync };
+  return { events, complete, timerActive, timerFiles, timerSupported, lastSync: lastSync() };
 }
 export async function runHooks(repo: string, m: Machine, action: string, timer = true): Promise<number> {
   if (action === "status") {

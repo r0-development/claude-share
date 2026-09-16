@@ -12,16 +12,16 @@ Arguments after `bash -s --` go to `cs init` (e.g. `bash -s -- --repo <url> --na
 ## 1. Machine name, then join an existing share or create one
 
 First question: what this machine is called (`desktop-work`, `laptop`, …). Every key it creates carries that name
-(`cs:<machine>:master`, `cs:<machine>:<identity>`), so keys are recognizable on GitHub and revocable per machine.
+(`cs:<machine>:share-key`, `cs:<machine>:<identity>`), so keys are recognizable on GitHub and revocable per machine.
 
 **Join** — paste the share URL in any form (`https://github.com/<owner>/claude-share-config` is fine).
 cs checks whether the repo exists (public or private), then makes sure this machine can reach it:
 
-- a **share key** `~/.ssh/cs/master` is generated. It is this machine's key for the share *only* — separate
+- a **share key** `~/.ssh/cs/share` is generated. It is this machine's key for the share *only* — separate
   from all identities and never involving a token.
 - the public key is shown with the link `…/settings/keys/new` and the title to use; add it as a **deploy key with write
   access** (your account's SSH keys work too), choose *Done — check access*, and cs verifies it.
-- the repo is cloned to `~/.config/claude-share/repo`, pinned to the share key.
+- the share is cloned to `~/.config/claude-share/share`, pinned to the share key.
 
 **Create** — name the repo (default `claude-share-config`), create it *empty and private* on GitHub, paste its URL;
 same share-key step; cs initializes it from the template and pushes.

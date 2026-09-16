@@ -16,7 +16,7 @@ import * as identity from "./identity.js";
 import * as ui from "./ui.js";
 
 export const SHARE_REPO_NAME = "claude-share-config";
-export const PHASES = ["deps", "repo", "ssh", "apply", "link", "secrets", "hooks", "doctor"];
+export const PHASES = ["deps", "share", "ssh", "apply", "link", "secrets", "hooks", "doctor"];
 const owner = (v: string) => (/^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})$/.test(v) ? undefined : "a GitHub login, e.g. octocat");
 const email = (v: string) => (/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(v) ? undefined : "not an email address");
 const name = (v: string) => (NAME_RE.test(v) ? undefined : "letters, digits, . _ - only");
@@ -32,7 +32,7 @@ export function newShare(dest: string, branch = "master"): string {
 }
 
 async function accessLoop(sshUrl: string, gh: [string, string] | undefined, interactive: boolean, machine: string) {
-  const { pub, created } = sharekey.ensureKey(machine); if (created) ui.step(`share key generated  ${ui.dim(sharekey.KEY)}`);
+  const { pub, created } = sharekey.ensureKey(machine); if (created) ui.step(`share key generated  ${ui.dim(sharekey.KEY())}`);
   let [ok, err] = await ui.spin("checking access to the share…", () => sharekey.canAccess(sshUrl));
   let tries = 0;
   while (!ok) { sharekey.instructions(pub, gh, machine); if (!interactive) throw new Error("cs: share not reachable with the share key (see instructions above)");
@@ -171,7 +171,8 @@ async function finish(repo: string, m: Machine, interactive: boolean, skip: stri
 }
 export interface InitOpts { repo?: string; owner?: string; name?: string; profiles?: string[]; skip?: string[]; workspace?: string; interactive?: boolean; key?: string; installDeps?: boolean }
 export async function init(o: InitOpts): Promise<number> {
-  const skip = o.skip ?? []; for (const x of skip) if (!PHASES.includes(x)) throw new Error(`cs: unknown phase '${x}' (phases: ${PHASES.join(", ")})`);
+  const skip = (o.skip ?? []).map((x) => (x === "repo" ? "share" : x));   // the share phase's old name, still accepted
+  for (const x of skip) if (!PHASES.includes(x)) throw new Error(`cs: unknown phase '${x}' (phases: ${PHASES.join(", ")})`);
   const interactive = o.interactive ?? (ui.isTTY() || ui.isScripted()); const target = shareDirDefault();
   const localSrc = o.repo && !/:\/\/|^git@/.test(o.repo) ? expand(o.repo) : undefined;
   ui.intro("claude-share setup");
@@ -179,7 +180,7 @@ export async function init(o: InitOpts): Promise<number> {
   const nm = await machineName(o.name ?? "", interactive);
   const already = existsSync(target) && git.isRepo(target);
   if (already) { ui.skip(`share already at ${contract(target)}`); if (git.remoteUrl(target)) sharekey.configureRepo(target); }
-  else if (!skip.includes("repo")) {
+  else if (!skip.includes("share")) {
     if (localSrc) { if (!(git.isRepo(localSrc) || git.isBare(localSrc))) throw new Error(`cs: ${localSrc} is not a git repo`); mkdirSync(dirname(target), { recursive: true }); git.git(["clone", "-q", localSrc, target]); ui.ok(`share cloned from ${contract(localSrc)}`); }
     else if (o.repo) { const [sshUrl, gh] = sharekey.parseRepoUrl(o.repo);
       if (o.key) { mkdirSync(dirname(target), { recursive: true }); git.git(["clone", "-q", sshUrl, target], undefined, { sshKey: expand(o.key) }); git.git(["config", "core.sshCommand", `ssh -i ${contract(expand(o.key))} -o IdentitiesOnly=yes`], target); }

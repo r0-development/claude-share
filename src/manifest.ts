@@ -59,7 +59,7 @@ export function parseManifest(text: string, path?: string): Manifest {
   const d = parse(text) as any;
   const identities: Record<string, Identity> = {};
   for (const [id, v] of Object.entries<any>(d.identities ?? {}))
-    identities[id] = { id, name: v.name ?? "", email: v.email ?? "", owner: v.owner ?? v.github_owner ?? "", sshKey: v.ssh_key, urlGlobs: v.url_globs };
+    identities[id] = { id, name: v.name ?? "", email: v.email ?? "", owner: v.owner ?? v.github_owner ?? "", sshKey: v.ssh_key, urlGlobs: v.url_globs };   // github_owner: the key's old name, rewritten by cs doctor --fix
   const projects: Record<string, Project> = {};
   for (const [name, v] of Object.entries<any>(d.projects ?? {}))
     projects[name] = { name, path: v.path, url: v.url || undefined, identity: v.identity || undefined, profiles: v.profiles ?? ["all"], machines: v.machines ?? [],

@@ -2,10 +2,9 @@
  *  facts per project → plan (src/plan.ts, pure) → plan screen (one multi-select, one confirmation) → execute → push
  *  the share → summary. Direction is never asked: waiting handoffs are applied and dirty work is sent in the same run.
  *  Only the plan screen touches a project remote (ADR-0002). */
-import { closeSync, existsSync, mkdirSync, openSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { existsSync } from "node:fs";
 import * as git from "./git.js";
-import { stateDir } from "./paths.js";
+import { acquire } from "./lock.js";
 import type { Machine } from "./machine.js";
 import { checkoutRoot, loadManifest, selectedProjects, workspace, type Manifest } from "./manifest.js";
 import { applyGit, applyLinks, applySettings, applyShellRc } from "./apply.js";
@@ -23,22 +22,6 @@ import * as ui from "./ui.js";
 
 export interface SyncOpts { note?: string; timeout?: number }
 export interface SyncResult { rc: number; summary: string }
-
-// ---------------------------------------------------------------- one cs sync at a time (a timer tick and a manual run must never race)
-const lockFile = () => join(stateDir(), "sync.lock");
-const alive = (pid: number) => { try { process.kill(pid, 0); return true; } catch { return false; } };
-function lock(): boolean {
-  mkdirSync(stateDir(), { recursive: true });
-  const take = () => { const fd = openSync(lockFile(), "wx"); writeFileSync(fd, String(process.pid)); closeSync(fd); };
-  try { take(); } catch {
-    let pid = NaN; try { pid = parseInt(readFileSync(lockFile(), "utf8"), 10); } catch {}
-    if (pid && alive(pid)) return false;
-    try { unlinkSync(lockFile()); take(); } catch { return false; }   // a crashed run left it behind
-  }
-  const release = () => { try { if (parseInt(readFileSync(lockFile(), "utf8"), 10) === process.pid) unlinkSync(lockFile()); } catch {} };
-  process.on("exit", release);   // also runs on Ctrl-C at a prompt (clack exits the process)
-  return true;
-}
 
 // ---------------------------------------------------------------- gather (src/gather.ts) + the lines it earns under "projects checked"
 function report(facts: Facts[]) {
@@ -68,7 +51,7 @@ async function planScreen(pl: Plan): Promise<Action[]> {
 
 // ---------------------------------------------------------------- share conflicts: asked per file, outside the spinner, then the rebase is settled and finished
 async function syncShare(repo: string, m: Machine, title: string, done: string, copyBack: () => void, opts: ShareOpts) {
-  const once = (t: string, extra: ShareOpts) => ui.group(t, async () => { copyBack(); const r = await shareGitSync(repo, "config", m.name, { ...opts, ...extra, ask: ui.canAsk() }); if (r.offline) ui.step("offline — local changes wait for the next sync"); return r; }, { done });
+  const once = (t: string, extra: ShareOpts) => ui.group(t, async () => { copyBack(); const r = await shareGitSync(repo, "share", m.name, { ...opts, ...extra, ask: ui.canAsk() }); if (r.offline) ui.step("offline — local changes wait for the next sync"); return r; }, { done });
   let r = await once(title, {}); const answers: Record<string, Side> = {};
   while (r.conflicts?.length) {   // memory/plan *.md never get here (merge=union); the rebase was aborted, nothing changed yet
     for (const c of r.conflicts) answers[c.file] = await ui.select(`${c.file} changed on both machines — keep which version?`,
@@ -115,7 +98,9 @@ async function askEnvKeys(qs: EnvQuestion[], states: Record<string, EnvState[]>)
 
 // ---------------------------------------------------------------- the run
 export async function runSync(repo: string, m: Machine, man: Manifest, o: SyncOpts = {}): Promise<SyncResult> {
-  if (!lock()) throw new Error("cs: another cs sync is running here — wait for it to finish");
+  // one cs sync at a time (a timer tick and a manual run must never race); released on exit, which Ctrl-C at a prompt also is
+  const release = acquire(); if (!release) throw new Error("cs: another cs sync is running here (or the hooks' share sync, a few seconds) — wait for it to finish");
+  process.on("exit", release);
   const timeout = o.timeout ?? 20; let rc = 0;
   const copyBack = () => { const ws = workspace(man, m); for (const p of selectedProjects(man, m)) if (checkouts(p, ws).length) syncProject(repo, p, ws); };
 

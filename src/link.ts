@@ -45,7 +45,8 @@ function localize(rel: string, data: Buffer, mem: string): Buffer {
   let d: any = {}; try { d = data.toString("utf8").trim() ? JSON.parse(data.toString("utf8")) : {}; } catch {}
   d.autoMemoryDirectory = contract(mem); return Buffer.from(dumps(d));
 }
-const stateFile = (p: Project) => join(stateDir(), "link", `${p.name}.json`);
+/** Which files the project state placed last time, so a file deleted from the state is removed from the checkouts. */
+const stateFile = (p: Project) => join(stateDir(), "project-state", `${p.name}.json`);
 const loadState = (p: Project): Set<string> => { try { return new Set(JSON.parse(readFileSync(stateFile(p), "utf8")).files); } catch { return new Set(); } };
 const saveState = (p: Project, files: Set<string>) => { mkdirSync(dirname(stateFile(p)), { recursive: true }); writeFileSync(stateFile(p), JSON.stringify({ files: [...files].sort() }, null, 2)); };
 function write(path: string, data: Buffer, mtime?: number) {

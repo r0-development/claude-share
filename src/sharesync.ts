@@ -2,25 +2,21 @@
  *  The share is never left mid-rebase: a conflict is resolved here (newest wins, or a side the caller decided) or the
  *  rebase is aborted and the files are returned so that cs sync can ask. Nothing is lost — this machine's commits are
  *  kept in refs/cs/backup/share/<time> before a rebase is settled. */
-import { closeSync, existsSync, mkdirSync, openSync, rmSync, statSync, unlinkSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import * as git from "./git.js";
 import { contract, stateDir } from "./paths.js";
+import { acquire } from "./lock.js";
 import type { Machine } from "./machine.js";
 import { loadManifest, selectedProjects, workspace, type Manifest } from "./manifest.js";
 import { runApply } from "./apply.js";
 import { checkouts, runLink, syncProject } from "./link.js";
 import * as ui from "./ui.js";
 
-const lockFile = (label: string) => join(stateDir(), `sync-${label}.lock`);
-function tryLock(label: string): number | undefined {
-  mkdirSync(stateDir(), { recursive: true });
-  try { return openSync(lockFile(label), "wx"); } catch {
-    try { if (Date.now() - statSync(lockFile(label)).mtimeMs > 10 * 60 * 1000) { unlinkSync(lockFile(label)); return openSync(lockFile(label), "wx"); } } catch {}
-    return undefined;
-  }
-}
-const unlock = (label: string, fd: number) => { closeSync(fd); try { unlinkSync(lockFile(label)); } catch {} };
+/** When the share last synced here (ISO time, or "offline" when the last attempt could not fetch); what bare cs and cs doctor show. */
+export const lastSyncFile = () => join(stateDir(), "last-sync");
+export const lastSync = (): string | undefined => (existsSync(lastSyncFile()) ? readFileSync(lastSyncFile(), "utf8").trim() : undefined);
+const markSync = (what: string) => { mkdirSync(stateDir(), { recursive: true }); writeFileSync(lastSyncFile(), what + "\n"); };
 
 /** Which machine's version of a file wins: `ours` = this machine, `theirs` = the other machine. (During a rebase git's own
  *  ours/theirs are the other way round — stage 2 is the upstream commit, stage 3 the local commit being replayed.) */
@@ -78,14 +74,14 @@ function settleRebase(repo: string, label: string, local: string, upstream: stri
 export async function shareGitSync(repo: string, label: string, machine: string, o: SyncOpts = {}): Promise<ShareResult> {
   if (!git.isRepo(repo)) { ui.warn(`${label}: not a git repo (${contract(repo)})`); return { ok: false }; }
   const timeout = o.timeout ?? 20;
-  const fd = tryLock(label); if (fd === undefined) { ui.info(`${label}: another sync is running, skipping`); return { ok: true }; }
+  const release = acquire(); if (!release) { ui.info(`${label}: another sync is running, skipping`); return { ok: true }; }
   try {
     if (git.rebaseInProgress(repo)) { ui.error(`${label}: a rebase is in progress in ${contract(repo)}`, "", "finish it: git rebase --continue · or drop it: git rebase --abort"); return { ok: false }; }
     if (!o.pullOnly && git.isDirty(repo)) { const n = git.dirtyCount(repo); git.git(["add", "-A"], repo); git.commit(repo, `sync(${machine}): ${n} file(s) ${new Date().toISOString().slice(0, 16).replace("T", " ")}`, "cs", `cs@${machine}`); ui.step(`${label}: committed ${n} change(s)`); }
     if (!git.remoteUrl(repo)) { ui.ok(`${label}: no remote configured; local only`); return { ok: true }; }
     if (o.commitOnly) return { ok: true, offline: true };
     const f = await ui.spin(`${label}: fetching…`, () => git.gitA(["fetch", "-q", "--prune", "origin"], repo, { check: false, timeout }));
-    if (f.code !== 0) { ui.warn(`${label}: offline or fetch timed out; will push later`); writeFileSync(join(stateDir(), `last-${label}`), "offline\n"); return { ok: true, offline: true }; }
+    if (f.code !== 0) { ui.warn(`${label}: offline or fetch timed out; will push later`); markSync("offline"); return { ok: true, offline: true }; }
     const branch = git.currentBranch(repo); if (!branch) { ui.fail(`${label}: detached HEAD; refusing to sync`); return { ok: false }; }
     if (!git.out(["rev-parse", "--abbrev-ref", "@{upstream}"], repo)) {
       if (git.out(["rev-parse", "--verify", "-q", `origin/${branch}`], repo)) git.git(["branch", "-q", `--set-upstream-to=origin/${branch}`, branch], repo);
@@ -108,18 +104,18 @@ export async function shareGitSync(repo: string, label: string, machine: string,
     }
     let pushed = 0;
     if (!o.pullOnly) { const ab = git.aheadBehind(repo); if (ab && ab[0]) { const pr = await ui.spin(`${label}: pushing…`, () => git.gitA(["push", "-q", "origin", branch], repo, { check: false, timeout }));
-      if (pr.code !== 0) { ui.warn(`${label}: push rejected, retrying once`); unlock(label, fd); return shareGitSync(repo, label, machine, o); } pushed = ab[0]; ui.ok(`${label}: pushed ${ab[0]} commit(s)`); } }
-    writeFileSync(join(stateDir(), `last-${label}`), new Date().toISOString() + "\n");
+      if (pr.code !== 0) { ui.warn(`${label}: push rejected, retrying once`); release(); return shareGitSync(repo, label, machine, o); } pushed = ab[0]; ui.ok(`${label}: pushed ${ab[0]} commit(s)`); } }
+    markSync(new Date().toISOString());
     return { ok: true, pushed };
-  } finally { try { unlock(label, fd); } catch {} }
+  } finally { release(); }
 }
 /** The hidden `cs share-sync` (hooks, timer): cannot ask, so conflicts are settled newest-wins per file unless --resolve says otherwise. */
 export async function runShareSync(repo: string, m: Machine, man: Manifest, o: SyncOpts & { debounce?: number } = {}): Promise<number> {
   const ws = workspace(man, m); let rc = 0;
-  if (o.debounce) { const last = join(stateDir(), "last-config"); if (existsSync(last) && Date.now() - statSync(last).mtimeMs < o.debounce * 1000) return 0; }
+  if (o.debounce && existsSync(lastSyncFile()) && Date.now() - statSync(lastSyncFile()).mtimeMs < o.debounce * 1000) return 0;
   const before = git.out(["rev-parse", "HEAD"], repo);
   if (!o.pullOnly) for (const p of selectedProjects(man, m)) if (checkouts(p, ws).length) syncProject(repo, p, ws);
-  if (!(await shareGitSync(repo, "config", m.name, { ...o, resolve: o.resolve ?? "newest", ask: false })).ok) rc = 2;
+  if (!(await shareGitSync(repo, "share", m.name, { ...o, resolve: o.resolve ?? "newest", ask: false })).ok) rc = 2;
   const after = git.out(["rev-parse", "HEAD"], repo);
   if (after !== before || o.pullOnly) {
     const changed = before ? git.out(["diff", "--name-only", before, after], repo) : "";

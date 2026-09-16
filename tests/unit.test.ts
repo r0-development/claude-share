@@ -55,7 +55,7 @@ test("import: env var names; dotenv round trip", () => {
 
 // cs sync plan: facts (what was observed) → actions with defaults + questions for a human. No I/O.
 const facts = (over: Partial<Facts>): Facts => ({ project: "p", layout: "plain", units: [{ rel: ".", branch: "main", dirty: 0, unpushed: 0 }], waiting: [], ...over });
-const w = (branch: string, machine: string) => ({ branch, machine, when: "2026-09-16T08:00:00+00:00", note: "", ref: `wip/u/${branch}` });
+const w = (branch: string, machine: string) => ({ branch, machine, when: "2026-09-16T08:00:00+00:00", note: "", ref: `handoff/u/${branch}` });
 test("plan: table of facts → actions", () => {
   const cases: [string, Facts, { actions: string[]; checked?: boolean[]; questions?: string[]; skipped?: number }][] = [
     ["clean, nothing waiting", facts({}), { actions: [] }],

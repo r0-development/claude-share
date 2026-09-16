@@ -6,7 +6,12 @@ export const claudeDir = () => process.env.CLAUDE_CONFIG_DIR || join(home(), ".c
 export const claudeJson = () => join(process.env.CLAUDE_CONFIG_DIR || home(), ".claude.json");
 export const csConfigDir = () => process.env.CS_CONFIG_DIR || join(home(), ".config", "claude-share");
 export const machineFile = () => join(csConfigDir(), "machine.toml");
-export const shareDirDefault = () => join(csConfigDir(), "repo");
+export const shareDirDefault = () => join(csConfigDir(), "share");
+export const shareKeyDefault = () => join(home(), ".ssh", "cs", "share");
+/** Names from before the glossary (#13), read only by src/migrate.ts's detection and by the fallbacks in src/machine.ts
+ *  and src/sharekey.ts that keep a not-yet-migrated machine working. */
+export const legacyShareDir = () => join(csConfigDir(), "repo");
+export const legacyShareKey = () => join(home(), ".ssh", "cs", "master");
 export const handoffStateDir = () => join(stateDir(), "handoff");
 export const stateDir = () => join(process.env.XDG_STATE_HOME || join(home(), ".local", "state"), "cs");
 export const toolRoot = () => resolve(new URL(".", import.meta.url).pathname, "..");

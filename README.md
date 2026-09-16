@@ -68,7 +68,7 @@ There is deliberately **no global `user.email`**: a repo that matches no identit
 | `cs identity add <id> --owner <owner> --name "<name>" --email <email>` | add it, render git includes, offer to store a token for `<owner>` (`--key <path>` to use an existing key, `--no-token`) |
 | `cs identity rename <old> <new>` | rename everywhere (manifest, projects, key files, published pubkeys, includes) |
 | `cs ssh setup` / `cs ssh check` | create missing identity keys, publish public halves, register on GitHub (user accounts, via token) or print for pasting; verify |
-| `cs ssh share-key` | the machine's **share key** `~/.ssh/cs/master`: reaches the share only (deploy key); nothing else uses it |
+| `cs ssh share-key` | the machine's **share key** `~/.ssh/cs/share`: reaches the share only (deploy key); nothing else uses it |
 | `cs token set\|check\|rm\|ls <owner>` | API tokens |
 | `cs doctor --fix` | report identity mismatches; rewrite remotes that use an old owner name or SSH alias |
 
@@ -165,7 +165,7 @@ for this machine), both pre-checked, and branches with unpushed commits, listed 
 and one confirmation. Nothing is written to a project remote before that screen, and a real branch is only ever pushed
 from it; a handoff carries the local-only commits either way. An empty plan skips the screen ("nothing to move"). Offline, the local parts still run. A dirty checkout with a handoff waiting for
 the same branch is asked afterwards: keep mine and leave it waiting (default) / apply the handoff / send mine over it —
-whichever side loses is kept in `refs/cs/backup/<branch>/<time>` of that checkout, never deleted. Handoffs live on `wip/<user>/<branch>` of
+whichever side loses is kept in `refs/cs/backup/<branch>/<time>` of that checkout, never deleted. Handoffs live on `handoff/<user>/<branch>` of
 the project's own remote; the sending machine is never touched (private index), secrets-looking files are refused,
 worktrees are created on demand. The manual halves (`cs handoff`, `cs resume`, `cs handoffs`) stay callable but hidden.
 See `docs/HANDOFF.md`.
@@ -188,11 +188,11 @@ would commit is refused until it is gitignored; `env = false` on a project opts 
 |---|---|
 | `cs sync` | the daily verb (above). The share part: commit → pull --rebase → push; memory/plan collisions union-merge; a file changed on both machines is asked per file (this machine's / the other machine's version) and the rebase finishes in the same run |
 | `cs share-sync` (hidden) | the share alone — what the Claude Code hooks (push after each response, pull at session start) and the 15-min timer run; cannot ask, so a file changed on both machines is settled newest-wins (`--resolve ours\|theirs` overrides); the share is never left blocked or mid-rebase. `cs sync` re-installs both |
-| `cs doctor [--fix]` | platform, tools, links, settings drift, identities, remotes, leftover local-scope MCP secrets |
+| `cs doctor [--fix]` | platform, tools, links, settings drift, identities, remotes, hooks and timer, leftover local-scope MCP secrets, old on-disk names (`--fix` performs the local moves; `docs/MIGRATION.md`) |
 | `cs deps [--install]` | prerequisites; installs age, sops, fnm, claude user-locally |
 | `cs update` | update the tool |
 
-Docs: `docs/BOOTSTRAP.md`, `docs/SECRETS.md`, `docs/WINDOWS.md`.
+Docs: `docs/BOOTSTRAP.md`, `docs/SECRETS.md`, `docs/HANDOFF.md`, `docs/MIGRATION.md`, `docs/WINDOWS.md`.
 
 ## Developing
 

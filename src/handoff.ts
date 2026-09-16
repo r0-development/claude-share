@@ -18,8 +18,8 @@ import * as ui from "./ui.js";
 const DENY = ["**/.env", "**/.env.*", "**/*.pem", "**/*.key", "**/*token*", "**/*secret*"];
 const SIDE = ".cs-handoff";
 const NOTE_LABEL: Record<NoteSource, string> = { explicit: " · note", claude: " · note (claude)", git: " · note (git-derived)" };
-/** Remote ref namespace handoffs live under (on-disk name; see the migration notes before changing it). */
-export const REF_NS = "wip";
+/** Remote ref namespace handoffs live under (an on-disk name: docs/MIGRATION.md lists the moves when it changes). */
+export const REF_NS = "handoff";
 
 export interface Handoff { ref: string; sha: string; branch: string; base: string; machine: string; worktree: string; note: string; when: string }
 export interface Unit { path: string; branch: string; rel: string }
@@ -75,7 +75,6 @@ async function backupAndReset(p: Project, m: Machine, ws: string, path: string, 
 
 const stateFile = (p: Project) => join(handoffStateDir(), `${p.name}.json`);
 const noteFile = (p: Project) => join(handoffStateDir(), `${p.name}.note`);
-export const pendingFile = () => join(handoffStateDir(), "pending");
 function saveState(p: Project, data: unknown) { mkdirSync(handoffStateDir(), { recursive: true }); writeFileSync(stateFile(p), JSON.stringify(data, null, 2)); }
 export function loadState(p: Project): any { try { return JSON.parse(readFileSync(stateFile(p), "utf8")); } catch { return undefined; } }
 
@@ -115,7 +114,6 @@ export async function handoff(repo: string, m: Machine, man: Manifest, projects:
     }
     if (results.length) saveState(p, { handedOff: results, machine: m.name });
   }
-  if (pushed) { try { rmSync(pendingFile(), { force: true }); } catch {} }
   return rc;
 }
 
@@ -216,15 +214,6 @@ export function printNote(man: Manifest, m: Machine, cwd = process.cwd()): boole
   const st = loadState(p);
   process.stdout.write(`Handoff note for ${p.name}${st?.resumed?.from ? ` (from ${st.resumed.from}, resumed ${st.resumed.at?.slice(0, 16)})` : ""}:\n${note.trimEnd()}\n`);
   return true;
-}
-/** SessionEnd hook: remember that dirty work exists here (no network). Nothing reads the marker since bare cs looks at
- *  the trees directly (#8); the hook and this file go with the on-disk cleanups (#13). */
-export function markPending(man: Manifest, m: Machine, cwd = process.cwd()): void {
-  const p = projectForPath(man, m, cwd); if (!p || !enabled(p)) return;
-  const top = git.toplevel(cwd); if (!top || !git.isDirty(top)) return;
-  mkdirSync(handoffStateDir(), { recursive: true });
-  let cur: Record<string, string> = {}; try { cur = JSON.parse(readFileSync(pendingFile(), "utf8")); } catch {}
-  cur[p.name] = new Date().toISOString(); writeFileSync(pendingFile(), JSON.stringify(cur));
 }
 export const projectsFor = (man: Manifest, m: Machine, names: string[], all: boolean): Project[] => {
   if (names.length) return names.map((n) => { const p = man.projects[n]; if (!p) throw new Error(`cs: unknown project '${n}'`); return p; });
