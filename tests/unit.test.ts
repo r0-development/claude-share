@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { mergeLayers, diffKeys } from "../src/jsonmerge.ts";
-import { parseManifest, validate, selected, identityForUrl, projectBlock, globs, globMatch, hasRemote, removeProjectText } from "../src/manifest.ts";
+import { parseManifest, validate, selected, identityForUrl, projectBlock, globs, globMatch, hasRemote, removeProjectText, addProjectText, updateProjectText, addIdentityText, renameIdentityText } from "../src/manifest.ts";
 import { canonicalGithub } from "../src/git.ts";
 import { parseRepoUrl } from "../src/sharekey.ts";
 import { newProjectOptions, rewriteIdentityFlags } from "../src/projects.ts";
@@ -54,6 +54,39 @@ test("manifest: removeProjectText drops the block and its sub-tables, leaves nei
   // absent name: nothing changes, reported as not found
   const none = removeProjectText(text, "nope");
   assert.ok(!none.found && none.text === text);
+});
+test("manifest: addProjectText appends the block after one blank line, whatever the file ended with; a registered name throws", () => {
+  const p = { name: "c", url: "git@github.com:acme/c.git", identity: "work", profiles: ["all"], machines: [], layout: "plain" as const, handoff: {} };
+  const block = `[projects.c]\nurl = "git@github.com:acme/c.git"\nidentity = "work"\nprofiles = [ "all" ]\n`;
+  const text = `[workspace]\nroot = "~/dev"\n\n[projects.a]   # first\nprofiles = ["all"]\n`;
+  assert.equal(addProjectText(text, p), text + "\n" + block);
+  assert.equal(addProjectText(text.trimEnd(), p), text + "\n" + block);           // no final newline
+  assert.equal(addProjectText(text + "\n\n\n", p), text + "\n" + block);        // several
+  assert.throws(() => addProjectText(text, { ...p, name: "a" }), { message: "cs: project 'a' already registered (edit projects.toml to change it)" });
+  assert.equal(Object.keys(parseManifest(addProjectText(text, p)).projects).join(), "a,c");
+});
+test("manifest: updateProjectText rewrites the main block in place — sub-tables, neighbours and blank lines kept; unknown name throws", () => {
+  const p = { name: "a", url: "git@github.com:acme/a.git", identity: "work", branch: "main", profiles: ["all"], machines: [], layout: "plain" as const, handoff: {} };
+  const text = `[workspace]\nroot = "~/dev"\n\n# ---- Projects\n\n[projects.a]\nprofiles = ["all"]\n\n\n[projects.a.handoff]\nextra = ["dist/"]\n\n[projects.b]\nprofiles = ["work"]\n`;
+  assert.equal(updateProjectText(text, p), `[workspace]\nroot = "~/dev"\n\n# ---- Projects\n\n[projects.a]\nurl = "git@github.com:acme/a.git"\nidentity = "work"\nbranch = "main"\nprofiles = [ "all" ]\n\n\n[projects.a.handoff]\nextra = ["dist/"]\n\n[projects.b]\nprofiles = ["work"]\n`);
+  assert.throws(() => updateProjectText(text, { ...p, name: "zz" }), { message: "cs: project 'zz' not found in projects.toml" });
+  assert.equal(parseManifest(updateProjectText(text, p)).projects.a.url, "git@github.com:acme/a.git");
+});
+test("manifest: addIdentityText goes before the `# ---- Projects` marker, else at the end; the default key path is not written; a taken id throws", () => {
+  const i = { id: "acme", name: "A", email: "a@example.invalid", owner: "acme", sshKey: "~/.ssh/cs/acme" };
+  const block = `[identities.acme]\nowner = "acme"\nname = "A"\nemail = "a@example.invalid"\n`;
+  const marked = `[workspace]\nroot = "~/dev"\n\n[identities.work]\nowner = "corp"\n# ---- Projects\n\n[projects.a]\nprofiles = ["all"]\n`;
+  assert.equal(addIdentityText(marked, i), `[workspace]\nroot = "~/dev"\n\n[identities.work]\nowner = "corp"\n\n${block}\n# ---- Projects\n\n[projects.a]\nprofiles = ["all"]\n`);
+  const plain = `[workspace]\nroot = "~/dev"\n\n[projects.a]\nprofiles = ["all"]`;
+  assert.equal(addIdentityText(plain, i), plain + "\n\n" + block);
+  assert.throws(() => addIdentityText(marked, { ...i, id: "work" }), { message: "cs: identity 'work' already exists" });
+  assert.equal(parseManifest(addIdentityText(marked, i)).identities.acme.email, "a@example.invalid");
+});
+test("manifest: renameIdentityText renames the table and every `identity = \"old\"` value; a longer id with the same prefix is left alone", () => {
+  const text = `[identities.work]\nowner = "corp"\n\n[identities.work2]\nowner = "corp2"\n\n[projects.a]\nidentity = "work"   # a comment\n\n[projects.b]\nidentity="work2"\n\n[projects.c]\nidentity = "work"\n`;
+  assert.equal(renameIdentityText(text, "work", "corp"), `[identities.corp]\nowner = "corp"\n\n[identities.work2]\nowner = "corp2"\n\n[projects.a]\nidentity = "corp"   # a comment\n\n[projects.b]\nidentity="work2"\n\n[projects.c]\nidentity = "corp"\n`);
+  const m = parseManifest(renameIdentityText(text, "work", "corp"));
+  assert.deepEqual([Object.keys(m.identities), m.projects.a.identity, m.projects.b.identity], [["corp", "work2"], "corp", "work2"]);
 });
 test("cs new: --<id> / --<owner> become --identity; profiles default to the identity's own when the machine has it, else the machine's", () => {
   const m = parseManifest(TOML);

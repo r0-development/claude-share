@@ -101,19 +101,25 @@ export function identityBlock(i: Identity) {
   return block(`identities.${i.id}`, { owner: i.owner, name: i.name, email: i.email, ssh_key: i.sshKey && i.sshKey !== `~/.ssh/cs/${i.id}` ? i.sshKey : undefined,
     url_globs: i.urlGlobs && JSON.stringify(i.urlGlobs) !== JSON.stringify([`git@github.com:${i.owner}/**`]) ? i.urlGlobs : undefined });
 }
+/** Append `[projects.<name>]` after the last line, separated by one blank line. Pure. */
+export function addProjectText(text: string, p: Project): string {
+  if (projectTableRe(p.name, "m").test(text)) throw new Error(`cs: project '${p.name}' already registered (edit projects.toml to change it)`);
+  return text.replace(/\n*$/, "\n\n") + projectBlock(p);
+}
 export function appendProject(repo: string, p: Project) {
-  const f = join(repo, "projects.toml"); let t = readFileSync(f, "utf8");
-  if (new RegExp(`^\\[projects\\.${p.name.replace(/[.]/g, "\\.")}\\]\\s*$`, "m").test(t)) throw new Error(`cs: project '${p.name}' already registered (edit projects.toml to change it)`);
-  writeFileSync(f, t.replace(/\n*$/, "\n\n") + projectBlock(p));
+  const f = join(repo, "projects.toml"); writeFileSync(f, addProjectText(readFileSync(f, "utf8"), p));
 }
 /** Rewrite the main `[projects.<name>]` block in place; sub-tables (`[projects.<name>.handoff]`) are left untouched. */
-export function updateProject(repo: string, p: Project) {
-  const f = join(repo, "projects.toml"); const lines = readFileSync(f, "utf8").split("\n");
+export function updateProjectText(text: string, p: Project): string {
+  const lines = text.split("\n");
   const start = lines.findIndex((l) => new RegExp(`^\\[projects\\.${p.name.replace(/[.]/g, "\\.")}\\]\\s*$`).test(l));
   if (start < 0) throw new Error(`cs: project '${p.name}' not found in projects.toml`);
   let end = start + 1; while (end < lines.length && !/^\[/.test(lines[end])) end++;
   while (end > start + 1 && lines[end - 1].trim() === "") end--;
-  writeFileSync(f, [...lines.slice(0, start), projectBlock(p).trimEnd(), ...lines.slice(end)].join("\n"));
+  return [...lines.slice(0, start), projectBlock(p).trimEnd(), ...lines.slice(end)].join("\n");
+}
+export function updateProject(repo: string, p: Project) {
+  const f = join(repo, "projects.toml"); writeFileSync(f, updateProjectText(readFileSync(f, "utf8"), p));
 }
 /** The header of `[projects.<name>]` or any `[projects.<name>.<sub>]` table, as one trimmed line (a trailing comment allowed). */
 export const projectTableRe = (name: string, flags = "") => new RegExp(`^\\[projects\\.${name.replace(/[.]/g, "\\.")}(\\.[^\\]]+)?\\]\\s*(#.*)?$`, flags);
@@ -133,11 +139,17 @@ export function removeProjectText(text: string, name: string): { text: string; f
   while (keep.length > 1 && keep[keep.length - 1] === "" && keep[keep.length - 2] === "") keep.pop();   // the last block's leading blank lines
   return { text: keep.join("\n"), found };
 }
+/** Insert `[identities.<id>]` before the `# ---- Projects` marker (one blank line either side), or append it. Pure. */
+export function addIdentityText(text: string, i: Identity): string {
+  if (new RegExp(`^\\[identities\\.${i.id.replace(/[.]/g, "\\.")}\\]\\s*$`, "m").test(text)) throw new Error(`cs: identity '${i.id}' already exists`);
+  const marker = "# ---- Projects"; const b = identityBlock(i);
+  return text.includes(marker) ? text.slice(0, text.indexOf(marker)).replace(/\n*$/, "\n\n") + b + "\n" + text.slice(text.indexOf(marker)) : text.replace(/\n*$/, "\n\n") + b;
+}
+/** `[identities.<old>]` becomes `[identities.<new>]` and every `identity = "<old>"` value follows. Pure. */
+export function renameIdentityText(text: string, oldId: string, newId: string): string {
+  const esc = oldId.replace(/[.]/g, "\\.");
+  return text.replace(new RegExp(`^\\[identities\\.${esc}\\]`, "m"), `[identities.${newId}]`).replace(new RegExp(`^(identity\\s*=\\s*)"${esc}"`, "mg"), `$1"${newId}"`);
+}
 export function appendIdentity(repo: string, i: Identity) {
-  const f = join(repo, "projects.toml"); let t = readFileSync(f, "utf8");
-  if (new RegExp(`^\\[identities\\.${i.id.replace(/[.]/g, "\\.")}\\]\\s*$`, "m").test(t)) throw new Error(`cs: identity '${i.id}' already exists`);
-  const marker = "# ---- Projects";
-  const b = identityBlock(i);
-  t = t.includes(marker) ? t.slice(0, t.indexOf(marker)).replace(/\n*$/, "\n\n") + b + "\n" + t.slice(t.indexOf(marker)) : t.replace(/\n*$/, "\n\n") + b;
-  writeFileSync(f, t);
+  const f = join(repo, "projects.toml"); writeFileSync(f, addIdentityText(readFileSync(f, "utf8"), i));
 }

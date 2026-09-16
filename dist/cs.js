@@ -6256,6 +6256,8 @@ var manifest_exports = {};
 __export(manifest_exports, {
   NAME_RE: () => NAME_RE,
   SUPPORTED_SCHEMA: () => SUPPORTED_SCHEMA,
+  addIdentityText: () => addIdentityText,
+  addProjectText: () => addProjectText,
   appendIdentity: () => appendIdentity,
   appendProject: () => appendProject,
   globMatch: () => globMatch,
@@ -6272,9 +6274,11 @@ __export(manifest_exports, {
   projectForPath: () => projectForPath,
   projectTableRe: () => projectTableRe,
   removeProjectText: () => removeProjectText,
+  renameIdentityText: () => renameIdentityText,
   selected: () => selected,
   selectedProjects: () => selectedProjects,
   updateProject: () => updateProject,
+  updateProjectText: () => updateProjectText,
   validate: () => validate,
   workspace: () => workspace
 });
@@ -6391,21 +6395,26 @@ function identityBlock(i2) {
     url_globs: i2.urlGlobs && JSON.stringify(i2.urlGlobs) !== JSON.stringify([`git@github.com:${i2.owner}/**`]) ? i2.urlGlobs : void 0
   });
 }
+function addProjectText(text3, p) {
+  if (projectTableRe(p.name, "m").test(text3)) throw new Error(`cs: project '${p.name}' already registered (edit projects.toml to change it)`);
+  return text3.replace(/\n*$/, "\n\n") + projectBlock(p);
+}
 function appendProject(repo, p) {
   const f = join3(repo, "projects.toml");
-  let t2 = readFileSync3(f, "utf8");
-  if (new RegExp(`^\\[projects\\.${p.name.replace(/[.]/g, "\\.")}\\]\\s*$`, "m").test(t2)) throw new Error(`cs: project '${p.name}' already registered (edit projects.toml to change it)`);
-  writeFileSync2(f, t2.replace(/\n*$/, "\n\n") + projectBlock(p));
+  writeFileSync2(f, addProjectText(readFileSync3(f, "utf8"), p));
 }
-function updateProject(repo, p) {
-  const f = join3(repo, "projects.toml");
-  const lines = readFileSync3(f, "utf8").split("\n");
+function updateProjectText(text3, p) {
+  const lines = text3.split("\n");
   const start = lines.findIndex((l2) => new RegExp(`^\\[projects\\.${p.name.replace(/[.]/g, "\\.")}\\]\\s*$`).test(l2));
   if (start < 0) throw new Error(`cs: project '${p.name}' not found in projects.toml`);
   let end = start + 1;
   while (end < lines.length && !/^\[/.test(lines[end])) end++;
   while (end > start + 1 && lines[end - 1].trim() === "") end--;
-  writeFileSync2(f, [...lines.slice(0, start), projectBlock(p).trimEnd(), ...lines.slice(end)].join("\n"));
+  return [...lines.slice(0, start), projectBlock(p).trimEnd(), ...lines.slice(end)].join("\n");
+}
+function updateProject(repo, p) {
+  const f = join3(repo, "projects.toml");
+  writeFileSync2(f, updateProjectText(readFileSync3(f, "utf8"), p));
 }
 function removeProjectText(text3, name2) {
   const mine = projectTableRe(name2);
@@ -6424,14 +6433,19 @@ function removeProjectText(text3, name2) {
   while (keep.length > 1 && keep[keep.length - 1] === "" && keep[keep.length - 2] === "") keep.pop();
   return { text: keep.join("\n"), found };
 }
-function appendIdentity(repo, i2) {
-  const f = join3(repo, "projects.toml");
-  let t2 = readFileSync3(f, "utf8");
-  if (new RegExp(`^\\[identities\\.${i2.id.replace(/[.]/g, "\\.")}\\]\\s*$`, "m").test(t2)) throw new Error(`cs: identity '${i2.id}' already exists`);
+function addIdentityText(text3, i2) {
+  if (new RegExp(`^\\[identities\\.${i2.id.replace(/[.]/g, "\\.")}\\]\\s*$`, "m").test(text3)) throw new Error(`cs: identity '${i2.id}' already exists`);
   const marker = "# ---- Projects";
   const b = identityBlock(i2);
-  t2 = t2.includes(marker) ? t2.slice(0, t2.indexOf(marker)).replace(/\n*$/, "\n\n") + b + "\n" + t2.slice(t2.indexOf(marker)) : t2.replace(/\n*$/, "\n\n") + b;
-  writeFileSync2(f, t2);
+  return text3.includes(marker) ? text3.slice(0, text3.indexOf(marker)).replace(/\n*$/, "\n\n") + b + "\n" + text3.slice(text3.indexOf(marker)) : text3.replace(/\n*$/, "\n\n") + b;
+}
+function renameIdentityText(text3, oldId, newId) {
+  const esc = oldId.replace(/[.]/g, "\\.");
+  return text3.replace(new RegExp(`^\\[identities\\.${esc}\\]`, "m"), `[identities.${newId}]`).replace(new RegExp(`^(identity\\s*=\\s*)"${esc}"`, "mg"), `$1"${newId}"`);
+}
+function appendIdentity(repo, i2) {
+  const f = join3(repo, "projects.toml");
+  writeFileSync2(f, addIdentityText(readFileSync3(f, "utf8"), i2));
 }
 var SUPPORTED_SCHEMA, NAME_RE, keyPath, globs, identityMatches, workspace, selectedProjects, hasRemote, projectTableRe;
 var init_manifest = __esm({
