@@ -6,7 +6,7 @@ import { canonicalGithub } from "../src/git.ts";
 import { parseRepoUrl } from "../src/sharekey.ts";
 import { envVarName } from "../src/import.ts";
 import { parseDotenv, dumpDotenv } from "../src/secrets/index.ts";
-import { plan, type Facts } from "../src/plan.ts";
+import { plan, status, type Facts } from "../src/plan.ts";
 
 test("jsonmerge: dicts recurse, scalars override, permission lists union, plain lists replace", () => {
   assert.deepEqual(mergeLayers({ a: { x: 1 } }, { a: { y: 2 } }), { a: { x: 1, y: 2 } });
@@ -107,4 +107,36 @@ test("plan: a push row names the branch and the count, is never checked, and is 
   assert.deepEqual(wt.actions.map((a) => a.id), ["send:p:a", "push:p:a"]);
   assert.equal(plan([facts({ units: [{ rel: ".", branch: "", dirty: 0, unpushed: 2, skip: "detached HEAD" }] })], "desk").actions.length, 0);
   assert.equal(plan([facts({ offline: true, units: [{ rel: ".", branch: "main", dirty: 0, unpushed: 2 }] })], "desk").actions.length, 0);
+});
+
+// bare cs: the same facts → one line's worth of bits and whether cs sync has anything to do
+test("status: facts → bits and pending", () => {
+  const cases: [string, Facts, string[], boolean][] = [
+    ["clean", facts({}), [], false],
+    ["dirty", facts({ units: [{ rel: ".", branch: "main", dirty: 3, unpushed: 0 }] }), ["3 dirty"], true],
+    ["unpushed", facts({ units: [{ rel: ".", branch: "main", dirty: 0, unpushed: 2 }] }), ["↑2 unpushed"], true],
+    ["waiting from another machine, same branch", facts({ waiting: [w("main", "laptop")] }), ["handoff waiting from laptop (2026-09-16 08:00)"], true],
+    ["waiting for another branch names it", facts({ waiting: [w("feat", "laptop")] }), ["handoff waiting from laptop for feat (2026-09-16 08:00)"], true],
+    ["my own handoff waiting → comes back with cs sync", facts({ waiting: [w("main", "desk")] }), ["handoff waiting from desk (2026-09-16 08:00)"], true],
+    ["dirty + waiting → both shown, pending (a question for cs sync)", facts({ units: [{ rel: ".", branch: "main", dirty: 1, unpushed: 0 }], waiting: [w("main", "laptop")] }), ["1 dirty", "handoff waiting from laptop (2026-09-16 08:00)"], true],
+    ["offline + dirty: the work is stale here whatever the network says", facts({ offline: true, units: [{ rel: ".", branch: "main", dirty: 1, unpushed: 0 }] }), ["1 dirty", "offline"], true],
+    ["offline + clean: nothing known to be pending", facts({ offline: true }), ["offline"], false],
+    ["handoff disabled: shown, dirty is not cs sync's business", facts({ disabled: true, units: [{ rel: ".", branch: "main", dirty: 1, unpushed: 0 }] }), ["1 dirty", "handoff disabled"], false],
+    ["files that look secret: the refusal and its override, not pending", facts({ units: [{ rel: ".", branch: "main", dirty: 1, unpushed: 0, secrets: [".env.example"] }] }), ["1 dirty", "not sent — files that look secret: .env.example (cs handoff --allow <glob>)"], false],
+    ["detached with work: the reason and what to do, not pending", facts({ units: [{ rel: ".", branch: "", dirty: 1, unpushed: 0, skip: "detached HEAD" }] }), ["1 dirty", "detached HEAD — not carried by cs sync: check a branch out"], false],
+    ["detached and clean: just the reason", facts({ units: [{ rel: ".", branch: "", dirty: 0, unpushed: 0, skip: "detached HEAD" }] }), ["detached HEAD"], false],
+    ["worktrees: other units are prefixed by their directory", facts({ layout: "worktrees", units: [{ rel: ".", branch: "main", dirty: 0, unpushed: 0 }, { rel: "wt-a", branch: "a", dirty: 2, unpushed: 1 }] }), ["wt-a: 2 dirty", "wt-a: ↑1 unpushed"], true],
+  ];
+  for (const [name, f, bits, pending] of cases) {
+    const st = status(f, "desk");
+    assert.deepEqual(st.bits.map((b) => b.text), bits, name);
+    assert.equal(st.pending, pending, name + " (pending)");
+  }
+  assert.equal(status(facts({ units: [{ rel: ".", branch: "main", dirty: 3, unpushed: 0 }] }), "desk").bits[0].kind, "dirty");
+  assert.equal(status(facts({ offline: true }), "desk").bits[0].kind, "offline");
+  // stuck: work is here that cs sync will not carry — attention, even though nothing is pending
+  assert.equal(status(facts({ units: [{ rel: ".", branch: "", dirty: 1, unpushed: 0, skip: "detached HEAD" }] }), "desk").stuck, true);
+  assert.equal(status(facts({ units: [{ rel: ".", branch: "", dirty: 0, unpushed: 0, skip: "detached HEAD" }] }), "desk").stuck, false);
+  assert.equal(status(facts({ units: [{ rel: ".", branch: "main", dirty: 1, unpushed: 0, secrets: [".env.example"] }] }), "desk").stuck, true);
+  assert.equal(status(facts({ disabled: true, units: [{ rel: ".", branch: "main", dirty: 1, unpushed: 0 }] }), "desk").stuck, false);
 });

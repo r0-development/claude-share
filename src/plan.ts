@@ -20,6 +20,11 @@ export interface Plan { actions: Action[]; questions: Question[]; skipped: strin
 export const count = (c: number, one: string, many = one + "s") => `${c} ${c === 1 ? one : many}`;
 /** "2026-09-16 08:00" from an ISO timestamp. */
 export const when = (iso: string) => iso.slice(0, 16).replace("T", " ");
+/** "3 min ago" / "2 h ago" / "5 d ago" (or the raw text when it is not a time, e.g. "offline"). */
+export function ago(iso: string, now = Date.now()): string {
+  const t = Date.parse(iso); if (isNaN(t)) return iso; const s = Math.max(0, (now - t) / 1000);
+  return s < 90 ? "just now" : s < 3600 ? `${Math.round(s / 60)} min ago` : s < 86400 ? `${Math.round(s / 3600)} h ago` : `${Math.round(s / 86400)} d ago`;
+}
 
 export function plan(facts: Facts[], machine: string): Plan {
   const actions: Action[] = [], questions: Question[] = [], skipped: string[] = [];
@@ -60,4 +65,25 @@ export function plan(facts: Facts[], machine: string): Plan {
     }
   }
   return { actions, questions, skipped };
+}
+
+/** Bare cs: one project's facts as the bits of its status line. `pending` — cs sync would do or ask something here;
+ *  `stuck` — dirty or unpushed work cs sync cannot carry (detached, on a handoff ref, files that look secret): the bit says what to do. */
+export interface StatusBit { kind: "dirty" | "unpushed" | "waiting" | "offline" | "disabled" | "skip"; text: string }
+export function status(f: Facts, machine: string): { bits: StatusBit[]; pending: boolean; stuck: boolean } {
+  const bits: StatusBit[] = []; let stuck = false;
+  for (const u of f.units) {
+    const at = u.rel === "." ? "" : `${u.rel}: `;   // worktrees: the root is the row's branch, the others say where
+    const work = u.dirty > 0 || u.unpushed > 0;
+    if (u.dirty) bits.push({ kind: "dirty", text: `${at}${u.dirty} dirty` });
+    if (u.unpushed) bits.push({ kind: "unpushed", text: `${at}↑${u.unpushed} unpushed` });
+    if (u.skip) { bits.push({ kind: "skip", text: `${at}${u.skip}${work ? " — not carried by cs sync: check a branch out" : ""}` }); if (work) stuck = true; }
+    if (u.secrets?.length) { bits.push({ kind: "skip", text: `${at}not sent — files that look secret: ${u.secrets.join(", ")} (cs handoff --allow <glob>)` }); stuck = true; }
+  }
+  const here = f.units[0]?.branch;
+  for (const w of f.waiting) bits.push({ kind: "waiting", text: `handoff waiting from ${w.machine}${w.branch === here ? "" : ` for ${w.branch}`} (${when(w.when)})` });
+  if (f.offline) bits.push({ kind: "offline", text: "offline" });
+  if (f.disabled) bits.push({ kind: "disabled", text: "handoff disabled" });
+  const pl = plan([{ ...f, offline: false }], machine);   // offline: what cs sync would do once the remote is reachable again
+  return { bits, pending: pl.actions.length > 0 || pl.questions.length > 0, stuck };
 }

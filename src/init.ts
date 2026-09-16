@@ -164,7 +164,7 @@ async function finish(repo: string, m: Machine, interactive: boolean, skip: stri
   if (missing.length && interactive && (await ui.confirm(`clone ${missing.length} project(s) now (${missing.slice(0, 6).map((p) => p.name).join(", ")}${missing.length > 6 ? "…" : ""})?`, true))) await ui.group(`clone ${missing.length} project(s)`, async () => (await import("./projects.js")).clone(repo, m, man, []));
   const rcFile = platform.shellRc().split("/").pop();
   ui.note([`${ui.bold("open a new terminal")} ${ui.dim(`(or: source ~/${rcFile})`)} — that gives you ${ui.bold("cs")} on PATH and the ${ui.bold("claude")} wrapper`,
-    `${ui.bold("claude")}  ${ui.dim("log in once on this machine")}`, `${ui.bold("cs status")}  ${ui.dim("dashboard")}`, `${ui.bold("cs new <project> --<identity>")}  ${ui.dim("start something")}`,
+    `${ui.bold("claude")}  ${ui.dim("log in once on this machine")}`, `${ui.bold("cs")}  ${ui.dim("what is waiting or stale")}`, `${ui.bold("cs sync")}  ${ui.dim("when leaving and when arriving")}`, `${ui.bold("cs new <project> --<identity>")}  ${ui.dim("start something")}`,
     ...(secretsOk ? [] : ["", ui.yellow(`secrets: not enabled yet — on a trusted machine run  cs sync && cs trust ${m.name} && cs sync,  then  cs sync  here`)])], "next");
   ui.outro(ui.bold("done"));
   return rc;

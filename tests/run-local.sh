@@ -209,7 +209,8 @@ VISIBLE="$($CS --help | sed -n '/^Commands:/,/^$/p' | grep -E '^  [a-z]' | awk '
 [ "$VISIBLE" = "sync new add clone secrets identity trust doctor update init help " ] || die "visible tier: $VISIBLE"
 SEC="$($CS secrets --help | sed -n '/^Commands:/,/^$/p' | grep -E '^  [a-z]' | awk '{print $1}' | tr '\n' ' ')"
 [ "$SEC" = "set get edit help " ] || die "secrets visible tier: $SEC"
-$CS apply >/dev/null && $CS link >/dev/null && $CS share path >/dev/null && $CS hooks >/dev/null && $CS handoffs >/dev/null && $CS status >/dev/null || die "hidden commands callable"
+$CS apply >/dev/null && $CS link >/dev/null && $CS share path >/dev/null && $CS hooks >/dev/null && $CS handoffs >/dev/null || die "hidden commands callable"
+rc=0; $CS status --no-fetch >/dev/null || rc=$?; [ $rc -le 1 ] || die "cs status callable"   # 1 = something to sync (the share has unpushed commits here)
 ($CS doctor || true) | grep -q "hooks installed" || die "doctor reports hooks"
 ($CS doctor || true) | grep -q "timer" || die "doctor reports the timer"
 ($CS doctor || true) | grep -q "last share sync" || die "doctor reports the last share sync"
@@ -434,6 +435,10 @@ grep -q "1 handoff(s) applied" "$HOME7/sync1.log" || die "laptop summary"
 CS_ANSWERS='[]' desk $CS sync > "$HOME6/sync3.log" 2>&1 || { cat "$HOME6/sync3.log"; die "desk sync 3"; }
 grep -q "nothing to move" "$HOME6/sync3.log" || die "nothing to move line"
 [ "$(git -C "$S/share.git" rev-parse HEAD)" = "$(git -C "$HOME6/.config/claude-share/repo" rev-parse HEAD)" ] || die "share updated on both"
+# bare cs (#8): clean everywhere → every line clean, no "run: cs sync", exit 0
+desk $CS > "$HOME6/status-clean.log" 2>&1 || { cat "$HOME6/status-clean.log"; die "cs must exit 0 when nothing is pending"; }
+grep -q "one .*clean" "$HOME6/status-clean.log" && grep -q "share .*clean.*synced" "$HOME6/status-clean.log" || die "clean rows for the project and the share"
+! grep -q "run: cs sync" "$HOME6/status-clean.log" || die "no run line when clean"
 # self-heal: hooks, timer and a ~/.claude link removed → restored without a prompt
 python3 - "$HOME6/.config/claude-share/repo/claude/settings.base.json" <<'PY'
 import json,sys; f=sys.argv[1]; d=json.load(open(f)); d.pop("hooks",None); json.dump(d,open(f,"w"))
@@ -456,6 +461,7 @@ git -C "$S/one.git" show-ref | grep -q "wip/test-user/main" || die "sent by id"
 mv "$S/one.git" "$S/one.git.off"; mv "$S/share.git" "$S/share.git.off"
 CS_ANSWERS='[]' desk $CS sync > "$HOME6/sync7.log" 2>&1 || { cat "$HOME6/sync7.log"; die "offline sync must not fail"; }
 grep -q "remote unreachable" "$HOME6/sync7.log" && grep -q "offline" "$HOME6/sync7.log" || die "offline reported"
+(desk $CS > "$HOME6/status-offline.log" 2>&1 || true); grep -q "one .*offline" "$HOME6/status-offline.log" && grep -q "share .*offline" "$HOME6/status-offline.log" || { cat "$HOME6/status-offline.log"; die "cs prints with an offline mark"; }
 mv "$S/one.git.off" "$S/one.git"; mv "$S/share.git.off" "$S/share.git"
 pass cs-sync
 
@@ -475,6 +481,9 @@ git -C "$S/one.git" log -1 --format=%B wip/test-user/main | grep -q "Cs-Machine:
 BK="$(git -C "$ONE7" for-each-ref --format='%(refname)' refs/cs/backup | head -1)"
 [ -n "$BK" ] && git -C "$ONE7" log -1 --format=%B "$BK" | grep -q "Cs-Machine: desk" && git -C "$ONE7" show "$BK:README" | grep -q "again" || die "send: backup ref holds desk's handoff (the losing side)"
 grep -q "backed up to refs/cs/backup" "$HOME7/q-send.log" && grep -q "1 handoff(s) sent" "$HOME7/q-send.log" || die "send: reported"
+# bare cs (#8) on desk: the handoff laptop just sent shows up with laptop's name — nothing on desk has fetched since; dirty + waiting → run: cs sync, exit 1
+desk $CS > "$HOME6/status-waiting.log" 2>&1 && die "cs must exit 1 while something is pending" || true
+grep -q "one .*dirty.*handoff waiting from laptop.*cs sync" "$HOME6/status-waiting.log" && grep -q "run: cs sync" "$HOME6/status-waiting.log" || { cat "$HOME6/status-waiting.log"; die "waiting handoff shown by bare cs"; }
 # apply: on desk (dirty with "again"), laptop's handoff wins; desk's changes go to a backup ref; the handoff leaves the remote
 grep -q again "$ONE6/README" || die "desk still dirty"
 CS_ANSWERS='["apply"]' desk $CS sync > "$HOME6/q-apply.log" 2>&1 || { cat "$HOME6/q-apply.log"; die "desk apply"; }

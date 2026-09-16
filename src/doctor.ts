@@ -10,15 +10,11 @@ import { applySettings } from "./apply.js";
 import * as ui from "./ui.js";
 import { which } from "./deps.js";
 import { unregisteredDirs } from "./status.js";
+import { ago } from "./plan.js";
 import { hooksStatus } from "./hooks.js";
 import { add, fixRemote } from "./projects.js";
 
 type R = ["ok" | "warn" | "fail", string];
-/** "3 min ago" / "2 h ago" / "5 d ago" (or the raw text when it is not a time, e.g. "offline"). */
-export function ago(iso: string): string {
-  const t = Date.parse(iso); if (isNaN(t)) return iso; const s = Math.max(0, (Date.now() - t) / 1000);
-  return s < 90 ? "just now" : s < 3600 ? `${Math.round(s / 60)} min ago` : s < 86400 ? `${Math.round(s / 3600)} h ago` : `${Math.round(s / 86400)} d ago`;
-}
 const LINKS = ["CLAUDE.md", "rules", "agents", "themes", "keybindings.json", "plans"];
 
 /** Registered projects (present here) and workspace directories that have no remote yet — the ensure-remote candidates. */

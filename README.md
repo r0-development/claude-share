@@ -97,7 +97,7 @@ Every project is a `[projects.<name>]` entry in `projects.toml` and a directory 
 | `cs new <name> --<identity>` | brand-new project: `mkdir`, `git init -b master`, private GitHub repo under the identity's owner, first commit + push, register, link Claude files. Re-runnable. `--public`, `--no-github`, `--synced`, `-d "description"` |
 | `cs add [path]` | register an existing directory (default: cwd; infers url, branch, identity, worktree layout) |
 | `cs clone [name…]` | clone the projects this machine's profiles select but that are missing here |
-| `cs status` / `cs` | every project: branch, dirty, unpushed, behind, identity mismatch, missing, unregistered dirs |
+| `cs` | fetches and shows one line per project — branch, dirty, ↑unpushed, handoff waiting from *machine*, missing here — the share's state and last sync, unregistered dirs; ends with `run: cs sync` when anything is pending (exit 1). `cs --no-fetch` for scripts |
 
 Project kinds: `git` (normal), `synced` (auto-committed notes; no manual git), `local` (registered so other machines know
 it exists, never cloned). `profiles` decide which machines get a project; `machines = [...]` is a hard allowlist;

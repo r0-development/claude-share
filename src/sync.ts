@@ -13,7 +13,8 @@ import { checkouts, syncProject } from "./link.js";
 import { hooksStatus, installHooks, installTimer } from "./hooks.js";
 import { describe, newest, shareGitSync, type Side, type SyncOpts as ShareOpts } from "./sharesync.js";
 import { clone } from "./projects.js";
-import { backupRef, denyHits, enabled, fetchHandoffs, handoff, REF_NS, resume, units, userSlug, type Handoff } from "./handoff.js";
+import { backupRef, handoff, resume, units } from "./handoff.js";
+import { gather } from "./gather.js";
 import { count, plan, when, type Action, type Answer, type Facts, type Plan, type Question } from "./plan.js";
 import * as ui from "./ui.js";
 
@@ -36,28 +37,12 @@ function lock(): boolean {
   return true;
 }
 
-// ---------------------------------------------------------------- gather: observe, decide nothing
-async function gather(m: Machine, man: Manifest, timeout: number): Promise<{ facts: Facts[]; handoffs: Record<string, Handoff[]> }> {
-  const ws = workspace(man, m); const facts: Facts[] = []; const handoffs: Record<string, Handoff[]> = {};
-  for (const p of selectedProjects(man, m)) {
-    const root = checkoutRoot(p, ws);
-    if (!existsSync(root) || !git.isRepo(root) || !git.remoteUrl(root)) continue;   // missing → clone reported it; no remote → cs doctor's business
-    const f: Facts = { project: p.name, layout: p.layout, units: [], waiting: [] };
-    facts.push(f);
-    if (!enabled(p)) { f.disabled = true; continue; }
-    const r = await ui.spin(`${p.name}: fetching…`, () => fetchHandoffs(root, userSlug(root), timeout));
-    if (!r.ok) { f.offline = true; continue; }
-    handoffs[p.name] = r.list;
-    f.waiting = r.list.map((h) => ({ branch: h.branch, machine: h.machine, when: h.when, note: h.note, ref: h.ref }));
-    for (const w of f.waiting) ui.step(`${p.name} · ${w.branch}  handoff waiting from ${w.machine} (${when(w.when)})`);
-    for (const u of units(p, ws)) {
-      const dirty = git.dirtyCount(u.path); const unpushed = git.aheadBehind(u.path)?.[0] ?? 0;
-      const skip = !u.branch ? "detached HEAD" : u.branch.startsWith(`${REF_NS}/`) ? "on a handoff ref" : undefined;
-      f.units.push({ rel: u.rel, branch: u.branch, dirty, unpushed, skip, secrets: dirty && !skip ? denyHits(u.path, p, []) : undefined });
-      if ((dirty || unpushed) && !skip) ui.step(`${p.name} · ${u.branch}  ${[dirty ? count(dirty, "change") : "", unpushed ? count(unpushed, "unpushed commit") : ""].filter(Boolean).join(", ")}`);
-    }
+// ---------------------------------------------------------------- gather (src/gather.ts) + the lines it earns under "projects checked"
+function report(facts: Facts[]) {
+  for (const f of facts) {
+    for (const w of f.waiting) ui.step(`${f.project} · ${w.branch}  handoff waiting from ${w.machine} (${when(w.when)})`);
+    for (const u of f.units) if ((u.dirty || u.unpushed) && !u.skip) ui.step(`${f.project} · ${u.branch}  ${[u.dirty ? count(u.dirty, "change") : "", u.unpushed ? count(u.unpushed, "unpushed commit") : ""].filter(Boolean).join(", ")}`);
   }
-  return { facts, handoffs };
 }
 
 // ---------------------------------------------------------------- plan screen: one multi-select, a summary, one confirmation
@@ -132,7 +117,7 @@ export async function runSync(repo: string, m: Machine, man: Manifest, o: SyncOp
   const cloned = selectedProjects(man, m).filter((p) => !before.has(p.name) && existsSync(checkoutRoot(p, ws))).length;
 
   // 4. gather → 5. plan → 6. plan screen
-  const { facts, handoffs } = await ui.group("projects checked", () => gather(m, man, timeout), { done: "all clean, nothing waiting" });
+  const { facts, handoffs } = await ui.group("projects checked", async () => { const g = await gather(m, man, { timeout }); report(g.facts); return g; }, { done: "all clean, nothing waiting" });
   const pl = plan(facts, m.name);
   for (const s of pl.skipped) ui.skip(s);
   let chosen: Action[] = [];

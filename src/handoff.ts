@@ -115,9 +115,10 @@ export async function handoff(repo: string, m: Machine, man: Manifest, projects:
   return rc;
 }
 
-/** Fetch the handoff refs of `user` from origin and describe what is waiting. `ok` is false when the fetch failed (offline). */
-export async function fetchHandoffs(root: string, user: string, timeout = 60): Promise<{ ok: boolean; list: Handoff[] }> {
-  const r = await git.gitA(["fetch", "-q", "--prune", "origin", refspec(user)], root, { check: false, timeout });
+/** Fetch the handoff refs of `user` from origin and describe what is waiting. `ok` is false when the fetch failed (offline);
+ *  `fetch: false` only reads what the last fetch brought. */
+export async function fetchHandoffs(root: string, user: string, timeout = 60, fetch = true): Promise<{ ok: boolean; list: Handoff[] }> {
+  const r = fetch ? await git.gitA(["fetch", "-q", "--prune", "origin", refspec(user)], root, { check: false, timeout }) : { code: 0 };
   const refs = git.out(["for-each-ref", "--format=%(refname:short) %(objectname)", `refs/remotes/origin/${REF_NS}/${user}/`], root).split("\n").filter(Boolean);
   const list = refs.map((l) => { const [full, sha] = l.split(" "); const t = git.trailers(root, sha); const ref = full.replace(/^origin\//, "");
     return { ref, sha, branch: t["Cs-Branch"] ?? "", base: t["Cs-Base"] ?? "", machine: t["Cs-Machine"] ?? "?", worktree: t["Cs-Worktree"] ?? ".", note: t["Cs-Note"] ?? "", when: git.out(["log", "-1", "--format=%cI", sha], root) }; }).filter((x) => x.branch);
@@ -212,7 +213,8 @@ export function printNote(man: Manifest, m: Machine, cwd = process.cwd()): boole
   process.stdout.write(`Handoff note for ${p.name}${st?.resumed?.from ? ` (from ${st.resumed.from}, resumed ${st.resumed.at?.slice(0, 16)})` : ""}:\n${note.trimEnd()}\n`);
   return true;
 }
-/** SessionEnd hook: remember that dirty work exists here (no network). */
+/** SessionEnd hook: remember that dirty work exists here (no network). Nothing reads the marker since bare cs looks at
+ *  the trees directly (#8); the hook and this file go with the on-disk cleanups (#13). */
 export function markPending(man: Manifest, m: Machine, cwd = process.cwd()): void {
   const p = projectForPath(man, m, cwd); if (!p || !enabled(p)) return;
   const top = git.toplevel(cwd); if (!top || !git.isDirty(top)) return;
@@ -220,8 +222,6 @@ export function markPending(man: Manifest, m: Machine, cwd = process.cwd()): voi
   let cur: Record<string, string> = {}; try { cur = JSON.parse(readFileSync(pendingFile(), "utf8")); } catch {}
   cur[p.name] = new Date().toISOString(); writeFileSync(pendingFile(), JSON.stringify(cur));
 }
-export function pending(): Record<string, string> { try { return JSON.parse(readFileSync(pendingFile(), "utf8")); } catch { return {}; } }
-export function clearPending(name: string) { const cur = pending(); delete cur[name]; writeFileSync(pendingFile(), JSON.stringify(cur)); }
 export const projectsFor = (man: Manifest, m: Machine, names: string[], all: boolean): Project[] => {
   if (names.length) return names.map((n) => { const p = man.projects[n]; if (!p) throw new Error(`cs: unknown project '${n}'`); return p; });
   if (all) return selectedProjects(man, m);
