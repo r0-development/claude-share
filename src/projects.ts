@@ -5,7 +5,7 @@ import { spawnSync } from "node:child_process";
 import * as git from "./git.js";
 import * as github from "./github.js";
 import { contract, expand } from "./paths.js";
-import type { Machine } from "./config.js";
+import type { Machine } from "./machine.js";
 import { appendProject, checkoutRoot, container, identityForUrl, keyPath, loadManifest, NAME_RE, selectedProjects, updateProject, validate, workspace, type Identity, type Manifest, type Project } from "./manifest.js";
 import { runLink } from "./link.js";
 import * as ui from "./ui.js";

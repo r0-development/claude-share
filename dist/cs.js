@@ -1757,14 +1757,14 @@ Expecting one of '${allowedValues.join("', '")}'`);
        * @return {Command} `this` command for chaining
        * @private
        */
-      _optionEx(config2, flags, description, fn, defaultValue) {
+      _optionEx(config, flags, description, fn, defaultValue) {
         if (typeof flags === "object" && flags instanceof Option2) {
           throw new Error(
             "To add an Option object use addOption() instead of option() or requiredOption()"
           );
         }
         const option = this.createOption(flags, description);
-        option.makeOptionMandatory(!!config2.mandatory);
+        option.makeOptionMandatory(!!config.mandatory);
         if (typeof fn === "function") {
           option.default(defaultValue).argParser(fn);
         } else if (fn instanceof RegExp) {
@@ -2734,9 +2734,9 @@ Expecting one of '${allowedValues.join("', '")}'`);
           this._outputConfiguration.writeErr("\n");
           this.outputHelp({ error: true });
         }
-        const config2 = errorOptions || {};
-        const exitCode = config2.exitCode || 1;
-        const code = config2.code || "commander.error";
+        const config = errorOptions || {};
+        const exitCode = config.exitCode || 1;
+        const code = config.code || "commander.error";
         this._exit(exitCode, code, message);
       }
       /**
@@ -5273,7 +5273,7 @@ __export(paths_exports, {
   isUnder: () => isUnder,
   machineFile: () => machineFile,
   nodename: () => nodename,
-  repoDirDefault: () => repoDirDefault,
+  shareDirDefault: () => shareDirDefault,
   stateDir: () => stateDir,
   templatesDir: () => templatesDir,
   toolRoot: () => toolRoot
@@ -5291,7 +5291,7 @@ function contract(p) {
   if (p.startsWith(h2 + "/")) return "~/" + p.slice(h2.length + 1);
   return p;
 }
-var home, claudeDir, claudeJson, csConfigDir, machineFile, repoDirDefault, handoffStateDir, stateDir, toolRoot, templatesDir, nodename, isUnder;
+var home, claudeDir, claudeJson, csConfigDir, machineFile, shareDirDefault, handoffStateDir, stateDir, toolRoot, templatesDir, nodename, isUnder;
 var init_paths = __esm({
   "src/paths.ts"() {
     "use strict";
@@ -5300,7 +5300,7 @@ var init_paths = __esm({
     claudeJson = () => join(process.env.CLAUDE_CONFIG_DIR || home(), ".claude.json");
     csConfigDir = () => process.env.CS_CONFIG_DIR || join(home(), ".config", "claude-share");
     machineFile = () => join(csConfigDir(), "machine.toml");
-    repoDirDefault = () => join(csConfigDir(), "repo");
+    shareDirDefault = () => join(csConfigDir(), "repo");
     handoffStateDir = () => join(stateDir(), "handoff");
     stateDir = () => join(process.env.XDG_STATE_HOME || join(home(), ".local", "state"), "cs");
     toolRoot = () => resolve(new URL(".", import.meta.url).pathname, "..");
@@ -6198,13 +6198,13 @@ var init_dist5 = __esm({
   }
 });
 
-// src/config.ts
-var config_exports = {};
-__export(config_exports, {
+// src/machine.ts
+var machine_exports = {};
+__export(machine_exports, {
   loadMachine: () => loadMachine,
   machineExists: () => machineExists,
-  repoDir: () => repoDir,
-  saveMachine: () => saveMachine
+  saveMachine: () => saveMachine,
+  shareDir: () => shareDir
 });
 import { existsSync, mkdirSync, readFileSync as readFileSync2, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
@@ -6231,13 +6231,13 @@ function saveMachine(m) {
   mkdirSync(dirname(machineFile()), { recursive: true });
   writeFileSync(machineFile(), "# claude-share machine config (not synced). Edit freely.\n" + stringify(obj) + "\n");
 }
-var repoDir;
-var init_config = __esm({
-  "src/config.ts"() {
+var shareDir;
+var init_machine = __esm({
+  "src/machine.ts"() {
     "use strict";
     init_dist5();
     init_paths();
-    repoDir = (m) => m.repo ? expand(m.repo) : repoDirDefault();
+    shareDir = (m) => m.repo ? expand(m.repo) : shareDirDefault();
   }
 });
 
@@ -6332,7 +6332,7 @@ function parseManifest(text3, path) {
 }
 function validate(m) {
   const errs = [];
-  if (m.schemaVersion > SUPPORTED_SCHEMA) errs.push(`projects.toml schema_version ${m.schemaVersion} > supported ${SUPPORTED_SCHEMA}; run cs self-update`);
+  if (m.schemaVersion > SUPPORTED_SCHEMA) errs.push(`projects.toml schema_version ${m.schemaVersion} > supported ${SUPPORTED_SCHEMA}; run cs update`);
   for (const i2 of Object.values(m.identities)) if (!i2.owner && !i2.urlGlobs?.length) errs.push(`identity ${i2.id}: needs owner (GitHub user/org)`);
   for (const p of Object.values(m.projects)) {
     if (!NAME_RE.test(p.name)) errs.push(`${p.name}: invalid project name`);
@@ -6679,9 +6679,9 @@ var init_github = __esm({
   }
 });
 
-// src/master.ts
-var master_exports = {};
-__export(master_exports, {
+// src/sharekey.ts
+var sharekey_exports = {};
+__export(sharekey_exports, {
   KEY: () => KEY,
   canAccess: () => canAccess,
   configureRepo: () => configureRepo,
@@ -6738,32 +6738,32 @@ async function registerDeployKey(owner2, repo, pub, title) {
 function instructions(pub, gh, machine) {
   const lines = [];
   if (gh) lines.push(`${cyan(`https://github.com/${gh[0]}/${gh[1]}/settings/keys/new`)}  ${dim('\u2192 deploy key, tick "Allow write access"')}`, "");
-  lines.push(`title  ${bold(`cs:${machine}:master`)}`, `key    ${bold(pub)}`, "", dim("this key only reaches the config repo; identities get their own keys"));
-  note2(lines, "Add this machine's master key to the config repo");
+  lines.push(`title  ${bold(`cs:${machine}:master`)}`, `key    ${bold(pub)}`, "", dim("this key only reaches the share; identities get their own keys"));
+  note2(lines, "Add this machine's share key to the share");
 }
-async function setup(repoDir2, interactive = true) {
-  const url = remoteUrl(repoDir2);
+async function setup(shareDir2, interactive = true) {
+  const url = remoteUrl(shareDir2);
   if (!url) {
-    warn("config repo has no remote");
+    warn("share has no remote");
     return 1;
   }
   const [sshUrl, gh] = parseRepoUrl(url);
   const { pub, created } = ensureKey();
-  kv("master key", KEY + (created ? "  (generated)" : ""));
+  kv("share key", KEY + (created ? "  (generated)" : ""));
   let [ok2] = await spin("checking access\u2026", () => canAccess(sshUrl));
   while (!ok2) {
-    instructions(pub, gh, (await Promise.resolve().then(() => (init_config(), config_exports))).loadMachine().name);
+    instructions(pub, gh, (await Promise.resolve().then(() => (init_machine(), machine_exports))).loadMachine().name);
     if (!interactive || !await proceed("added the key?")) return 1;
     [ok2] = await spin("checking access\u2026", () => canAccess(sshUrl));
   }
-  if (sshUrl !== url) git(["remote", "set-url", "origin", sshUrl], repoDir2);
-  configureRepo(repoDir2);
-  ok(`config repo uses the master key (${sshUrl})`);
+  if (sshUrl !== url) git(["remote", "set-url", "origin", sshUrl], shareDir2);
+  configureRepo(shareDir2);
+  ok(`share uses the share key (${sshUrl})`);
   return 0;
 }
 var KEY, keyPath2, httpsUrl, configureRepo;
-var init_master = __esm({
-  "src/master.ts"() {
+var init_sharekey = __esm({
+  "src/sharekey.ts"() {
     "use strict";
     init_git();
     init_github();
@@ -6772,7 +6772,7 @@ var init_master = __esm({
     KEY = "~/.ssh/cs/master";
     keyPath2 = () => expand(KEY);
     httpsUrl = (o, r2) => `https://github.com/${o}/${r2}.git`;
-    configureRepo = (repoDir2) => git(["config", "core.sshCommand", `ssh -i ${KEY} -o IdentitiesOnly=yes`], repoDir2);
+    configureRepo = (shareDir2) => git(["config", "core.sshCommand", `ssh -i ${KEY} -o IdentitiesOnly=yes`], shareDir2);
   }
 });
 
@@ -6873,14 +6873,14 @@ function link(src, dst, check, changes) {
   }
   if (existsSync6(dst)) {
     if (statSync2(dst).isDirectory()) {
-      changes.push(`adopt ${contract(dst)} \u2192 ${contract(src)} (merge)`);
+      changes.push(`import ${contract(dst)} \u2192 ${contract(src)} (merge)`);
       if (!check) {
         mkdirSync4(src, { recursive: true });
         mergeDirInto(src, dst);
         symlinkSync(src, dst);
       }
     } else if (!existsSync6(src)) {
-      changes.push(`adopt ${contract(dst)} \u2192 ${contract(src)}`);
+      changes.push(`import ${contract(dst)} \u2192 ${contract(src)}`);
       if (!check) {
         mkdirSync4(dirname3(src), { recursive: true });
         renameSync(dst, src);
@@ -7046,8 +7046,8 @@ __export(link_exports, {
   checkouts: () => checkouts,
   ensureExclude: () => ensureExclude,
   memoryDir: () => memoryDir,
+  projectState: () => projectState,
   runLink: () => runLink,
-  sideStore: () => sideStore,
   syncProject: () => syncProject
 });
 import { existsSync as existsSync7, mkdirSync as mkdirSync5, readdirSync as readdirSync2, readFileSync as readFileSync7, renameSync as renameSync2, statSync as statSync3, unlinkSync as unlinkSync3, utimesSync, writeFileSync as writeFileSync5 } from "node:fs";
@@ -7123,7 +7123,7 @@ function ensureExclude(checkout, check, changes) {
 }
 function syncProject(repo, p, ws, check = false) {
   const changes = [];
-  const side = sideStore(repo, p);
+  const side = projectState(repo, p);
   const targets = checkouts(p, ws);
   if (!targets.length) return changes;
   const mem = memoryDir(repo, p);
@@ -7138,7 +7138,7 @@ function syncProject(repo, p, ws, check = false) {
     const sideExists = existsSync7(sp) && statSync3(sp).isFile();
     const sideData = sideExists ? normalize(rel, readFileSync7(sp)) : void 0;
     const sideMtime = sideExists ? statSync3(sp).mtimeMs / 1e3 : -1;
-    let best = sideData, bestM = sideMtime, from = "side-store";
+    let best = sideData, bestM = sideMtime, from = "project state";
     for (const t2 of targets) {
       const tp = join7(t2, rel);
       if (existsSync7(tp) && statSync3(tp).isFile()) {
@@ -7155,7 +7155,7 @@ function syncProject(repo, p, ws, check = false) {
       for (const t2 of targets) {
         const tp = join7(t2, rel);
         if (existsSync7(tp)) {
-          changes.push(`remove ${rel} from ${contract(t2)} (deleted in side-store)`);
+          changes.push(`remove ${rel} from ${contract(t2)} (deleted in project state)`);
           if (!check) unlinkSync3(tp);
         }
       }
@@ -7168,7 +7168,7 @@ function syncProject(repo, p, ws, check = false) {
       } else continue;
     }
     if ((!sideData || !best.equals(sideData)) && (best.length || rel !== SETTINGS_LOCAL)) {
-      changes.push(`side-store \u2190 ${rel} (from ${from})`);
+      changes.push(`project state \u2190 ${rel} (from ${from})`);
       if (!check) write(sp, best, bestM > 0 ? bestM : void 0);
     }
     if (best.length || rel !== SETTINGS_LOCAL) final.add(rel);
@@ -7177,7 +7177,7 @@ function syncProject(repo, p, ws, check = false) {
       const want = localize(rel, best, mem);
       const have = existsSync7(tp) && statSync3(tp).isFile() ? readFileSync7(tp) : void 0;
       if (!have || !have.equals(want)) {
-        changes.push(`${contract(t2)}/${rel} \u2190 side-store`);
+        changes.push(`${contract(t2)}/${rel} \u2190 project state`);
         if (!check) write(tp, want, bestM > 0 ? bestM : void 0);
       }
     }
@@ -7201,7 +7201,7 @@ function runLink(repo, m, man, names = [], check = false) {
   if (!total) ok("project files in sync");
   return total;
 }
-var ROOT_FILES, SKIP_UNDER_CLAUDE, EXCLUDE_LINES, SETTINGS_LOCAL, NOT_SYNCED, sideStore, memoryDir, stateFile, loadState, saveState;
+var ROOT_FILES, SKIP_UNDER_CLAUDE, EXCLUDE_LINES, SETTINGS_LOCAL, NOT_SYNCED, projectState, memoryDir, stateFile, loadState, saveState;
 var init_link = __esm({
   "src/link.ts"() {
     "use strict";
@@ -7215,8 +7215,8 @@ var init_link = __esm({
     EXCLUDE_LINES = [".claude/", ".mcp.json", "CLAUDE.md", "CLAUDE.local.md"];
     SETTINGS_LOCAL = ".claude/settings.local.json";
     NOT_SYNCED = /* @__PURE__ */ new Set(["memory", "secrets"]);
-    sideStore = (repo, p) => join7(repo, "projects", p.name);
-    memoryDir = (repo, p) => join7(sideStore(repo, p), "memory");
+    projectState = (repo, p) => join7(repo, "projects", p.name);
+    memoryDir = (repo, p) => join7(projectState(repo, p), "memory");
     stateFile = (p) => join7(stateDir(), "link", `${p.name}.json`);
     loadState = (p) => {
       try {
@@ -7358,8 +7358,11 @@ ${(p.err || p.out).split("\n").slice(-5).join("\n")}`);
 // src/handoff.ts
 var handoff_exports = {};
 __export(handoff_exports, {
+  REF_NS: () => REF_NS,
   clearPending: () => clearPending,
   handoff: () => handoff,
+  handoffDrop: () => handoffDrop,
+  handoffGc: () => handoffGc,
   loadState: () => loadState2,
   markPending: () => markPending,
   pending: () => pending,
@@ -7367,9 +7370,7 @@ __export(handoff_exports, {
   printNote: () => printNote,
   projectsFor: () => projectsFor,
   resume: () => resume,
-  wipDrop: () => wipDrop,
-  wipGc: () => wipGc,
-  wipList: () => wipList
+  waitingList: () => waitingList
 });
 import { existsSync as existsSync9, mkdirSync as mkdirSync7, readFileSync as readFileSync8, rmSync as rmSync3, writeFileSync as writeFileSync6 } from "node:fs";
 import { basename as basename2, join as join9, relative as relative3 } from "node:path";
@@ -7383,7 +7384,7 @@ function denyHits(unit, p, allow) {
   const pats = [...DENY, ...hoff(p).never ?? []];
   return changed.filter((f) => pats.some((g) => globMatch(g, f) || globMatch(g, basename2(f))) && !allow.some((g) => globMatch(g, f)));
 }
-async function buildParcel(unit, p, m, note3, extras, excludes) {
+async function buildSnapshot(unit, p, m, note3, extras, excludes) {
   const idx = join9(commonDir(unit.path), `cs-handoff-index-${process.pid}`);
   const env2 = { GIT_INDEX_FILE: idx };
   try {
@@ -7404,7 +7405,7 @@ async function buildParcel(unit, p, m, note3, extras, excludes) {
     const files = out(["diff-tree", "-r", "--name-only", "HEAD", tree], unit.path).split("\n").filter((f) => f && !f.startsWith(SIDE)).length;
     const head = out(["rev-parse", "HEAD"], unit.path);
     const msg = [
-      `wip(${m.name}): ${unit.branch} @ ${head.slice(0, 7)} ${(/* @__PURE__ */ new Date()).toISOString()}`,
+      `handoff(${m.name}): ${unit.branch} @ ${head.slice(0, 7)} ${(/* @__PURE__ */ new Date()).toISOString()}`,
       "",
       `Cs-Base: ${head}`,
       `Cs-Branch: ${unit.branch}`,
@@ -7443,8 +7444,8 @@ async function handoff(repo, m, man, projects, o) {
     const results = [];
     for (const u5 of units(p, ws)) {
       const label = `${p.name}${u5.rel === "." ? "" : "/" + u5.rel}`;
-      if (!u5.branch || u5.branch.startsWith("wip/")) {
-        skip(`${label}: detached or on a wip branch`);
+      if (!u5.branch || u5.branch.startsWith(`${REF_NS}/`)) {
+        skip(`${label}: detached or on a handoff ref`);
         continue;
       }
       if (!remoteUrl(u5.path)) {
@@ -7464,22 +7465,22 @@ async function handoff(repo, m, man, projects, o) {
         continue;
       }
       const user = userSlug(u5.path);
-      const ref = wipRef(user, u5.branch);
+      const ref = handoffRef(user, u5.branch);
       if (o.dryRun) {
         step(`${label}: would push ${dirtyCount(u5.path)} change(s) on ${u5.branch} \u2192 ${ref}`);
         continue;
       }
-      await spin(`${label}: fetching ${ref}\u2026`, () => gitA(["fetch", "-q", "--prune", "origin", `+refs/heads/wip/${user}/*:refs/remotes/origin/wip/${user}/*`], u5.path, { check: false, timeout: 60 }));
+      await spin(`${label}: fetching ${ref}\u2026`, () => gitA(["fetch", "-q", "--prune", "origin", refspec(user)], u5.path, { check: false, timeout: 60 }));
       const lease = out(["rev-parse", "--verify", "-q", `refs/remotes/origin/${ref}`], u5.path);
       if (lease && !o.overwrite) {
         const t2 = trailers(u5.path, lease);
         if (t2["Cs-Machine"] && t2["Cs-Machine"] !== m.name) {
-          fail(`${label}: a parcel from ${t2["Cs-Machine"]} is waiting on ${ref} \u2014 run cs resume there first, or --overwrite`);
+          fail(`${label}: a handoff from ${t2["Cs-Machine"]} is waiting on ${ref} \u2014 run cs resume there first, or --overwrite`);
           rc = 1;
           continue;
         }
       }
-      const { sha, files } = await spin(`${label}: snapshotting\u2026`, () => buildParcel(u5, p, m, o.note ?? "", hoff(p).extra ?? [], hoff(p).exclude ?? []));
+      const { sha, files } = await spin(`${label}: snapshotting\u2026`, () => buildSnapshot(u5, p, m, o.note ?? "", hoff(p).extra ?? [], hoff(p).exclude ?? []));
       git(["update-ref", `refs/heads/${ref}`, sha], u5.path);
       const push3 = await spin(`${label}: pushing ${ref}\u2026`, () => gitA(["push", "-q", `--force-with-lease=refs/heads/${ref}:${lease || ""}`, "origin", `refs/heads/${ref}:refs/heads/${ref}`], u5.path, { check: false, timeout: 120 }));
       if (push3.code !== 0) {
@@ -7502,9 +7503,9 @@ async function handoff(repo, m, man, projects, o) {
   }
   return rc;
 }
-async function fetchParcels(root, user) {
-  await gitA(["fetch", "-q", "--prune", "origin", `+refs/heads/wip/${user}/*:refs/remotes/origin/wip/${user}/*`], root, { check: false, timeout: 60 });
-  const refs = out(["for-each-ref", "--format=%(refname:short) %(objectname)", `refs/remotes/origin/wip/${user}/`], root).split("\n").filter(Boolean);
+async function fetchWaiting(root, user) {
+  await gitA(["fetch", "-q", "--prune", "origin", refspec(user)], root, { check: false, timeout: 60 });
+  const refs = out(["for-each-ref", "--format=%(refname:short) %(objectname)", `refs/remotes/origin/${REF_NS}/${user}/`], root).split("\n").filter(Boolean);
   return refs.map((l2) => {
     const [full, sha] = l2.split(" ");
     const t2 = trailers(root, sha);
@@ -7512,14 +7513,14 @@ async function fetchParcels(root, user) {
     return { ref, sha, branch: t2["Cs-Branch"] ?? "", base: t2["Cs-Base"] ?? "", machine: t2["Cs-Machine"] ?? "?", worktree: t2["Cs-Worktree"] ?? ".", note: t2["Cs-Note"] ?? "", when: out(["log", "-1", "--format=%cI", sha], root) };
   }).filter((x) => x.branch);
 }
-function findOrCreateUnit(p, ws, parcel) {
+function findOrCreateUnit(p, ws, handoff2) {
   const root = checkoutRoot(p, ws);
-  const existing = units(p, ws).find((u5) => u5.branch === parcel.branch);
+  const existing = units(p, ws).find((u5) => u5.branch === handoff2.branch);
   if (existing) return { path: existing.path, created: false };
   if (p.layout === "worktrees") {
-    const dir = join9(container(p, ws), `wt-${slug(parcel.branch)}`);
-    const hasBranch = !!out(["rev-parse", "--verify", "-q", `refs/heads/${parcel.branch}`], root);
-    const r3 = git(["worktree", "add", "-q", ...hasBranch ? [dir, parcel.branch] : ["-b", parcel.branch, dir, parcel.base]], root, { check: false });
+    const dir = join9(container(p, ws), `wt-${slug(handoff2.branch)}`);
+    const hasBranch = !!out(["rev-parse", "--verify", "-q", `refs/heads/${handoff2.branch}`], root);
+    const r3 = git(["worktree", "add", "-q", ...hasBranch ? [dir, handoff2.branch] : ["-b", handoff2.branch, dir, handoff2.base]], root, { check: false });
     if (r3.code !== 0) {
       fail(`${p.name}: could not create worktree ${contract(dir)} \u2014 ${r3.err.split("\n").pop()}`);
       return void 0;
@@ -7530,9 +7531,9 @@ function findOrCreateUnit(p, ws, parcel) {
     fail(`${p.name}: ${contract(root)} is dirty and on ${currentBranch(root)}; commit/stash or use --replace`);
     return void 0;
   }
-  const r2 = git(["checkout", "-q", "-B", parcel.branch, out(["rev-parse", "--verify", "-q", `refs/heads/${parcel.branch}`], root) || parcel.base], root, { check: false });
+  const r2 = git(["checkout", "-q", "-B", handoff2.branch, out(["rev-parse", "--verify", "-q", `refs/heads/${handoff2.branch}`], root) || handoff2.base], root, { check: false });
   if (r2.code !== 0) {
-    fail(`${p.name}: checkout ${parcel.branch} failed \u2014 ${r2.err.split("\n").pop()}`);
+    fail(`${p.name}: checkout ${handoff2.branch} failed \u2014 ${r2.err.split("\n").pop()}`);
     return void 0;
   }
   return { path: root, created: false };
@@ -7545,15 +7546,15 @@ async function resume(repo, m, man, projects, o) {
     const root = checkoutRoot(p, ws);
     if (!existsSync9(root) || !remoteUrl(root)) continue;
     const user = userSlug(root);
-    const parcels = await spin(`${p.name}: looking for parcels\u2026`, () => fetchParcels(root, user));
-    if (!parcels.length) {
+    const handoffs2 = await spin(`${p.name}: looking for handoffs\u2026`, () => fetchWaiting(root, user));
+    if (!handoffs2.length) {
       skip(`${p.name}: nothing to resume`);
       continue;
     }
-    for (const pc2 of parcels) {
+    for (const pc2 of handoffs2) {
       const label = `${p.name} \xB7 ${pc2.branch}`;
       if (o.dryRun) {
-        step(`${label}: parcel from ${pc2.machine} (${pc2.when.slice(0, 16)})${pc2.note ? " \u2014 " + pc2.note : ""}`);
+        step(`${label}: handoff from ${pc2.machine} (${pc2.when.slice(0, 16)})${pc2.note ? " \u2014 " + pc2.note : ""}`);
         continue;
       }
       const unit = findOrCreateUnit(p, ws, pc2);
@@ -7567,7 +7568,7 @@ async function resume(repo, m, man, projects, o) {
           rc = 1;
           continue;
         }
-        const backup2 = await buildParcel({ path: unit.path, branch: pc2.branch, rel: relative3(container(p, ws), unit.path) || "." }, p, m, "", [], []);
+        const backup2 = await buildSnapshot({ path: unit.path, branch: pc2.branch, rel: relative3(container(p, ws), unit.path) || "." }, p, m, "", [], []);
         const bref = `refs/cs/backup/${slug(pc2.branch)}/${Date.now()}`;
         git(["update-ref", bref, backup2.sha], unit.path);
         git(["reset", "-q", "--hard"], unit.path);
@@ -7576,7 +7577,7 @@ async function resume(repo, m, man, projects, o) {
       }
       const ff = git(["merge", "-q", "--ff-only", pc2.base], unit.path, { check: false });
       if (ff.code !== 0) {
-        fail(`${label}: branch diverged from the parcel's base ${pc2.base.slice(0, 7)} \u2014 merge/rebase manually, then re-run`);
+        fail(`${label}: branch diverged from the handoff's base ${pc2.base.slice(0, 7)} \u2014 merge/rebase manually, then re-run`);
         rc = 1;
         continue;
       }
@@ -7584,7 +7585,7 @@ async function resume(repo, m, man, projects, o) {
       if (cp.code !== 0) {
         git(["cherry-pick", "--abort"], unit.path, { check: false });
         git(["reset", "-q", "--hard"], unit.path);
-        fail(`${label}: could not apply parcel \u2014 ${cp.err.split("\n").pop()}`);
+        fail(`${label}: could not apply handoff \u2014 ${cp.err.split("\n").pop()}`);
         rc = 1;
         continue;
       }
@@ -7623,24 +7624,24 @@ async function resume(repo, m, man, projects, o) {
   }
   return rc;
 }
-async function wipList(m, man, projects) {
+async function waitingList(m, man, projects) {
   const ws = workspace(man, m);
   const all = [];
   for (const p of projects) {
     const root = checkoutRoot(p, ws);
     if (!existsSync9(root) || !remoteUrl(root) || !enabled(p)) continue;
-    const parcels = await spin(`${p.name}: fetching parcels\u2026`, () => fetchParcels(root, userSlug(root)));
-    for (const pc2 of parcels) all.push({ ...pc2, ref: pc2.ref, worktree: p.name });
+    const handoffs2 = await spin(`${p.name}: fetching handoffs\u2026`, () => fetchWaiting(root, userSlug(root)));
+    for (const pc2 of handoffs2) all.push({ ...pc2, ref: pc2.ref, worktree: p.name });
   }
   return all;
 }
-async function wipGc(m, man, projects, olderThanDays) {
+async function handoffGc(m, man, projects, olderThanDays) {
   const ws = workspace(man, m);
   let n3 = 0;
   for (const p of projects) {
     const root = checkoutRoot(p, ws);
     if (!existsSync9(root) || !remoteUrl(root)) continue;
-    for (const pc2 of await fetchParcels(root, userSlug(root))) {
+    for (const pc2 of await fetchWaiting(root, userSlug(root))) {
       const age = (Date.now() - Date.parse(pc2.when)) / 864e5;
       if (age < olderThanDays) continue;
       await gitA(["push", "-q", "origin", "--delete", pc2.ref], root, { check: false });
@@ -7650,9 +7651,9 @@ async function wipGc(m, man, projects, olderThanDays) {
   }
   return n3;
 }
-async function wipDrop(m, man, p, ref) {
+async function handoffDrop(m, man, p, ref) {
   const root = checkoutRoot(p, workspace(man, m));
-  const full = ref.startsWith("wip/") ? ref : wipRef(userSlug(root), ref);
+  const full = ref.startsWith(`${REF_NS}/`) ? ref : handoffRef(userSlug(root), ref);
   await spin(`removing ${full}\u2026`, () => gitA(["push", "-q", "origin", "--delete", full], root, { timeout: 60 }));
   ok(`dropped ${full}`);
 }
@@ -7695,7 +7696,7 @@ function clearPending(name2) {
   delete cur[name2];
   writeFileSync6(pendingFile(), JSON.stringify(cur));
 }
-var DENY, SIDE, userSlug, wipRef, hoff, enabled, stateFile2, noteFile, pendingFile, projectsFor;
+var DENY, SIDE, REF_NS, userSlug, handoffRef, refspec, hoff, enabled, stateFile2, noteFile, pendingFile, projectsFor;
 var init_handoff = __esm({
   "src/handoff.ts"() {
     "use strict";
@@ -7706,8 +7707,10 @@ var init_handoff = __esm({
     init_ui();
     DENY = ["**/.env", "**/.env.*", "**/*.pem", "**/*.key", "**/*token*", "**/*secret*"];
     SIDE = ".cs-handoff";
+    REF_NS = "wip";
     userSlug = (p) => slug(configGet(p, "user.name") || userInfo().username);
-    wipRef = (user, branch) => `wip/${user}/${slug(branch)}`;
+    handoffRef = (user, branch) => `${REF_NS}/${user}/${slug(branch)}`;
+    refspec = (user) => `+refs/heads/${REF_NS}/${user}/*:refs/remotes/origin/${REF_NS}/${user}/*`;
     hoff = (p) => p.handoff ?? {};
     enabled = (p) => p.handoff !== false && hoff(p).enabled !== false;
     stateFile2 = (p) => join9(handoffStateDir(), `${p.name}.json`);
@@ -7771,7 +7774,7 @@ async function runStatus(repo, m, man, fetch2 = false, showAll = false) {
   info(`${dim("profiles")} ${m.profiles.join(", ")}  ${dim("workspace")} ${contract(ws)}`);
   const [branch, state] = repoState(repo, fetch2);
   const mk = join10(stateDir(), "blocked-config");
-  table([[bold("config repo"), branch, state + (existsSync10(mk) ? "  " + red("BLOCKED: " + readFileSync9(mk, "utf8").trim()) : "")]]);
+  table([[bold("share"), branch, state + (existsSync10(mk) ? "  " + red("BLOCKED: " + readFileSync9(mk, "utf8").trim()) : "")]]);
   let rc = 0;
   const rows = [];
   const known = /* @__PURE__ */ new Set();
@@ -8455,7 +8458,7 @@ function recipients(repo) {
   return m2 ? m2[1].split(",").map((x) => x.trim()).filter(Boolean) : [];
 }
 function writeRecipients(repo, recs) {
-  writeFileSync10(join15(repo, ".sops.yaml"), `# sops recipients \u2014 managed by cs secrets init / cs enroll / cs revoke
+  writeFileSync10(join15(repo, ".sops.yaml"), `# sops recipients \u2014 managed by cs secrets init / cs trust / cs untrust
 creation_rules:
   - path_regex: ${RULE}
     age: >-
@@ -8535,7 +8538,7 @@ var init_sops = __esm({
           if (existsSync15(src) && !existsSync15(hook)) {
             copyFileSync3(src, hook);
             chmodSync5(hook, 493);
-            ok("installed pre-commit plaintext guard in the config repo");
+            ok("installed pre-commit plaintext guard in the share");
           }
         } else if (recs.includes(pub)) ok("this machine can decrypt secrets");
         else step("this machine is not a recipient yet");
@@ -8569,7 +8572,7 @@ var init_sops = __esm({
       status(repo, m) {
         const pub = publicKey(), recs = recipients(repo);
         kv("age key", contract(keyFile()) + (existsSync15(keyFile()) ? "" : red("  missing")));
-        kv("recipient", pub && recs.includes(pub) ? green("yes") : red("no \u2014 cs enroll " + m.name));
+        kv("recipient", pub && recs.includes(pub) ? green("yes") : red("no \u2014 cs trust " + m.name));
         const names = {};
         const md = join15(repo, "machines");
         if (existsSync15(md)) for (const d of readdirSync5(md)) {
@@ -8645,11 +8648,11 @@ var init_secrets = __esm({
   }
 });
 
-// src/sync.ts
-var sync_exports = {};
-__export(sync_exports, {
-  gitSync: () => gitSync,
-  runSync: () => runSync
+// src/sharesync.ts
+var sharesync_exports = {};
+__export(sharesync_exports, {
+  runShareSync: () => runShareSync,
+  shareGitSync: () => shareGitSync
 });
 import { closeSync, existsSync as existsSync16, mkdirSync as mkdirSync11, openSync, readFileSync as readFileSync14, statSync as statSync4, unlinkSync as unlinkSync4, writeFileSync as writeFileSync11 } from "node:fs";
 import { join as join17 } from "node:path";
@@ -8668,7 +8671,7 @@ function tryLock(label) {
     return void 0;
   }
 }
-async function gitSync(repo, label, machine, o = {}) {
+async function shareGitSync(repo, label, machine, o = {}) {
   if (!isRepo(repo)) {
     warn(`${label}: not a git repo (${contract(repo)})`);
     return false;
@@ -8740,7 +8743,7 @@ async function gitSync(repo, label, machine, o = {}) {
         if (pr.code !== 0) {
           warn(`${label}: push rejected, retrying once`);
           unlock(label, fd);
-          return gitSync(repo, label, machine, o);
+          return shareGitSync(repo, label, machine, o);
         }
         ok(`${label}: pushed ${ab[0]} commit(s)`);
       }
@@ -8754,7 +8757,7 @@ async function gitSync(repo, label, machine, o = {}) {
     }
   }
 }
-async function runSync(repo, m, man, o = {}) {
+async function runShareSync(repo, m, man, o = {}) {
   const ws = workspace(man, m);
   let rc = 0;
   if (o.debounce) {
@@ -8765,7 +8768,7 @@ async function runSync(repo, m, man, o = {}) {
   if (!o.pullOnly) {
     for (const p of selectedProjects(man, m)) if (checkouts(p, ws).length) syncProject(repo, p, ws);
   }
-  if (!await gitSync(repo, "config", m.name, o)) rc = 2;
+  if (!await shareGitSync(repo, "config", m.name, o)) rc = 2;
   const after = out(["rev-parse", "HEAD"], repo);
   if (after !== before || o.pullOnly) {
     const changed = before ? out(["diff", "--name-only", before, after], repo) : "";
@@ -8775,8 +8778,8 @@ async function runSync(repo, m, man, o = {}) {
   return rc;
 }
 var marker, lockFile, unlock;
-var init_sync = __esm({
-  "src/sync.ts"() {
+var init_sharesync = __esm({
+  "src/sharesync.ts"() {
     "use strict";
     init_git();
     init_paths();
@@ -8801,7 +8804,6 @@ var secretscmd_exports = {};
 __export(secretscmd_exports, {
   diff: () => diff,
   edit: () => edit,
-  enroll: () => enroll,
   ensureRecipient: () => ensureRecipient,
   environment: () => environment,
   exec: () => exec3,
@@ -8810,10 +8812,11 @@ __export(secretscmd_exports, {
   pull: () => pull,
   push: () => push,
   recovery: () => recovery,
-  revoke: () => revoke,
   setValues: () => setValues,
   status: () => status,
-  unsetValues: () => unsetValues
+  trust: () => trust,
+  unsetValues: () => unsetValues,
+  untrust: () => untrust
 });
 import { chmodSync as chmodSync6, existsSync as existsSync17, mkdirSync as mkdirSync12, readdirSync as readdirSync6, readFileSync as readFileSync15, writeFileSync as writeFileSync12, rmSync as rmSync5 } from "node:fs";
 import { join as join18, relative as relative6 } from "node:path";
@@ -8915,7 +8918,7 @@ async function environment(repo, m, man, project, warnMissing = true) {
   if (env2.CS_SECRETS_LOADED === "1") return env2;
   const b = await getBackend(m);
   if (b.name !== "none" && !b.ready(repo)) {
-    if (warnMissing) warn("secrets not available on this machine (cs secrets init / cs enroll) \u2014 continuing without them");
+    if (warnMissing) warn("secrets not available on this machine (cs secrets init / cs trust) \u2014 continuing without them");
     return env2;
   }
   Object.assign(env2, b.loadEnv(repo, "global"));
@@ -8930,7 +8933,7 @@ async function exec3(repo, m, man, project, cmd) {
   const p = spawnSync7(cmd[0], cmd.slice(1), { stdio: "inherit", env: env2 });
   return p.status ?? 1;
 }
-async function enroll(repo, m, machine) {
+async function trust(repo, m, machine) {
   const pf = machinePubFile(repo, machine);
   if (!existsSync17(pf)) throw new Error(`cs: ${contract(pf)} not found \u2014 run cs secrets init on ${machine} and cs sync on both sides first`);
   const pub = readFileSync15(pf, "utf8").trim();
@@ -8942,11 +8945,11 @@ async function enroll(repo, m, machine) {
   writeRecipients(repo, [...recs, pub]);
   const n3 = await spin("re-encrypting secrets for the new recipient\u2026", () => updatekeys(repo));
   git(["add", "-A", ".sops.yaml", "secrets"], repo);
-  commit(repo, `secrets: enroll ${machine}`, "cs", `cs@${m.name}`);
+  commit(repo, `secrets: trust ${machine}`, "cs", `cs@${m.name}`);
   ok(`${machine} can now decrypt  ${dim(`${n3} file(s) re-encrypted`)}`);
   return 0;
 }
-async function revoke(repo, m, machine) {
+async function untrust(repo, m, machine) {
   const pf = machinePubFile(repo, machine);
   const pub = existsSync17(pf) ? readFileSync15(pf, "utf8").trim() : "";
   const recs = recipients(repo);
@@ -8955,8 +8958,8 @@ async function revoke(repo, m, machine) {
     const n3 = await spin("re-encrypting secrets without that machine\u2026", () => updatekeys(repo));
     rmSync5(join18(repo, "machines", machine), { recursive: true, force: true });
     git(["add", "-A", ".sops.yaml", "secrets", "machines"], repo);
-    commit(repo, `secrets: revoke ${machine}`, "cs", `cs@${m.name}`);
-    ok(`revoked ${machine}; re-encrypted ${n3} file(s)`);
+    commit(repo, `secrets: untrust ${machine}`, "cs", `cs@${m.name}`);
+    ok(`untrusted ${machine}; re-encrypted ${n3} file(s)`);
   } else warn(`${machine} was not a recipient`);
   const b = await getBackend(m);
   const keys = /* @__PURE__ */ new Set();
@@ -8990,7 +8993,7 @@ async function recovery(repo, m) {
   git(["add", "-A", ".sops.yaml", "secrets", "machines/recovery"], repo);
   commit(repo, "secrets: recovery recipient", "cs", `cs@${m.name}`);
   ok(`recovery recipient added; re-encrypted ${n3} file(s)`);
-  note2([priv, "", dim("On a bare machine: write it to ~/.config/sops/age/keys.txt, run cs secrets init, enroll the machine's own key, delete it.")], "Store this in your password manager now \u2014 it is not saved anywhere else");
+  note2([priv, "", dim("On a bare machine: write it to ~/.config/sops/age/keys.txt, run cs secrets init, trust the machine's own key, delete it.")], "Store this in your password manager now \u2014 it is not saved anywhere else");
   return 0;
 }
 async function ensureRecipient(repo, m, interactive) {
@@ -9007,12 +9010,12 @@ async function ensureRecipient(repo, m, interactive) {
   })())) : [];
   const where = others.length ? `on ${others.map((x) => bold(x)).join(" or ")}` : "on a machine that already has secrets";
   if (!interactive) {
-    warn(`secrets: not a recipient yet \u2014 ${where}: cs sync && cs enroll ${m.name} && cs sync; then cs sync here`);
+    warn(`secrets: not a recipient yet \u2014 ${where}: cs sync && cs trust ${m.name} && cs sync; then cs sync here`);
     return false;
   }
   for (; ; ) {
     const choice = await select2("This machine cannot decrypt secrets yet. How do you want to enable it?", [
-      { value: "enroll", label: "Enroll it from another machine", hint: "recommended \u2014 nothing secret is typed or copied" },
+      { value: "trust", label: "Trust it from another machine", hint: "recommended \u2014 nothing secret is typed or copied" },
       { value: "recovery", label: "Use the recovery key", hint: "paste it once; it is discarded afterwards" },
       { value: "skip", label: "Skip for now", hint: "Claude runs without secrets until then" }
     ]);
@@ -9034,11 +9037,11 @@ async function ensureRecipient(repo, m, interactive) {
         if (!recipients(repo).includes(own)) writeRecipients(repo, [...recipients(repo), own]);
         const n3 = await spin("re-encrypting secrets for this machine\u2026", () => updatekeys(repo));
         git(["add", "-A", ".sops.yaml", "secrets"], repo);
-        commit(repo, `secrets: enroll ${m.name} (recovery key)`, "cs", `cs@${m.name}`);
-        ok(`enrolled with the recovery key  ${dim(`${n3} file(s) re-encrypted`)}`);
+        commit(repo, `secrets: trust ${m.name} (recovery key)`, "cs", `cs@${m.name}`);
+        ok(`trusted via the recovery key  ${dim(`${n3} file(s) re-encrypted`)}`);
         void pub;
       } catch (e) {
-        fail(`could not enroll: ${e.message}`);
+        fail(`could not trust: ${e.message}`);
         continue;
       } finally {
         if (prev === void 0) delete process.env.SOPS_AGE_KEY_FILE;
@@ -9047,16 +9050,16 @@ async function ensureRecipient(repo, m, interactive) {
       }
       return b.ready(repo);
     }
-    note2([`${where} run:`, "", `  ${bold(`cs sync && cs enroll ${m.name} && cs sync`)}`, "", dim("that machine re-encrypts the secrets so this one can read them \u2014 no secret leaves either machine")], "Enroll this machine");
+    note2([`${where} run:`, "", `  ${bold(`cs sync && cs trust ${m.name} && cs sync`)}`, "", dim("that machine re-encrypts the secrets so this one can read them \u2014 no secret leaves either machine")], "Trust this machine");
     if (!await proceed("done on the other machine?", "Done \u2014 check now", "Skip for now")) return false;
-    const { runSync: runSync2 } = await Promise.resolve().then(() => (init_sync(), sync_exports));
+    const { runShareSync: runShareSync2 } = await Promise.resolve().then(() => (init_sharesync(), sharesync_exports));
     const { loadManifest: loadManifest2 } = await Promise.resolve().then(() => (init_manifest(), manifest_exports));
-    await spin("syncing\u2026", () => runSync2(repo, m, loadManifest2(repo), { pullOnly: true, timeout: 20 }));
+    await spin("syncing\u2026", () => runShareSync2(repo, m, loadManifest2(repo), { pullOnly: true, timeout: 20 }));
     if (b.ready(repo)) {
       ok("this machine can decrypt secrets");
       return true;
     }
-    warn("still not a recipient \u2014 did the other machine run cs sync after enrolling?");
+    warn("still not a recipient \u2014 did the other machine run cs sync after trusting it?");
   }
 }
 var mask, commitSecrets, checkIgnored;
@@ -9111,7 +9114,7 @@ function installHooks(repo, m, remove = false) {
   if (changed) {
     writeFileSync13(f, dumps(data));
     git(["add", f], repo);
-    commit(repo, `claude: ${remove ? "remove" : "install"} cs sync hooks`, "cs", `cs@${m.name}`);
+    commit(repo, `claude: ${remove ? "remove" : "install"} cs share-sync hooks`, "cs", `cs@${m.name}`);
   }
   return changed;
 }
@@ -9130,7 +9133,7 @@ function installTimer(remove = false) {
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0"><dict>
 <key>Label</key><string>dev.claude-share.sync</string>
-<key>ProgramArguments</key><array><string>/bin/sh</string><string>-lc</string><string>cs sync --quiet</string></array>
+<key>ProgramArguments</key><array><string>/bin/sh</string><string>-lc</string><string>cs share-sync --quiet</string></array>
 <key>StartInterval</key><integer>900</integer>
 <key>StandardOutPath</key><string>${log2}</string>
 <key>StandardErrorPath</key><string>${log2}</string>
@@ -9153,7 +9156,7 @@ Description=claude-share sync
 
 [Service]
 Type=oneshot
-ExecStart=/bin/sh -lc 'cs sync --quiet'
+ExecStart=/bin/sh -lc 'cs share-sync --quiet'
 StandardOutput=append:${log2}
 StandardError=append:${log2}
 `);
@@ -9189,30 +9192,30 @@ var init_hooks = __esm({
     init_platform();
     init_jsonmerge();
     init_ui();
-    STOP = "command -v cs >/dev/null 2>&1 && cs sync --push-only --quiet --debounce 120 || true";
-    START = "command -v cs >/dev/null 2>&1 && { cs sync --pull-only --quiet --timeout 5; cs note --print 2>/dev/null; } || true";
+    STOP = "command -v cs >/dev/null 2>&1 && cs share-sync --push-only --quiet --debounce 120 || true";
+    START = "command -v cs >/dev/null 2>&1 && { cs share-sync --pull-only --quiet --timeout 5; cs note --print 2>/dev/null; } || true";
     END2 = "command -v cs >/dev/null 2>&1 && cs handoff --mark --quiet || true";
     entries = () => ({
       Stop: [{ hooks: [{ type: "command", command: STOP, async: true, timeout: 120 }] }],
       SessionStart: [{ matcher: "startup", hooks: [{ type: "command", command: START, timeout: 15 }] }],
       SessionEnd: [{ hooks: [{ type: "command", command: END2, timeout: 5 }] }]
     });
-    ours = (e) => (e.hooks ?? []).some((h2) => /cs (sync|handoff|note)/.test(String(h2.command ?? "")));
+    ours = (e) => (e.hooks ?? []).some((h2) => /\bcs (share-sync|sync|handoff|note)\b/.test(String(h2.command ?? "")));
   }
 });
 
 // src/init.ts
 var init_exports = {};
 __export(init_exports, {
-  CONFIG_REPO_NAME: () => CONFIG_REPO_NAME,
   PHASES: () => PHASES,
+  SHARE_REPO_NAME: () => SHARE_REPO_NAME,
   init: () => init2,
-  newConfigRepo: () => newConfigRepo
+  newShare: () => newShare
 });
 import { copyFileSync as copyFileSync4, existsSync as existsSync19, mkdirSync as mkdirSync14, readdirSync as readdirSync7, writeFileSync as writeFileSync14 } from "node:fs";
 import { dirname as dirname8, join as join20, relative as relative7 } from "node:path";
-function newConfigRepo(dest, branch = "master") {
-  const src = templatesDir() + "/config-repo";
+function newShare(dest, branch = "master") {
+  const src = templatesDir() + "/share";
   mkdirSync14(dest, { recursive: true });
   const copy = (d) => {
     for (const e of readdirSync7(d, { withFileTypes: true })) {
@@ -9238,23 +9241,23 @@ function newConfigRepo(dest, branch = "master") {
 }
 async function accessLoop(sshUrl, gh, interactive, machine) {
   const { pub, created } = ensureKey(machine);
-  if (created) step(`master key generated  ${dim(KEY)}`);
-  let [ok2, err] = await spin("checking access to the config repo\u2026", () => canAccess(sshUrl));
+  if (created) step(`share key generated  ${dim(KEY)}`);
+  let [ok2, err] = await spin("checking access to the share\u2026", () => canAccess(sshUrl));
   let tries = 0;
   while (!ok2) {
     instructions(pub, gh, machine);
-    if (!interactive) throw new Error("cs: config repo not reachable with the master key (see instructions above)");
-    if (!await proceed("added the key?", "Done \u2014 check access", "Abort") || tries++ >= 10) throw new Error("cs: aborted \u2014 config repo not reachable");
+    if (!interactive) throw new Error("cs: share not reachable with the share key (see instructions above)");
+    if (!await proceed("added the key?", "Done \u2014 check access", "Abort") || tries++ >= 10) throw new Error("cs: aborted \u2014 share not reachable");
     [ok2, err] = await spin("checking access\u2026", () => canAccess(sshUrl));
     if (!ok2) warn(`still no access \u2014 ${err}`);
   }
-  step("config repo reachable with the master key");
+  step("share reachable with the share key");
 }
 async function cloneConfig(sshUrl, target) {
   mkdirSync14(dirname8(target), { recursive: true });
-  await spin("cloning the config repo\u2026", () => gitA(["clone", "-q", sshUrl, target], void 0, { sshKey: keyPath2() }));
+  await spin("cloning the share\u2026", () => gitA(["clone", "-q", sshUrl, target], void 0, { sshKey: keyPath2() }));
   configureRepo(target);
-  step(`config repo cloned to ${dim(contract(target))}`);
+  step(`share cloned to ${dim(contract(target))}`);
 }
 async function askUrl(prompt) {
   for (; ; ) {
@@ -9263,7 +9266,7 @@ async function askUrl(prompt) {
     if (gh) {
       const vis = await spin("looking up the repository\u2026", () => isPublic(httpsUrl(...gh)));
       if (vis === true) step(`${gh[0]}/${gh[1]} found (public)`);
-      else if (vis === false) step(`${gh[0]}/${gh[1]} found (private) \u2014 access via the master key`);
+      else if (vis === false) step(`${gh[0]}/${gh[1]} found (private) \u2014 access via the share key`);
       else {
         warn(`${gh[0]}/${gh[1]} not found or unreachable`);
         if (!await confirm2("use this URL anyway?", false)) continue;
@@ -9274,24 +9277,24 @@ async function askUrl(prompt) {
 }
 async function join_(target, interactive, machine, repoUrl2 = "") {
   if (existsSync19(target) && isRepo(target)) {
-    skip(`config repo already at ${contract(target)}`);
+    skip(`share already at ${contract(target)}`);
     configureRepo(target);
     return;
   }
-  const [sshUrl, gh] = repoUrl2 ? parseRepoUrl(repoUrl2) : await askUrl("config repo URL");
+  const [sshUrl, gh] = repoUrl2 ? parseRepoUrl(repoUrl2) : await askUrl("share URL");
   await accessLoop(sshUrl, gh, interactive, machine);
   await cloneConfig(sshUrl, target);
 }
 async function create2(target, interactive, machine) {
-  const n3 = await text2("name for your new config repo", { default: CONFIG_REPO_NAME, validate: name });
+  const n3 = await text2("name for your new share", { default: SHARE_REPO_NAME, validate: name });
   note2([cyan("https://github.com/new"), dim("no README, no .gitignore, no license \u2014 completely empty")], `Create an empty PRIVATE repository named '${n3}' on GitHub`);
   const [sshUrl, gh] = await askUrl("paste the new repo's URL");
   await accessLoop(sshUrl, gh, interactive, machine);
-  newConfigRepo(target);
+  newShare(target);
   if (!remoteUrl(target)) git(["remote", "add", "origin", sshUrl], target);
   configureRepo(target);
-  await spin("pushing the initial config repo\u2026", () => gitA(["push", "-q", "-u", "origin", currentBranch(target)], target));
-  step(`config repo initialized and pushed  ${dim(sshUrl)}`);
+  await spin("pushing the initial share\u2026", () => gitA(["push", "-q", "-u", "origin", currentBranch(target)], target));
+  step(`share initialized and pushed  ${dim(sshUrl)}`);
 }
 async function machineName(existingName, interactive) {
   if (machineExists()) return existingName || loadMachine().name;
@@ -9441,7 +9444,7 @@ function push2(repo) {
   const ab = aheadBehind(repo);
   if (ab === void 0 || ab[0]) {
     const r2 = git(["push", "-q", "-u", "origin", currentBranch(repo)], repo, { check: false, timeout: 60 });
-    r2.code === 0 ? ok("config repo pushed") : fail(`push failed: ${r2.err}`);
+    r2.code === 0 ? ok("share pushed") : fail(`push failed: ${r2.err}`);
   }
 }
 async function finish(repo, m, interactive, skip2) {
@@ -9458,7 +9461,7 @@ async function finish(repo, m, interactive, skip2) {
     (await Promise.resolve().then(() => (init_hooks(), hooks_exports))).runHooks(repo, m, "install");
     runApply(repo, m, loadManifest(repo));
   });
-  await group("config repo", () => push2(repo), { done: "nothing to push" });
+  await group("share", () => push2(repo), { done: "nothing to push" });
   let rc = 0;
   if (!skip2.includes("doctor")) rc = await group("doctor", () => runDoctor(repo, m, loadManifest(repo), false, true), { done: "all checks passed" });
   const ws = workspace(man, m);
@@ -9470,7 +9473,7 @@ async function finish(repo, m, interactive, skip2) {
     `${bold("claude")}  ${dim("log in once on this machine")}`,
     `${bold("cs status")}  ${dim("dashboard")}`,
     `${bold("cs new <project> --<identity>")}  ${dim("start something")}`,
-    ...secretsOk ? [] : ["", yellow(`secrets: not enabled yet \u2014 on a trusted machine run  cs sync && cs enroll ${m.name} && cs sync,  then  cs sync  here`)]
+    ...secretsOk ? [] : ["", yellow(`secrets: not enabled yet \u2014 on a trusted machine run  cs sync && cs trust ${m.name} && cs sync,  then  cs sync  here`)]
   ], "next");
   outro2(bold("done"));
   return rc;
@@ -9479,21 +9482,21 @@ async function init2(o) {
   const skip2 = o.skip ?? [];
   for (const x of skip2) if (!PHASES.includes(x)) throw new Error(`cs: unknown phase '${x}' (phases: ${PHASES.join(", ")})`);
   const interactive = o.interactive ?? (isTTY() || isScripted());
-  const target = repoDirDefault();
+  const target = shareDirDefault();
   const localSrc = o.repo && !/:\/\/|^git@/.test(o.repo) ? expand(o.repo) : void 0;
   intro2("claude-share setup");
   if (!skip2.includes("deps")) await group("prerequisites", () => runDeps(o.installDeps, true));
   const nm = await machineName(o.name ?? "", interactive);
   const already = existsSync19(target) && isRepo(target);
   if (already) {
-    skip(`config repo already at ${contract(target)}`);
+    skip(`share already at ${contract(target)}`);
     if (remoteUrl(target)) configureRepo(target);
   } else if (!skip2.includes("repo")) {
     if (localSrc) {
       if (!(isRepo(localSrc) || isBare(localSrc))) throw new Error(`cs: ${localSrc} is not a git repo`);
       mkdirSync14(dirname8(target), { recursive: true });
       git(["clone", "-q", localSrc, target]);
-      ok(`config repo cloned from ${contract(localSrc)}`);
+      ok(`share cloned from ${contract(localSrc)}`);
     } else if (o.repo) {
       const [sshUrl, gh] = parseRepoUrl(o.repo);
       if (o.key) {
@@ -9506,19 +9509,19 @@ async function init2(o) {
       }
     } else if (o.owner) {
       const token2 = await ensureToken(o.owner, interactive);
-      const url = `git@github.com:${o.owner}/${CONFIG_REPO_NAME}.git`;
-      if (await ensureRepo(o.owner, CONFIG_REPO_NAME, token2, true, "claude-share config (private)")) {
-        ok(`created private repo ${o.owner}/${CONFIG_REPO_NAME}`);
-        newConfigRepo(target);
+      const url = `git@github.com:${o.owner}/${SHARE_REPO_NAME}.git`;
+      if (await ensureRepo(o.owner, SHARE_REPO_NAME, token2, true, "claude-share config (private)")) {
+        ok(`created private repo ${o.owner}/${SHARE_REPO_NAME}`);
+        newShare(target);
         git(["remote", "add", "origin", url], target);
-        await accessLoop(url, [o.owner, CONFIG_REPO_NAME], interactive, nm);
+        await accessLoop(url, [o.owner, SHARE_REPO_NAME], interactive, nm);
         configureRepo(target);
       } else {
-        await accessLoop(url, [o.owner, CONFIG_REPO_NAME], interactive, nm);
+        await accessLoop(url, [o.owner, SHARE_REPO_NAME], interactive, nm);
         await cloneConfig(url, target);
       }
     } else if (interactive) {
-      const choice = await select2("What would you like to do?", [{ value: "join", label: "Join an existing share", hint: "you already have a config repo (from another machine)" }, { value: "create", label: "Create a new share", hint: "first machine, no config repo yet" }]);
+      const choice = await select2("What would you like to do?", [{ value: "join", label: "Join an existing share", hint: "you already have a share (from another machine)" }, { value: "create", label: "Create a new share", hint: "first machine, no share yet" }]);
       if (choice === "create") await create2(target, true, nm);
       else await join_(target, true, nm);
     } else throw new Error("cs: pass --repo <url|path> or --owner <github-owner>, or run cs init in a terminal");
@@ -9528,16 +9531,16 @@ async function init2(o) {
   await keysAndTokens(target, m, interactive, skip2);
   return finish(target, m, interactive, skip2);
 }
-var CONFIG_REPO_NAME, PHASES, owner, email, name;
+var SHARE_REPO_NAME, PHASES, owner, email, name;
 var init_init = __esm({
   "src/init.ts"() {
     "use strict";
     init_git();
     init_github();
-    init_master();
+    init_sharekey();
     init_paths();
     init_platform();
-    init_config();
+    init_machine();
     init_manifest();
     init_apply();
     init_link();
@@ -9545,7 +9548,7 @@ var init_init = __esm({
     init_deps();
     init_identity();
     init_ui();
-    CONFIG_REPO_NAME = "claude-share-config";
+    SHARE_REPO_NAME = "claude-share-config";
     PHASES = ["deps", "repo", "ssh", "apply", "link", "secrets", "hooks", "doctor"];
     owner = (v) => /^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})$/.test(v) ? void 0 : "a GitHub login, e.g. octocat";
     email = (v) => /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(v) ? void 0 : "not an email address";
@@ -9553,16 +9556,16 @@ var init_init = __esm({
   }
 });
 
-// src/adopt.ts
-var adopt_exports = {};
-__export(adopt_exports, {
-  adoptMcp: () => adoptMcp,
-  adoptMemory: () => adoptMemory,
-  adoptProjectFiles: () => adoptProjectFiles,
+// src/import.ts
+var import_exports = {};
+__export(import_exports, {
   candidatePaths: () => candidatePaths,
   claudeProjectKey: () => claudeProjectKey,
   envVarName: () => envVarName,
-  runAdopt: () => runAdopt,
+  importMcp: () => importMcp,
+  importMemory: () => importMemory,
+  importProjectFiles: () => importProjectFiles,
+  runImport: () => runImport,
   unionLines: () => unionLines
 });
 import { copyFileSync as copyFileSync5, existsSync as existsSync20, mkdirSync as mkdirSync15, readdirSync as readdirSync8, readFileSync as readFileSync17, writeFileSync as writeFileSync15 } from "node:fs";
@@ -9582,13 +9585,13 @@ function walkFiles(dir) {
   if (existsSync20(dir)) rec(dir);
   return out2.sort();
 }
-function adoptMemory(repo, p, ws, machine, check = false) {
+function importMemory(repo, p, ws, machine, check = false) {
   const dest = memoryDir(repo, p);
   let n3 = 0;
   for (const cand of candidatePaths(p, ws)) {
     const src = join21(claudeDir(), "projects", claudeProjectKey(cand), "memory");
     if (!existsSync20(src)) continue;
-    info(`${p.name}: adopting memory from ${contract(src)}`);
+    info(`${p.name}: importing memory from ${contract(src)}`);
     for (const f of walkFiles(src)) {
       const rel = relative8(src, f);
       const target = join21(dest, rel);
@@ -9611,16 +9614,16 @@ function adoptMemory(repo, p, ws, machine, check = false) {
         n3++;
       }
     }
-    if (!check) writeFileSync15(join21(dirname9(src), "memory.adopted-by-cs"), `adopted into ${contract(dest)} on ${(/* @__PURE__ */ new Date()).toISOString().slice(0, 10)}
+    if (!check) writeFileSync15(join21(dirname9(src), "memory.imported-by-cs"), `imported into ${contract(dest)} on ${(/* @__PURE__ */ new Date()).toISOString().slice(0, 10)}
 `);
   }
-  if (!n3) ok(`${p.name}: no new memory to adopt`);
+  if (!n3) ok(`${p.name}: no new memory to import`);
   return n3;
 }
-function adoptProjectFiles(repo, p, ws, check = false) {
+function importProjectFiles(repo, p, ws, check = false) {
   const ch = syncProject(repo, p, ws, check);
   for (const c2 of ch) step(`${p.name}: ${c2}`);
-  if (!ch.length) ok(`${p.name}: nothing to adopt`);
+  if (!ch.length) ok(`${p.name}: nothing to import`);
   return ch.length;
 }
 function envVarName(server, key) {
@@ -9636,7 +9639,7 @@ function localScope(p, ws) {
   for (const cand of candidatePaths(p, ws)) for (const [n3, cfg] of Object.entries(data.projects?.[cand]?.mcpServers ?? {})) found[n3] ??= cfg;
   return found;
 }
-function adoptMcp(repo, p, ws, check = false, show = false) {
+function importMcp(repo, p, ws, check = false, show = false) {
   const found = localScope(p, ws);
   if (show) {
     for (const [n3, cfg] of Object.entries(found)) {
@@ -9649,7 +9652,7 @@ function adoptMcp(repo, p, ws, check = false, show = false) {
     ok(`${p.name}: no local-scope MCP servers in ~/.claude.json`);
     return 0;
   }
-  const side = sideStore(repo, p);
+  const side = projectState(repo, p);
   const f = join21(side, ".mcp.json");
   const existing = existsSync20(f) ? loads(readFileSync17(f, "utf8")) : { mcpServers: {} };
   existing.mcpServers ??= {};
@@ -9678,25 +9681,25 @@ function adoptMcp(repo, p, ws, check = false, show = false) {
     writeFileSync15(sl, dumps(sd));
   }
   if (Object.keys(secrets).length) {
-    warn(`${p.name}: values replaced by \${VAR} placeholders \u2014 store them: cs secrets set global ${Object.keys(secrets).map((k) => `${k}=\u2026`).join(" ")}  (full values: cs adopt mcp ${p.name} --show)`);
+    warn(`${p.name}: values replaced by \${VAR} placeholders \u2014 store them: cs secrets set global ${Object.keys(secrets).map((k) => `${k}=\u2026`).join(" ")}  (full values: cs import mcp ${p.name} --show)`);
   }
   return Object.keys(found).length;
 }
-function runAdopt(repo, m, man, what, names, check, show) {
+function runImport(repo, m, man, what, names, check, show) {
   const ws = workspace(man, m);
-  if (!names.length) throw new Error("cs: adopt needs a project name (or --all)");
+  if (!names.length) throw new Error("cs: import needs a project name (or --all)");
   for (const n3 of names) {
     const p = man.projects[n3];
     if (!p) throw new Error(`cs: unknown project '${n3}'`);
-    if (what === "memory") adoptMemory(repo, p, ws, m.name, check);
-    else if (what === "project") adoptProjectFiles(repo, p, ws, check);
-    else if (what === "mcp") adoptMcp(repo, p, ws, check, show);
-    else throw new Error(`cs: unknown adopt target '${what}'`);
+    if (what === "memory") importMemory(repo, p, ws, m.name, check);
+    else if (what === "project") importProjectFiles(repo, p, ws, check);
+    else if (what === "mcp") importMcp(repo, p, ws, check, show);
+    else throw new Error(`cs: unknown import target '${what}'`);
   }
 }
 var claudeProjectKey, unionLines;
-var init_adopt = __esm({
-  "src/adopt.ts"() {
+var init_import = __esm({
+  "src/import.ts"() {
     "use strict";
     init_paths();
     init_manifest();
@@ -9736,7 +9739,7 @@ var {
 // src/index.ts
 init_ui();
 init_platform();
-init_config();
+init_machine();
 init_manifest();
 init_paths();
 init_git();
@@ -9748,31 +9751,31 @@ var pkg = JSON.parse((await import("node:fs")).readFileSync(join22(toolRoot(), "
 var csv = (s) => s ? s.split(",").map((x) => x.trim()).filter(Boolean) : [];
 function ctx() {
   const m = loadMachine();
-  const repo = repoDir(m);
+  const repo = shareDir(m);
   return { repo, m, man: loadManifest(repo) };
 }
 var program2 = new Command("cs").description("claude-share: projects + Claude Code setup in sync across machines").version(pkg.version, "-V, --version").option("-q, --quiet", "only warnings/errors").configureHelp({ sortSubcommands: false }).showSuggestionAfterError(true).enablePositionalOptions().addHelpText("after", `
 examples:
   cs init                                  set this machine up (wizard: join or create a share)
   cs new billing-api --personal            new project: dir, git, GitHub repo, first push, Claude wired in
-  cs                                       dashboard: config repo + every project
-  cs sync                                  push/pull the config repo (memory, plans, settings)
+  cs                                       dashboard: share + every project
+  cs sync                                  push/pull the share (memory, plans, settings)
   cs identity add acme --owner acme-org --name "Me" --email me@acme.com
   cs secrets set global API_TOKEN=\u2026        encrypted, available to Claude's MCP servers as \${API_TOKEN}`);
 program2.hook("preAction", (_root, cmd) => setQuiet(Boolean(program2.opts().quiet || cmd.opts().quiet)));
-program2.command("init").description("set this machine up (wizard) \u2014 or --repo <url> / --owner <owner> for scripts").option("--repo <url>", "existing config repo: git URL or local path").option("--owner <owner>", "GitHub user/org to create claude-share-config under").option("--key <path>", "ssh key for cloning --repo (instead of the master key)").option("--non-interactive").option("--name <name>", "machine name").option("--profiles <list>", "comma list").option("--workspace <path>").option("--skip <phases>", "comma list: deps,repo,ssh,apply,link,secrets,hooks,doctor").option("--install-deps").action(async (o) => {
+program2.command("init").description("set this machine up (wizard) \u2014 or --repo <url> / --owner <owner> for scripts").option("--repo <url>", "existing share: git URL or local path").option("--owner <owner>", "GitHub user/org to create claude-share-config under").option("--key <path>", "ssh key for cloning --repo (instead of the share key)").option("--non-interactive").option("--name <name>", "machine name").option("--profiles <list>", "comma list").option("--workspace <path>").option("--skip <phases>", "comma list: deps,repo,ssh,apply,link,secrets,hooks,doctor").option("--install-deps").action(async (o) => {
   const { init: init3 } = await Promise.resolve().then(() => (init_init(), init_exports));
   process.exitCode = await init3({ repo: o.repo, owner: o.owner, key: o.key, name: o.name, profiles: csv(o.profiles), workspace: o.workspace, skip: csv(o.skip), installDeps: o.installDeps, interactive: !o.nonInteractive && (isTTY() || isScripted()) });
 });
-var config = program2.command("config").description("manage the config repo");
-config.command("new <path>").description("create a config repo skeleton").action(async (p) => {
-  const { newConfigRepo: newConfigRepo2 } = await Promise.resolve().then(() => (init_init(), init_exports));
+var share = program2.command("share").description("the share itself: new <path> | path");
+share.command("new <path>").description("create a share skeleton").action(async (p) => {
+  const { newShare: newShare2 } = await Promise.resolve().then(() => (init_init(), init_exports));
   const { expand: expand2, contract: contract3 } = await Promise.resolve().then(() => (init_paths(), paths_exports));
-  const d = newConfigRepo2(expand2(p));
-  ok(`config repo created at ${contract3(d)} \u2014 edit projects.toml, then cs init --repo ${contract3(d)}`);
+  const d = newShare2(expand2(p));
+  ok(`share created at ${contract3(d)} \u2014 edit projects.toml, then cs init --repo ${contract3(d)}`);
 });
-config.command("path").description("print the config repo path").action(() => console.log(repoDir(loadMachine())));
-program2.command("apply").description("render ~/.claude + git identity includes from the config repo").option("--check", "report drift, change nothing").action(async (o) => {
+share.command("path").description("print the share path").action(() => console.log(shareDir(loadMachine())));
+program2.command("apply").description("render ~/.claude + git identity includes from the share").option("--check", "report drift, change nothing").action(async (o) => {
   const { repo, m, man } = ctx();
   const { runApply: runApply2 } = await Promise.resolve().then(() => (init_apply(), apply_exports));
   await command(o.check ? "cs apply --check" : "cs apply", async () => {
@@ -9780,7 +9783,7 @@ program2.command("apply").description("render ~/.claude + git identity includes 
     process.exitCode = o.check && n3 ? 1 : 0;
   });
 });
-program2.command("link [names...]").description("sync Claude files between side-store and project checkouts").option("--check").action(async (names, o) => {
+program2.command("link [names...]").description("place project state (Claude files, memory) into project checkouts; newer content flows back").option("--check").action(async (names, o) => {
   const { repo, m, man } = ctx();
   const { runLink: runLink2 } = await Promise.resolve().then(() => (init_link(), link_exports));
   await command(o.check ? "cs link --check" : "cs link", async () => {
@@ -9788,32 +9791,35 @@ program2.command("link [names...]").description("sync Claude files between side-
     process.exitCode = o.check && n3 ? 1 : 0;
   });
 });
-program2.command("adopt <what> [names...]").description("pull existing local state into the config repo (memory | project | mcp)").option("--all").option("--check").option("--show", "(mcp) print the secret values").action(async (what, names, o) => {
+program2.command("import <what> [names...]").description("take existing local state into the share (memory | project | mcp)").option("--all").option("--check").option("--show", "(mcp) print the secret values").action(async (what, names, o) => {
   const { repo, m, man } = ctx();
-  const { runAdopt: runAdopt2 } = await Promise.resolve().then(() => (init_adopt(), adopt_exports));
+  const { runImport: runImport2 } = await Promise.resolve().then(() => (init_import(), import_exports));
   const { selectedProjects: selectedProjects2 } = await Promise.resolve().then(() => (init_manifest(), manifest_exports));
   const targets = names.length ? names : o.all ? selectedProjects2(man, m).map((p) => p.name) : [];
   if (o.show) {
-    runAdopt2(repo, m, man, what, targets, o.check, true);
+    runImport2(repo, m, man, what, targets, o.check, true);
     return;
   }
-  await command(`cs adopt ${what}`, async () => {
-    for (const n3 of targets) await group(n3, () => runAdopt2(repo, m, man, what, [n3], o.check, false), { done: "nothing to adopt" });
+  await command(`cs import ${what}`, async () => {
+    for (const n3 of targets) await group(n3, () => runImport2(repo, m, man, what, [n3], o.check, false), { done: "nothing to import" });
   });
 });
-program2.command("sync").description("commit / pull --rebase / push the config repo").option("--pull-only").option("--push-only").option("--timeout <s>", "", "20").option("--resolve <ours|theirs>").option("--debounce <s>", "skip if a sync ran less than N seconds ago", "0").option("-q, --quiet").action(async (o) => {
+var shareSyncAction = (title) => async (o) => {
   const { repo, m, man } = ctx();
-  const { runSync: runSync2 } = await Promise.resolve().then(() => (init_sync(), sync_exports));
+  const { runShareSync: runShareSync2 } = await Promise.resolve().then(() => (init_sharesync(), sharesync_exports));
   const opts = { pullOnly: o.pullOnly, pushOnly: o.pushOnly, timeout: +o.timeout, resolve: o.resolve, debounce: +o.debounce };
   if (o.quiet || program2.opts().quiet) {
-    process.exitCode = await runSync2(repo, m, man, opts);
+    process.exitCode = await runShareSync2(repo, m, man, opts);
     return;
   }
-  await command("cs sync", async () => {
-    process.exitCode = await runSync2(repo, m, man, opts);
+  await command(title, async () => {
+    process.exitCode = await runShareSync2(repo, m, man, opts);
   }, { outro: () => process.exitCode ? red("blocked \u2014 see above") : dim("in sync") });
-});
-program2.command("status").description("config repo + projects overview").option("--fetch").option("--all").action(async (o) => {
+};
+var shareSyncOpts = (c2) => c2.option("--pull-only").option("--push-only").option("--timeout <s>", "", "20").option("--resolve <ours|theirs>").option("--debounce <s>", "skip if a sync ran less than N seconds ago", "0").option("-q, --quiet");
+shareSyncOpts(program2.command("share-sync", { hidden: true }).description("commit / pull --rebase / push the share only (what hooks and the timer run)")).action(shareSyncAction("cs share-sync"));
+shareSyncOpts(program2.command("sync").description("the daily verb: bring this machine up to date and leave nothing stale here")).action(shareSyncAction("cs sync"));
+program2.command("status").description("share + projects overview").option("--fetch").option("--all").action(async (o) => {
   const { repo, m, man } = ctx();
   const { runStatus: runStatus2 } = await Promise.resolve().then(() => (init_status(), status_exports));
   intro2(`cs status  ${dim(m.name)}`);
@@ -9892,12 +9898,12 @@ ident.command("rename <old> <new>").action(async (a2, b) => {
   const { repo, m, man } = ctx();
   process.exitCode = (await Promise.resolve().then(() => (init_identity(), identity_exports))).rename(repo, m, man, a2, b);
 });
-program2.command("ssh [action]").description("per-machine SSH keys: setup | check | master").action(async (action = "check") => {
+program2.command("ssh [action]").description("per-machine SSH keys: setup | check | share-key").action(async (action = "check") => {
   const { repo, m, man } = ctx();
   await command(
     `cs ssh ${action}`,
     async () => {
-      if (action === "master") process.exitCode = await (await Promise.resolve().then(() => (init_master(), master_exports))).setup(repo, isTTY());
+      if (action === "share-key") process.exitCode = await (await Promise.resolve().then(() => (init_sharekey(), sharekey_exports))).setup(repo, isTTY());
       else process.exitCode = await (await Promise.resolve().then(() => (init_ssh(), ssh_exports))).setup(repo, m, man, action === "check");
     },
     { outro: () => process.exitCode ? yellow("keys still to register \u2014 re-run cs ssh check afterwards") : green("all keys verified") }
@@ -9921,7 +9927,7 @@ program2.command("hooks [action]").description("automatic sync: install | remove
     process.exitCode = await group(action === "remove" ? "removed" : "installed", () => runHooks2(repo, m, action, o.timer));
   });
 });
-program2.command("update").alias("self-update").description("update the cs tool itself").action(async () => {
+program2.command("update").description("update the cs tool itself").action(async () => {
   await command("cs update", async () => {
     const root = toolRoot();
     if (!isRepo(root)) throw new Error(`cs: ${root} is not a git checkout`);
@@ -9969,7 +9975,7 @@ async function startUpdateCheck() {
   }).catch(() => 0);
   return () => run;
 }
-var sec = program2.command("secrets").description("encrypted secrets in the config repo (sops + age)").enablePositionalOptions();
+var sec = program2.command("secrets").description("encrypted secrets in the share (sops + age)").enablePositionalOptions();
 var S = () => Promise.resolve().then(() => (init_secretscmd(), secretscmd_exports));
 sec.command("init").action(async () => {
   const { repo, m } = ctx();
@@ -9979,7 +9985,7 @@ sec.command("status").action(async () => {
   const { repo, m } = ctx();
   intro2("cs secrets status");
   await (await S()).status(repo, m);
-  outro2(dim("cs secrets set \xB7 cs enroll <machine>"));
+  outro2(dim("cs secrets set \xB7 cs trust <machine>"));
 });
 sec.command("edit <name>").description("global | <project>").action(async (n3) => {
   const { repo, m } = ctx();
@@ -10018,16 +10024,16 @@ sec.command("recovery").action(async () => {
   const { repo, m } = ctx();
   await command("cs secrets recovery", async () => (await S()).recovery(repo, m));
 });
-program2.command("enroll <machine>").description("grant another machine access to secrets").action(async (mc) => {
+program2.command("trust <machine>").description("trust another machine: grant it access to the secrets").action(async (mc) => {
   const { repo, m } = ctx();
-  await command(`cs enroll ${mc}`, async () => group("enrolled", async () => (await S()).enroll(repo, m, mc)), { outro: () => dim(`now: cs sync here, then cs sync on ${mc}`) });
+  await command(`cs trust ${mc}`, async () => group("trusted", async () => (await S()).trust(repo, m, mc)), { outro: () => dim(`now: cs sync here, then cs sync on ${mc}`) });
 });
-program2.command("revoke <machine>").description("remove a machine's access to secrets").action(async (mc) => {
+program2.command("untrust <machine>").description("untrust a machine: remove its access to the secrets").action(async (mc) => {
   const { repo, m } = ctx();
-  await command(`cs revoke ${mc}`, async () => group("revoked", async () => (await S()).revoke(repo, m, mc)));
+  await command(`cs untrust ${mc}`, async () => group("untrusted", async () => (await S()).untrust(repo, m, mc)));
 });
 var H = () => Promise.resolve().then(() => (init_handoff(), handoff_exports));
-program2.command("handoff [projects...]").description("push uncommitted work of the cwd project (or --all) to wip/<user>/<branch> on its remote").option("-m, --note <text>", "note shown when the work is resumed").option("--all", "every selected git project").option("--dry-run").option("--allow <glob>", "override the secret-file deny list", (v, a2) => [...a2, v], []).option("--overwrite", "replace a parcel from another machine").option("--mark", "(SessionEnd hook) only remember that dirty work exists here").option("-q, --quiet").action(async (names, o) => {
+program2.command("handoff [projects...]").description("send a handoff: uncommitted work of the cwd project (or --all) to its remote").option("-m, --note <text>", "note shown when the work is resumed").option("--all", "every selected git project").option("--dry-run").option("--allow <glob>", "override the secret-file deny list", (v, a2) => [...a2, v], []).option("--overwrite", "replace a handoff another machine left").option("--mark", "(SessionEnd hook) only remember that dirty work exists here").option("-q, --quiet").action(async (names, o) => {
   const { repo, m, man } = ctx();
   const h2 = await H();
   if (o.mark) {
@@ -10040,48 +10046,48 @@ program2.command("handoff [projects...]").description("push uncommitted work of 
       const projects = h2.projectsFor(man, m, names, o.all);
       process.exitCode = await group("handed off", () => h2.handoff(repo, m, man, projects, { note: o.note, dryRun: o.dryRun, allow: o.allow, overwrite: o.overwrite }), { done: "nothing to hand off" });
       if (!o.dryRun) {
-        const { runSync: runSync2 } = await Promise.resolve().then(() => (init_sync(), sync_exports));
-        await group("memory & plans synced", () => runSync2(repo, m, man, { pushOnly: true, timeout: 20 }), { done: "already in sync" });
+        const { runShareSync: runShareSync2 } = await Promise.resolve().then(() => (init_sharesync(), sharesync_exports));
+        await group("memory & plans synced", () => runShareSync2(repo, m, man, { pushOnly: true, timeout: 20 }), { done: "already in sync" });
       }
     },
     { outro: () => process.exitCode ? red("some units not handed off \u2014 see above") : dim("on the other machine: cs resume") }
   );
 });
-program2.command("resume [projects...]").description("apply parcels from wip/<user>/* as uncommitted changes and delete them").option("--all").option("--replace", "discard local uncommitted changes in the target (a backup ref is kept)").option("--keep-remote", "leave the wip branch on the remote").option("--dry-run").action(async (names, o) => {
+program2.command("resume [projects...]").description("apply waiting handoffs as uncommitted changes and delete them from the remote").option("--all").option("--replace", "discard local uncommitted changes in the target (a backup ref is kept)").option("--keep-remote", "leave the handoff on the remote").option("--dry-run").action(async (names, o) => {
   const { repo, m, man } = ctx();
   const h2 = await H();
   await command(
     "cs resume",
     async () => {
       const projects = h2.projectsFor(man, m, names, o.all);
-      const { runSync: runSync2 } = await Promise.resolve().then(() => (init_sync(), sync_exports));
-      await group("memory & plans", () => runSync2(repo, m, man, { pullOnly: true, timeout: 10 }), { done: "up to date" });
-      process.exitCode = await group("resumed", () => h2.resume(repo, m, man, projects, { replace: o.replace, keepRemote: o.keepRemote, dryRun: o.dryRun }), { done: "no parcels waiting" });
+      const { runShareSync: runShareSync2 } = await Promise.resolve().then(() => (init_sharesync(), sharesync_exports));
+      await group("memory & plans", () => runShareSync2(repo, m, man, { pullOnly: true, timeout: 10 }), { done: "up to date" });
+      process.exitCode = await group("resumed", () => h2.resume(repo, m, man, projects, { replace: o.replace, keepRemote: o.keepRemote, dryRun: o.dryRun }), { done: "no handoffs waiting" });
     },
-    { outro: () => process.exitCode ? red("some parcels not applied \u2014 see above") : dim("carry on: claude") }
+    { outro: () => process.exitCode ? red("some handoffs not applied \u2014 see above") : dim("carry on: claude") }
   );
 });
-var wip = program2.command("wip").description("parcels waiting on remotes");
-wip.command("ls", { isDefault: true }).option("--all").action(async (o) => {
+var handoffs = program2.command("handoffs").description("handoffs waiting on remotes: ls | gc | drop");
+handoffs.command("ls", { isDefault: true }).option("--all").action(async (o) => {
   const { m, man } = ctx();
   const h2 = await H();
   const projects = h2.projectsFor(man, m, [], o.all ?? true);
-  intro2("cs wip");
-  const list = await h2.wipList(m, man, projects);
-  if (!list.length) info(dim("no parcels waiting"));
+  intro2("cs handoffs");
+  const list = await h2.waitingList(m, man, projects);
+  if (!list.length) info(dim("no handoffs waiting"));
   else table(list.map((x) => [x.worktree, x.branch, x.machine, x.when.slice(0, 16), dim(x.note)]), ["project", "branch", "from", "when", "note"]);
-  outro2(dim("cs resume \xB7 cs wip gc --older-than 14"));
+  outro2(dim("cs sync \xB7 cs handoffs gc --older-than 14"));
 });
-wip.command("gc").option("--older-than <days>", "", "14").option("--all").action(async (o) => {
+handoffs.command("gc").option("--older-than <days>", "", "14").option("--all").action(async (o) => {
   const { m, man } = ctx();
   const h2 = await H();
-  await command("cs wip gc", async () => group("dropped", () => h2.wipGc(m, man, h2.projectsFor(man, m, [], true), +o.olderThan), { done: "nothing older than that" }));
+  await command("cs handoffs gc", async () => group("dropped", () => h2.handoffGc(m, man, h2.projectsFor(man, m, [], true), +o.olderThan), { done: "nothing older than that" }));
 });
-wip.command("drop <branch>").description("delete one parcel (branch name or wip/\u2026 ref) for the cwd project").action(async (b) => {
+handoffs.command("drop <branch>").description("delete one waiting handoff (branch name or full ref) for the cwd project").action(async (b) => {
   const { m, man } = ctx();
   const h2 = await H();
   const [p] = h2.projectsFor(man, m, [], false);
-  await command("cs wip drop", () => h2.wipDrop(m, man, p, b));
+  await command("cs handoffs drop", () => h2.handoffDrop(m, man, p, b));
 });
 program2.command("note").description("print (once) the note left by the last cs resume for the cwd project").option("--print").action(async () => {
   const { m, man } = ctx();
@@ -10101,7 +10107,7 @@ program2.command("ui-demo", { hidden: true }).description("show every UI element
     await group("empty phase", () => {
     }, { done: "nothing to do" });
     table([[green("\u2713"), "node", dim("v22")], [yellow("!"), "gh", dim("missing")]]);
-    note2([`title  ${bold("cs:demo:master")}`, `key    ${bold("ssh-ed25519 AAAA\u2026 cs:demo:master")}`], "a note box");
+    note2([`title  ${bold("cs:demo:share-key")}`, `key    ${bold("ssh-ed25519 AAAA\u2026 cs:demo:share-key")}`], "a note box");
     warn("a warning");
     fail("an error line (does not abort)");
     if (isTTY()) {
@@ -10153,7 +10159,7 @@ async function main() {
     program2.help();
   }
   const cmdName = argv.find((a2) => !a2.startsWith("-"));
-  const wantsCheck = !["update", "self-update", "ui-demo"].includes(cmdName ?? "") && !argv.includes("-q") && !argv.includes("--quiet");
+  const wantsCheck = !["update", "ui-demo"].includes(cmdName ?? "") && !argv.includes("-q") && !argv.includes("--quiet");
   const finishCheck = wantsCheck ? await startUpdateCheck() : async () => 0;
   try {
     await program2.parseAsync(process.argv);

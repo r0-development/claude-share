@@ -3,7 +3,7 @@ import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join, isAbsolute, resolve } from "node:path";
 import { parse, stringify } from "smol-toml";
 import { expand } from "./paths.js";
-import type { Machine } from "./config.js";
+import type { Machine } from "./machine.js";
 
 export const SUPPORTED_SCHEMA = 1;
 export const NAME_RE = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/;
@@ -68,7 +68,7 @@ export function parseManifest(text: string, path?: string): Manifest {
 }
 export function validate(m: Manifest): string[] {
   const errs: string[] = [];
-  if (m.schemaVersion > SUPPORTED_SCHEMA) errs.push(`projects.toml schema_version ${m.schemaVersion} > supported ${SUPPORTED_SCHEMA}; run cs self-update`);
+  if (m.schemaVersion > SUPPORTED_SCHEMA) errs.push(`projects.toml schema_version ${m.schemaVersion} > supported ${SUPPORTED_SCHEMA}; run cs update`);
   for (const i of Object.values(m.identities)) if (!i.owner && !i.urlGlobs?.length) errs.push(`identity ${i.id}: needs owner (GitHub user/org)`);
   for (const p of Object.values(m.projects)) {
     if (!NAME_RE.test(p.name)) errs.push(`${p.name}: invalid project name`);

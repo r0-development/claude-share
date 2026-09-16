@@ -4,7 +4,7 @@ import { join } from "node:path";
 import * as git from "./git.js";
 import { claudeDir, claudeJson, contract } from "./paths.js";
 import * as platform from "./platform.js";
-import type { Machine } from "./config.js";
+import type { Machine } from "./machine.js";
 import { checkoutRoot, identityMatches, loadManifest, selectedProjects, workspace, type Manifest, type Project } from "./manifest.js";
 import { applySettings } from "./apply.js";
 import * as ui from "./ui.js";

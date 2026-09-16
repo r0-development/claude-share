@@ -4,14 +4,14 @@ import { existsSync, unlinkSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import * as ui from "./ui.js";
 import * as platform from "./platform.js";
-import { loadMachine, machineExists, repoDir, type Machine } from "./config.js";
+import { loadMachine, machineExists, shareDir, type Machine } from "./machine.js";
 import { identityByFlag, loadManifest, projectForPath, type Manifest } from "./manifest.js";
 import { csConfigDir, toolRoot } from "./paths.js";
 import * as git from "./git.js";
 
 const pkg = JSON.parse((await import("node:fs")).readFileSync(join(toolRoot(), "package.json"), "utf8")) as { version: string };
 const csv = (s?: string) => (s ? s.split(",").map((x) => x.trim()).filter(Boolean) : []);
-function ctx(): { repo: string; m: Machine; man: Manifest } { const m = loadMachine(); const repo = repoDir(m); return { repo, m, man: loadManifest(repo) }; }
+function ctx(): { repo: string; m: Machine; man: Manifest } { const m = loadMachine(); const repo = shareDir(m); return { repo, m, man: loadManifest(repo) }; }
 
 const program = new Command("cs").description("claude-share: projects + Claude Code setup in sync across machines").version(pkg.version, "-V, --version")
   .option("-q, --quiet", "only warnings/errors").configureHelp({ sortSubcommands: false }).showSuggestionAfterError(true).enablePositionalOptions()
@@ -19,38 +19,41 @@ const program = new Command("cs").description("claude-share: projects + Claude C
 examples:
   cs init                                  set this machine up (wizard: join or create a share)
   cs new billing-api --personal            new project: dir, git, GitHub repo, first push, Claude wired in
-  cs                                       dashboard: config repo + every project
-  cs sync                                  push/pull the config repo (memory, plans, settings)
+  cs                                       dashboard: share + every project
+  cs sync                                  push/pull the share (memory, plans, settings)
   cs identity add acme --owner acme-org --name "Me" --email me@acme.com
   cs secrets set global API_TOKEN=…        encrypted, available to Claude's MCP servers as \${API_TOKEN}`);
 program.hook("preAction", (_root, cmd) => ui.setQuiet(Boolean(program.opts().quiet || (cmd.opts() as any).quiet)));
 
 program.command("init").description("set this machine up (wizard) — or --repo <url> / --owner <owner> for scripts")
-  .option("--repo <url>", "existing config repo: git URL or local path").option("--owner <owner>", "GitHub user/org to create claude-share-config under")
-  .option("--key <path>", "ssh key for cloning --repo (instead of the master key)").option("--non-interactive").option("--name <name>", "machine name")
+  .option("--repo <url>", "existing share: git URL or local path").option("--owner <owner>", "GitHub user/org to create claude-share-config under")
+  .option("--key <path>", "ssh key for cloning --repo (instead of the share key)").option("--non-interactive").option("--name <name>", "machine name")
   .option("--profiles <list>", "comma list").option("--workspace <path>").option("--skip <phases>", "comma list: deps,repo,ssh,apply,link,secrets,hooks,doctor").option("--install-deps")
   .action(async (o) => { const { init } = await import("./init.js"); process.exitCode = await init({ repo: o.repo, owner: o.owner, key: o.key, name: o.name, profiles: csv(o.profiles), workspace: o.workspace, skip: csv(o.skip), installDeps: o.installDeps, interactive: !o.nonInteractive && (ui.isTTY() || ui.isScripted()) }); });
 
-const config = program.command("config").description("manage the config repo");
-config.command("new <path>").description("create a config repo skeleton").action(async (p) => { const { newConfigRepo } = await import("./init.js"); const { expand, contract } = await import("./paths.js"); const d = newConfigRepo(expand(p)); ui.ok(`config repo created at ${contract(d)} — edit projects.toml, then cs init --repo ${contract(d)}`); });
-config.command("path").description("print the config repo path").action(() => console.log(repoDir(loadMachine())));
+const share = program.command("share").description("the share itself: new <path> | path");
+share.command("new <path>").description("create a share skeleton").action(async (p) => { const { newShare } = await import("./init.js"); const { expand, contract } = await import("./paths.js"); const d = newShare(expand(p)); ui.ok(`share created at ${contract(d)} — edit projects.toml, then cs init --repo ${contract(d)}`); });
+share.command("path").description("print the share path").action(() => console.log(shareDir(loadMachine())));
 
-program.command("apply").description("render ~/.claude + git identity includes from the config repo").option("--check", "report drift, change nothing")
+program.command("apply").description("render ~/.claude + git identity includes from the share").option("--check", "report drift, change nothing")
   .action(async (o) => { const { repo, m, man } = ctx(); const { runApply } = await import("./apply.js");
     await ui.command(o.check ? "cs apply --check" : "cs apply", async () => { const n = (await ui.group(o.check ? "drift" : "~/.claude applied", () => runApply(repo, m, man, o.check), { done: o.check ? "no drift" : "already up to date" })).length; process.exitCode = o.check && n ? 1 : 0; }); });
-program.command("link [names...]").description("sync Claude files between side-store and project checkouts").option("--check")
+program.command("link [names...]").description("place project state (Claude files, memory) into project checkouts; newer content flows back").option("--check")
   .action(async (names, o) => { const { repo, m, man } = ctx(); const { runLink } = await import("./link.js");
     await ui.command(o.check ? "cs link --check" : "cs link", async () => { const n = await ui.group(o.check ? "pending changes" : "project files linked", () => runLink(repo, m, man, names, o.check), { done: o.check ? "nothing pending" : "already in sync" }); process.exitCode = o.check && n ? 1 : 0; }); });
-program.command("adopt <what> [names...]").description("pull existing local state into the config repo (memory | project | mcp)").option("--all").option("--check").option("--show", "(mcp) print the secret values")
-  .action(async (what, names, o) => { const { repo, m, man } = ctx(); const { runAdopt } = await import("./adopt.js"); const { selectedProjects } = await import("./manifest.js");
+program.command("import <what> [names...]").description("take existing local state into the share (memory | project | mcp)").option("--all").option("--check").option("--show", "(mcp) print the secret values")
+  .action(async (what, names, o) => { const { repo, m, man } = ctx(); const { runImport } = await import("./import.js"); const { selectedProjects } = await import("./manifest.js");
     const targets = names.length ? names : o.all ? selectedProjects(man, m).map((p) => p.name) : [];
-    if (o.show) { runAdopt(repo, m, man, what, targets, o.check, true); return; }
-    await ui.command(`cs adopt ${what}`, async () => { for (const n of targets) await ui.group(n, () => runAdopt(repo, m, man, what, [n], o.check, false), { done: "nothing to adopt" }); }); });
-program.command("sync").description("commit / pull --rebase / push the config repo").option("--pull-only").option("--push-only").option("--timeout <s>", "", "20").option("--resolve <ours|theirs>").option("--debounce <s>", "skip if a sync ran less than N seconds ago", "0").option("-q, --quiet")
-  .action(async (o) => { const { repo, m, man } = ctx(); const { runSync } = await import("./sync.js"); const opts = { pullOnly: o.pullOnly, pushOnly: o.pushOnly, timeout: +o.timeout, resolve: o.resolve, debounce: +o.debounce };
-    if (o.quiet || program.opts().quiet) { process.exitCode = await runSync(repo, m, man, opts); return; }
-    await ui.command("cs sync", async () => { process.exitCode = await runSync(repo, m, man, opts); }, { outro: () => (process.exitCode ? ui.red("blocked — see above") : ui.dim("in sync")) }); });
-program.command("status").description("config repo + projects overview").option("--fetch").option("--all").action(async (o) => { const { repo, m, man } = ctx(); const { runStatus } = await import("./status.js"); ui.intro(`cs status  ${ui.dim(m.name)}`); process.exitCode = await runStatus(repo, m, man, o.fetch, o.all); ui.outro(ui.dim("cs sync · cs clone · cs doctor")); });
+    if (o.show) { runImport(repo, m, man, what, targets, o.check, true); return; }
+    await ui.command(`cs import ${what}`, async () => { for (const n of targets) await ui.group(n, () => runImport(repo, m, man, what, [n], o.check, false), { done: "nothing to import" }); }); });
+// share-sync: the share alone (commit / pull --rebase / push) — what the hooks and the timer run. `cs sync` is the daily verb on top of it.
+const shareSyncAction = (title: string) => async (o: any) => { const { repo, m, man } = ctx(); const { runShareSync } = await import("./sharesync.js"); const opts = { pullOnly: o.pullOnly, pushOnly: o.pushOnly, timeout: +o.timeout, resolve: o.resolve, debounce: +o.debounce };
+    if (o.quiet || program.opts().quiet) { process.exitCode = await runShareSync(repo, m, man, opts); return; }
+    await ui.command(title, async () => { process.exitCode = await runShareSync(repo, m, man, opts); }, { outro: () => (process.exitCode ? ui.red("blocked — see above") : ui.dim("in sync")) }); };
+const shareSyncOpts = (c: Command) => c.option("--pull-only").option("--push-only").option("--timeout <s>", "", "20").option("--resolve <ours|theirs>").option("--debounce <s>", "skip if a sync ran less than N seconds ago", "0").option("-q, --quiet");
+shareSyncOpts(program.command("share-sync", { hidden: true }).description("commit / pull --rebase / push the share only (what hooks and the timer run)")).action(shareSyncAction("cs share-sync"));
+shareSyncOpts(program.command("sync").description("the daily verb: bring this machine up to date and leave nothing stale here")).action(shareSyncAction("cs sync"));
+program.command("status").description("share + projects overview").option("--fetch").option("--all").action(async (o) => { const { repo, m, man } = ctx(); const { runStatus } = await import("./status.js"); ui.intro(`cs status  ${ui.dim(m.name)}`); process.exitCode = await runStatus(repo, m, man, o.fetch, o.all); ui.outro(ui.dim("cs sync · cs clone · cs doctor")); });
 program.command("doctor").description("environment and consistency checks").option("--fix").action(async (o) => { const { repo, m, man } = ctx(); const { runDoctor } = await import("./doctor.js"); ui.intro("cs doctor"); process.exitCode = await runDoctor(repo, m, man, o.fix); ui.outro(process.exitCode ? ui.red("problems found") : ui.green("all good")); });
 program.command("add [path]").description("register an existing directory as a project (default: cwd); creates its private GitHub repo when it has no remote").option("--profiles <list>").option("--identity <id>").option("--name <name>").option("--description <text>", "", "").option("--public").option("--no-commit")
   .action(async (p, o) => { const { repo, m, man } = ctx(); const { add } = await import("./projects.js"); await ui.command("cs add", () => add(repo, m, man, p, { profiles: csv(o.profiles), identity: o.identity, name: o.name, description: o.description, noCommit: !o.commit, priv: !o.public })); });
@@ -76,14 +79,14 @@ ident.command("add <id>").requiredOption("--owner <owner>", "GitHub user or org"
   .action(async (id, o) => { const { repo, m, man } = ctx(); process.exitCode = await (await import("./identity.js")).add(repo, m, man, id, { owner: o.owner, name: o.name, email: o.email, key: o.key, noToken: !o.token }); });
 ident.command("rename <old> <new>").action(async (a, b) => { const { repo, m, man } = ctx(); process.exitCode = (await import("./identity.js")).rename(repo, m, man, a, b); });
 
-program.command("ssh [action]").description("per-machine SSH keys: setup | check | master").action(async (action = "check") => { const { repo, m, man } = ctx();
-  await ui.command(`cs ssh ${action}`, async () => { if (action === "master") process.exitCode = await (await import("./master.js")).setup(repo, ui.isTTY()); else process.exitCode = await (await import("./ssh.js")).setup(repo, m, man, action === "check"); },
+program.command("ssh [action]").description("per-machine SSH keys: setup | check | share-key").action(async (action = "check") => { const { repo, m, man } = ctx();
+  await ui.command(`cs ssh ${action}`, async () => { if (action === "share-key") process.exitCode = await (await import("./sharekey.js")).setup(repo, ui.isTTY()); else process.exitCode = await (await import("./ssh.js")).setup(repo, m, man, action === "check"); },
     { outro: () => (process.exitCode ? ui.yellow("keys still to register — re-run cs ssh check afterwards") : ui.green("all keys verified")) }); });
 program.command("deps").description("check (or install) prerequisites").option("--install").action(async (o) => { await ui.command(o.install ? "cs deps --install" : "cs deps", async () => { process.exitCode = await (await import("./deps.js")).runDeps(o.install); }, { outro: () => (process.exitCode ? ui.red("required tools missing") : ui.green("all required tools present")) }); });
 program.command("hooks [action]").description("automatic sync: install | remove | status").option("--no-timer").action(async (action = "status", o) => { const { repo, m } = ctx(); const { runHooks } = await import("./hooks.js");
   if (action === "status") { ui.intro("cs hooks"); process.exitCode = runHooks(repo, m, action, o.timer); ui.outro(ui.dim("cs hooks install · cs hooks remove")); return; }
   await ui.command(`cs hooks ${action}`, async () => { process.exitCode = await ui.group(action === "remove" ? "removed" : "installed", () => runHooks(repo, m, action, o.timer)); }); });
-program.command("update").alias("self-update").description("update the cs tool itself").action(async () => { await ui.command("cs update", async () => {
+program.command("update").description("update the cs tool itself").action(async () => { await ui.command("cs update", async () => {
   const root = toolRoot(); if (!git.isRepo(root)) throw new Error(`cs: ${root} is not a git checkout`);
   const before = git.out(["rev-parse", "--short", "HEAD"], root);
   const r = await ui.spin("checking for updates…", () => git.gitA(["pull", "-q", "--ff-only"], root, { check: false, timeout: 60 }));
@@ -113,10 +116,10 @@ async function startUpdateCheck(): Promise<() => Promise<number>> {
   return () => run;
 }
 
-const sec = program.command("secrets").description("encrypted secrets in the config repo (sops + age)").enablePositionalOptions();
+const sec = program.command("secrets").description("encrypted secrets in the share (sops + age)").enablePositionalOptions();
 const S = () => import("./secretscmd.js");
 sec.command("init").action(async () => { const { repo, m } = ctx(); await ui.command("cs secrets init", async () => ui.group("secrets", async () => (await S()).init(repo, m, ui.isTTY()))); });
-sec.command("status").action(async () => { const { repo, m } = ctx(); ui.intro("cs secrets status"); await (await S()).status(repo, m); ui.outro(ui.dim("cs secrets set · cs enroll <machine>")); });
+sec.command("status").action(async () => { const { repo, m } = ctx(); ui.intro("cs secrets status"); await (await S()).status(repo, m); ui.outro(ui.dim("cs secrets set · cs trust <machine>")); });
 sec.command("edit <name>").description("global | <project>").action(async (n) => { const { repo, m } = ctx(); await (await S()).edit(repo, m, n); });
 sec.command("set <name> <pairs...>").description("KEY=VALUE …").action(async (n, pairs) => { const { repo, m } = ctx(); await (await S()).setValues(repo, m, n, pairs); });
 sec.command("unset <name> <keys...>").action(async (n, keys) => { const { repo, m } = ctx(); await (await S()).unsetValues(repo, m, n, keys); });
@@ -127,32 +130,32 @@ sec.command("diff <project>").action(async (p) => { const { repo, m, man } = ctx
 sec.command("exec [command...]").description("run a command with global + project secrets in its environment").option("-p, --project <name>").passThroughOptions().allowUnknownOption()
   .action(async (command, o) => { const { repo, m, man } = ctx(); const cmd = command[0] === "--" ? command.slice(1) : command; process.exitCode = await (await S()).exec(repo, m, man, o.project, cmd); });
 sec.command("recovery").action(async () => { const { repo, m } = ctx(); await ui.command("cs secrets recovery", async () => (await S()).recovery(repo, m)); });
-program.command("enroll <machine>").description("grant another machine access to secrets").action(async (mc) => { const { repo, m } = ctx(); await ui.command(`cs enroll ${mc}`, async () => ui.group("enrolled", async () => (await S()).enroll(repo, m, mc)), { outro: () => ui.dim(`now: cs sync here, then cs sync on ${mc}`) }); });
-program.command("revoke <machine>").description("remove a machine's access to secrets").action(async (mc) => { const { repo, m } = ctx(); await ui.command(`cs revoke ${mc}`, async () => ui.group("revoked", async () => (await S()).revoke(repo, m, mc))); });
+program.command("trust <machine>").description("trust another machine: grant it access to the secrets").action(async (mc) => { const { repo, m } = ctx(); await ui.command(`cs trust ${mc}`, async () => ui.group("trusted", async () => (await S()).trust(repo, m, mc)), { outro: () => ui.dim(`now: cs sync here, then cs sync on ${mc}`) }); });
+program.command("untrust <machine>").description("untrust a machine: remove its access to the secrets").action(async (mc) => { const { repo, m } = ctx(); await ui.command(`cs untrust ${mc}`, async () => ui.group("untrusted", async () => (await S()).untrust(repo, m, mc))); });
 const H = () => import("./handoff.js");
-program.command("handoff [projects...]").description("push uncommitted work of the cwd project (or --all) to wip/<user>/<branch> on its remote")
-  .option("-m, --note <text>", "note shown when the work is resumed").option("--all", "every selected git project").option("--dry-run").option("--allow <glob>", "override the secret-file deny list", (v: string, a: string[]) => [...a, v], [] as string[]).option("--overwrite", "replace a parcel from another machine")
+program.command("handoff [projects...]").description("send a handoff: uncommitted work of the cwd project (or --all) to its remote")
+  .option("-m, --note <text>", "note shown when the work is resumed").option("--all", "every selected git project").option("--dry-run").option("--allow <glob>", "override the secret-file deny list", (v: string, a: string[]) => [...a, v], [] as string[]).option("--overwrite", "replace a handoff another machine left")
   .option("--mark", "(SessionEnd hook) only remember that dirty work exists here").option("-q, --quiet")
   .action(async (names, o) => { const { repo, m, man } = ctx(); const h = await H();
     if (o.mark) { h.markPending(man, m); return; }
     await ui.command("cs handoff", async () => { const projects = h.projectsFor(man, m, names, o.all);
       process.exitCode = await ui.group("handed off", () => h.handoff(repo, m, man, projects, { note: o.note, dryRun: o.dryRun, allow: o.allow, overwrite: o.overwrite }), { done: "nothing to hand off" });
-      if (!o.dryRun) { const { runSync } = await import("./sync.js"); await ui.group("memory & plans synced", () => runSync(repo, m, man, { pushOnly: true, timeout: 20 }), { done: "already in sync" }); } },
+      if (!o.dryRun) { const { runShareSync } = await import("./sharesync.js"); await ui.group("memory & plans synced", () => runShareSync(repo, m, man, { pushOnly: true, timeout: 20 }), { done: "already in sync" }); } },
       { outro: () => (process.exitCode ? ui.red("some units not handed off — see above") : ui.dim("on the other machine: cs resume")) }); });
-program.command("resume [projects...]").description("apply parcels from wip/<user>/* as uncommitted changes and delete them")
-  .option("--all").option("--replace", "discard local uncommitted changes in the target (a backup ref is kept)").option("--keep-remote", "leave the wip branch on the remote").option("--dry-run")
+program.command("resume [projects...]").description("apply waiting handoffs as uncommitted changes and delete them from the remote")
+  .option("--all").option("--replace", "discard local uncommitted changes in the target (a backup ref is kept)").option("--keep-remote", "leave the handoff on the remote").option("--dry-run")
   .action(async (names, o) => { const { repo, m, man } = ctx(); const h = await H();
     await ui.command("cs resume", async () => { const projects = h.projectsFor(man, m, names, o.all);
-      const { runSync } = await import("./sync.js"); await ui.group("memory & plans", () => runSync(repo, m, man, { pullOnly: true, timeout: 10 }), { done: "up to date" });
-      process.exitCode = await ui.group("resumed", () => h.resume(repo, m, man, projects, { replace: o.replace, keepRemote: o.keepRemote, dryRun: o.dryRun }), { done: "no parcels waiting" }); },
-      { outro: () => (process.exitCode ? ui.red("some parcels not applied — see above") : ui.dim("carry on: claude")) }); });
-const wip = program.command("wip").description("parcels waiting on remotes");
-wip.command("ls", { isDefault: true }).option("--all").action(async (o) => { const { m, man } = ctx(); const h = await H(); const projects = h.projectsFor(man, m, [], o.all ?? true);
-  ui.intro("cs wip"); const list = await h.wipList(m, man, projects);
-  if (!list.length) ui.info(ui.dim("no parcels waiting")); else ui.table(list.map((x) => [x.worktree, x.branch, x.machine, x.when.slice(0, 16), ui.dim(x.note)]), ["project", "branch", "from", "when", "note"]);
-  ui.outro(ui.dim("cs resume · cs wip gc --older-than 14")); });
-wip.command("gc").option("--older-than <days>", "", "14").option("--all").action(async (o) => { const { m, man } = ctx(); const h = await H(); await ui.command("cs wip gc", async () => ui.group("dropped", () => h.wipGc(m, man, h.projectsFor(man, m, [], true), +o.olderThan), { done: "nothing older than that" })); });
-wip.command("drop <branch>").description("delete one parcel (branch name or wip/… ref) for the cwd project").action(async (b) => { const { m, man } = ctx(); const h = await H(); const [p] = h.projectsFor(man, m, [], false); await ui.command("cs wip drop", () => h.wipDrop(m, man, p, b)); });
+      const { runShareSync } = await import("./sharesync.js"); await ui.group("memory & plans", () => runShareSync(repo, m, man, { pullOnly: true, timeout: 10 }), { done: "up to date" });
+      process.exitCode = await ui.group("resumed", () => h.resume(repo, m, man, projects, { replace: o.replace, keepRemote: o.keepRemote, dryRun: o.dryRun }), { done: "no handoffs waiting" }); },
+      { outro: () => (process.exitCode ? ui.red("some handoffs not applied — see above") : ui.dim("carry on: claude")) }); });
+const handoffs = program.command("handoffs").description("handoffs waiting on remotes: ls | gc | drop");
+handoffs.command("ls", { isDefault: true }).option("--all").action(async (o) => { const { m, man } = ctx(); const h = await H(); const projects = h.projectsFor(man, m, [], o.all ?? true);
+  ui.intro("cs handoffs"); const list = await h.waitingList(m, man, projects);
+  if (!list.length) ui.info(ui.dim("no handoffs waiting")); else ui.table(list.map((x) => [x.worktree, x.branch, x.machine, x.when.slice(0, 16), ui.dim(x.note)]), ["project", "branch", "from", "when", "note"]);
+  ui.outro(ui.dim("cs sync · cs handoffs gc --older-than 14")); });
+handoffs.command("gc").option("--older-than <days>", "", "14").option("--all").action(async (o) => { const { m, man } = ctx(); const h = await H(); await ui.command("cs handoffs gc", async () => ui.group("dropped", () => h.handoffGc(m, man, h.projectsFor(man, m, [], true), +o.olderThan), { done: "nothing older than that" })); });
+handoffs.command("drop <branch>").description("delete one waiting handoff (branch name or full ref) for the cwd project").action(async (b) => { const { m, man } = ctx(); const h = await H(); const [p] = h.projectsFor(man, m, [], false); await ui.command("cs handoffs drop", () => h.handoffDrop(m, man, p, b)); });
 program.command("note").description("print (once) the note left by the last cs resume for the cwd project").option("--print").action(async () => { const { m, man } = ctx(); const h = await H(); if (!h.printNote(man, m)) process.exitCode = 1; });
 
 program.command("ui-demo", { hidden: true }).description("show every UI element with fake data").action(async () => {
@@ -162,7 +165,7 @@ program.command("ui-demo", { hidden: true }).description("show every UI element 
     await ui.group("grouped phase with items", async () => { for (const n of ["alpha", "beta", "gamma"]) { await ui.spin(`working on ${n}…`, () => sleep(600)); ui.step(`${n} done`); } });
     await ui.group("empty phase", () => {}, { done: "nothing to do" });
     ui.table([[ui.green("✓"), "node", ui.dim("v22")], [ui.yellow("!"), "gh", ui.dim("missing")]]);
-    ui.note([`title  ${ui.bold("cs:demo:master")}`, `key    ${ui.bold("ssh-ed25519 AAAA… cs:demo:master")}`], "a note box");
+    ui.note([`title  ${ui.bold("cs:demo:share-key")}`, `key    ${ui.bold("ssh-ed25519 AAAA… cs:demo:share-key")}`], "a note box");
     ui.warn("a warning"); ui.fail("an error line (does not abort)");
     if (ui.isTTY()) { const v = await ui.select("a select", [{ value: "a", label: "Option A", hint: "hint" }, { value: "b", label: "Option B" }]); const ok = await ui.confirm(`you picked ${v} — confirm?`, true); ui.step(`confirm → ${ok}`); }
   }, { outro: () => ui.dim("demo over") });
@@ -179,7 +182,7 @@ async function main() {
   if (argv[0] === "new" && machineExists()) { try { const { man } = ctx(); for (let i = 1; i < argv.length; i++) { const a = argv[i]; if (a.startsWith("--") && !a.includes("=")) { const hit = identityByFlag(man, a.slice(2)); if (hit) argv.splice(i, 1, "--identity", hit.id); } } process.argv = [...process.argv.slice(0, 2), ...argv]; } catch {} }
   if (!argv.length) { if (machineExists()) { const finish = await startUpdateCheck(); const { repo, m, man } = ctx(); const { runStatus } = await import("./status.js"); ui.intro(`claude-share  ${ui.dim(m.name)}`); await runStatus(repo, m, man); const behind = await Promise.race([finish(), new Promise<number>((r) => setTimeout(() => r(0), 50))]); ui.outro(behind > 0 ? ui.yellow(`cs is ${behind} commit(s) behind — run cs update`) : ui.dim("cs sync · cs new <project> --<identity> · cs --help")); return; } program.help(); }
   const cmdName = argv.find((a) => !a.startsWith("-"));
-  const wantsCheck = !["update", "self-update", "ui-demo"].includes(cmdName ?? "") && !argv.includes("-q") && !argv.includes("--quiet");
+  const wantsCheck = !["update", "ui-demo"].includes(cmdName ?? "") && !argv.includes("-q") && !argv.includes("--quiet");
   const finishCheck = wantsCheck ? await startUpdateCheck() : async () => 0;
   try { await program.parseAsync(process.argv); }
   catch (e: any) { if (e?.handled) { process.exitCode = e.code ?? 1; return; } const msg: string = e?.message ?? String(e); if (msg.startsWith("cs: ")) { const [what, ...rest] = msg.slice(4).split("\n"); ui.error(what, rest.join("\n").trim()); process.exitCode = 1; } else throw e; }

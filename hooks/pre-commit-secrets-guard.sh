@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Refuse to commit plaintext under secrets/ in the claude-share config repo.
+# Refuse to commit plaintext under secrets/ in the claude-share share.
 bad=0
 while IFS= read -r f; do
   case "$f" in

@@ -1,4 +1,4 @@
-/** The master key ~/.ssh/cs/master: one per machine, used ONLY to reach the config repo (deploy key). */
+/** The share key: one SSH key per machine, used ONLY to reach the share (deploy key). KEY is its on-disk path. */
 import { chmodSync, existsSync, mkdirSync, readFileSync } from "node:fs";
 import { dirname } from "node:path";
 import { spawnSync } from "node:child_process";
@@ -46,16 +46,16 @@ export async function registerDeployKey(owner: string, repo: string, pub: string
 export function instructions(pub: string, gh: [string, string] | undefined, machine: string) {
   const lines: string[] = [];
   if (gh) lines.push(`${ui.cyan(`https://github.com/${gh[0]}/${gh[1]}/settings/keys/new`)}  ${ui.dim("→ deploy key, tick \"Allow write access\"")}`, "");
-  lines.push(`title  ${ui.bold(`cs:${machine}:master`)}`, `key    ${ui.bold(pub)}`, "", ui.dim("this key only reaches the config repo; identities get their own keys"));
-  ui.note(lines, "Add this machine's master key to the config repo");
+  lines.push(`title  ${ui.bold(`cs:${machine}:master`)}`, `key    ${ui.bold(pub)}`, "", ui.dim("this key only reaches the share; identities get their own keys"));
+  ui.note(lines, "Add this machine's share key to the share");
 }
-export const configureRepo = (repoDir: string) => git.git(["config", "core.sshCommand", `ssh -i ${KEY} -o IdentitiesOnly=yes`], repoDir);
-export async function setup(repoDir: string, interactive = true): Promise<number> {
-  const url = git.remoteUrl(repoDir); if (!url) { ui.warn("config repo has no remote"); return 1; }
+export const configureRepo = (shareDir: string) => git.git(["config", "core.sshCommand", `ssh -i ${KEY} -o IdentitiesOnly=yes`], shareDir);
+export async function setup(shareDir: string, interactive = true): Promise<number> {
+  const url = git.remoteUrl(shareDir); if (!url) { ui.warn("share has no remote"); return 1; }
   const [sshUrl, gh] = parseRepoUrl(url); const { pub, created } = ensureKey();
-  ui.kv("master key", KEY + (created ? "  (generated)" : ""));
+  ui.kv("share key", KEY + (created ? "  (generated)" : ""));
   let [ok] = await ui.spin("checking access…", () => canAccess(sshUrl));
-  while (!ok) { instructions(pub, gh, (await import("./config.js")).loadMachine().name); if (!interactive || !(await ui.proceed("added the key?"))) return 1; [ok] = await ui.spin("checking access…", () => canAccess(sshUrl)); }
-  if (sshUrl !== url) git.git(["remote", "set-url", "origin", sshUrl], repoDir);
-  configureRepo(repoDir); ui.ok(`config repo uses the master key (${sshUrl})`); return 0;
+  while (!ok) { instructions(pub, gh, (await import("./machine.js")).loadMachine().name); if (!interactive || !(await ui.proceed("added the key?"))) return 1; [ok] = await ui.spin("checking access…", () => canAccess(sshUrl)); }
+  if (sshUrl !== url) git.git(["remote", "set-url", "origin", sshUrl], shareDir);
+  configureRepo(shareDir); ui.ok(`share uses the share key (${sshUrl})`); return 0;
 }

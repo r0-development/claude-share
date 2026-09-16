@@ -3,7 +3,7 @@ import { closeSync, existsSync, mkdirSync, openSync, readFileSync, statSync, unl
 import { join } from "node:path";
 import * as git from "./git.js";
 import { contract, stateDir } from "./paths.js";
-import type { Machine } from "./config.js";
+import type { Machine } from "./machine.js";
 import { loadManifest, selectedProjects, workspace, type Manifest } from "./manifest.js";
 import { runApply } from "./apply.js";
 import { checkouts, runLink, syncProject } from "./link.js";
@@ -21,7 +21,7 @@ function tryLock(label: string): number | undefined {
 const unlock = (label: string, fd: number) => { closeSync(fd); try { unlinkSync(lockFile(label)); } catch {} };
 
 export interface SyncOpts { pullOnly?: boolean; pushOnly?: boolean; timeout?: number; resolve?: "ours" | "theirs" }
-export async function gitSync(repo: string, label: string, machine: string, o: SyncOpts = {}): Promise<boolean> {
+export async function shareGitSync(repo: string, label: string, machine: string, o: SyncOpts = {}): Promise<boolean> {
   if (!git.isRepo(repo)) { ui.warn(`${label}: not a git repo (${contract(repo)})`); return false; }
   const timeout = o.timeout ?? 20;
   if (existsSync(marker(label)) && !o.resolve) { ui.fail(`${label}: sync blocked by an earlier conflict — ${readFileSync(marker(label), "utf8").trim()}`); return false; }
@@ -55,17 +55,17 @@ export async function gitSync(repo: string, label: string, machine: string, o: S
     }
     if (existsSync(marker(label))) unlinkSync(marker(label));
     if (!o.pullOnly) { const ab = git.aheadBehind(repo); if (ab && ab[0]) { const pr = await ui.spin(`${label}: pushing…`, () => git.gitA(["push", "-q", "origin", branch], repo, { check: false, timeout }));
-      if (pr.code !== 0) { ui.warn(`${label}: push rejected, retrying once`); unlock(label, fd); return gitSync(repo, label, machine, o); } ui.ok(`${label}: pushed ${ab[0]} commit(s)`); } }
+      if (pr.code !== 0) { ui.warn(`${label}: push rejected, retrying once`); unlock(label, fd); return shareGitSync(repo, label, machine, o); } ui.ok(`${label}: pushed ${ab[0]} commit(s)`); } }
     writeFileSync(join(stateDir(), `last-${label}`), new Date().toISOString() + "\n");
     return true;
   } finally { try { unlock(label, fd); } catch {} }
 }
-export async function runSync(repo: string, m: Machine, man: Manifest, o: SyncOpts & { debounce?: number } = {}): Promise<number> {
+export async function runShareSync(repo: string, m: Machine, man: Manifest, o: SyncOpts & { debounce?: number } = {}): Promise<number> {
   const ws = workspace(man, m); let rc = 0;
   if (o.debounce) { const last = join(stateDir(), "last-config"); if (existsSync(last) && Date.now() - statSync(last).mtimeMs < o.debounce * 1000) return 0; }
   const before = git.out(["rev-parse", "HEAD"], repo);
   if (!o.pullOnly) for (const p of selectedProjects(man, m)) if (checkouts(p, ws).length) syncProject(repo, p, ws);
-  if (!(await gitSync(repo, "config", m.name, o))) rc = 2;
+  if (!(await shareGitSync(repo, "config", m.name, o))) rc = 2;
   const after = git.out(["rev-parse", "HEAD"], repo);
   if (after !== before || o.pullOnly) {
     const changed = before ? git.out(["diff", "--name-only", before, after], repo) : "";

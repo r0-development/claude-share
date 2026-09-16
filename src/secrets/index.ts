@@ -1,6 +1,6 @@
 /** Secrets backends: sops (default) | none. */
 import { join } from "node:path";
-import type { Machine } from "../config.js";
+import type { Machine } from "../machine.js";
 
 export interface Backend {
   name: string;

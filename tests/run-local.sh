@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# End-to-end check in a throwaway HOME: config repo skeleton -> init -> idempotency -> link/adopt/sync.
+# End-to-end check in a throwaway HOME: share skeleton -> init -> idempotency -> link/import/sync.
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 export HOME="$(mktemp -d)"
@@ -36,8 +36,8 @@ KEY="$(echo "$HOME/dev/alpha" | sed 's/[^A-Za-z0-9]/-/g')"
 mkdir -p "$HOME/.claude/projects/$KEY/memory" && echo "- [x](x.md) - a fact" > "$HOME/.claude/projects/$KEY/memory/MEMORY.md" && echo "fact" > "$HOME/.claude/projects/$KEY/memory/x.md"
 mkdir -p "$HOME/dev/notes"   # unregistered dir
 
-# --- config repo skeleton + bare remote for it
-$CS config new "$HOME/cfg-src" >/dev/null
+# --- share skeleton + bare remote for it
+$CS share new "$HOME/cfg-src" >/dev/null
 cat >> "$HOME/cfg-src/projects.toml" <<TOML
 
 [identities.test]
@@ -76,10 +76,10 @@ pass init
 [ -L "$HOME/.claude/CLAUDE.md" ] || die "CLAUDE.md linked"
 [ -L "$HOME/.claude/skills/shared-skill" ] && [ -d "$HOME/.claude/skills/old-skill" ] && [ ! -L "$HOME/.claude/skills/old-skill" ] || die "skills coexist"
 [ -L "$HOME/.agents/skills" ] && [ "$(readlink -f "$HOME/.agents/skills")" = "$(readlink -f "$CS_CONFIG_DIR/repo/claude/skills")" ] || die "~/.agents/skills is the repo skills dir"
-[ -f "$CS_CONFIG_DIR/repo/claude/skills/sh-skill/SKILL.md" ] && [ -f "$HOME/.claude/skills/sh-skill/SKILL.md" ] || die "skills.sh skill adopted into repo"
-[ -L "$HOME/.agents/.skill-lock.json" ] && grep -q sh-skill "$CS_CONFIG_DIR/repo/claude/skill-lock.json" || die "skill lock adopted into repo"
-$CS apply --check | grep -q "up to date" || die "apply idempotent after skills adoption"
-[ -L "$HOME/.claude/plans" ] && [ -f "$CS_CONFIG_DIR/repo/plans/old.md" ] || die "plans adopted into repo"
+[ -f "$CS_CONFIG_DIR/repo/claude/skills/sh-skill/SKILL.md" ] && [ -f "$HOME/.claude/skills/sh-skill/SKILL.md" ] || die "skills.sh skill imported into the share"
+[ -L "$HOME/.agents/.skill-lock.json" ] && grep -q sh-skill "$CS_CONFIG_DIR/repo/claude/skill-lock.json" || die "skill lock imported into the share"
+$CS apply --check | grep -q "up to date" || die "apply idempotent after skills import"
+[ -L "$HOME/.claude/plans" ] && [ -f "$CS_CONFIG_DIR/repo/plans/old.md" ] || die "plans imported into the share"
 python3 - "$HOME/.claude/settings.json" <<'PY' || die "settings merged"
 import json,sys; d=json.load(open(sys.argv[1]))
 assert d["model"]=="opus" and d["theme"]=="light", d
@@ -90,17 +90,17 @@ grep -q 'hasconfig:remote.\*.url' "$HOME/.config/git/claude-share.inc" || die "i
 [ "$(git -C "$HOME/dev/alpha" config user.email)" = "test@example.com" ] || die "identity via includeIf"
 pass apply
 SIDE="$CS_CONFIG_DIR/repo/projects/alpha"
-[ -f "$SIDE/CLAUDE.md" ] && [ -f "$SIDE/.claude/settings.local.json" ] || die "alpha files adopted into side-store"
+[ -f "$SIDE/CLAUDE.md" ] && [ -f "$SIDE/.claude/settings.local.json" ] || die "alpha files imported into project state"
 grep -q autoMemoryDirectory "$HOME/dev/alpha/.claude/settings.local.json" || die "autoMemoryDirectory injected"
-! grep -q autoMemoryDirectory "$SIDE/.claude/settings.local.json" || die "side-store stays machine-independent"
+! grep -q autoMemoryDirectory "$SIDE/.claude/settings.local.json" || die "project state stays machine-independent"
 grep -q '^\.claude/$' "$HOME/dev/alpha/.git/info/exclude" || die "exclude written"
 [ -z "$(git -C "$HOME/dev/alpha" status --porcelain)" ] || die "alpha stays clean for git"
 grep -q autoMemoryDirectory "$HOME/dev/beta/wt-feat/.claude/settings.local.json" || die "worktree got settings"
 grep -q autoMemoryDirectory "$HOME/dev/beta/repo/.claude/settings.local.json" || die "main checkout got settings"
 pass link
-$CS adopt memory alpha >/dev/null || die "adopt memory"
-[ -f "$SIDE/memory/x.md" ] && grep -q "a fact" "$SIDE/memory/MEMORY.md" || die "memory adopted"
-pass adopt-memory
+$CS import memory alpha >/dev/null || die "import memory"
+[ -f "$SIDE/memory/x.md" ] && grep -q "a fact" "$SIDE/memory/MEMORY.md" || die "memory imported"
+pass import-memory
 
 # --- idempotency
 $CS apply --check >/dev/null || die "apply --check clean"
@@ -110,9 +110,9 @@ pass idempotent
 
 # --- edit in checkout flows back and to the worktree; sync commits + pushes
 sleep 1; echo '# alpha guidance v2' > "$HOME/dev/alpha/CLAUDE.md"
-$CS sync >/dev/null || die "sync"
+$CS share-sync >/dev/null || die "sync"
 grep -q v2 "$SIDE/CLAUDE.md" || die "newer checkout content won"
-(cd "$CS_CONFIG_DIR/repo" && [ -z "$(git status --porcelain)" ]) || die "config repo committed"
+(cd "$CS_CONFIG_DIR/repo" && [ -z "$(git status --porcelain)" ]) || die "share committed"
 [ "$(git -C "$HOME/cfg.git" rev-parse HEAD)" = "$(git -C "$CS_CONFIG_DIR/repo" rev-parse HEAD)" ] || die "pushed"
 pass sync-copyback
 
@@ -127,23 +127,23 @@ export HOME2="$(mktemp -d)"
   grep -q "$HOME2" "$HOME2/dev/alpha/.claude/settings.local.json" && ! grep -q "$HOME\b" "$HOME2/dev/alpha/.claude/settings.local.json" || true
   # conflict: both machines edit the same memory topic -> union, no block
   echo "- [y](y.md) - m2 fact" >> "$CS_CONFIG_DIR/repo/projects/alpha/memory/MEMORY.md"
-  $CS sync >/dev/null || die "m2 sync"
+  $CS share-sync >/dev/null || die "m2 sync"
 )
 echo "- [z](z.md) - m1 fact" >> "$SIDE/memory/MEMORY.md"
-$CS sync >/dev/null || die "m1 sync after m2"
+$CS share-sync >/dev/null || die "m1 sync after m2"
 grep -q "m2 fact" "$SIDE/memory/MEMORY.md" && grep -q "m1 fact" "$SIDE/memory/MEMORY.md" || die "union merge"
 pass two-machines-union
 
 # --- real JSON conflict blocks cleanly, resolve unblocks
 ( export HOME="$HOME2" CLAUDE_CONFIG_DIR="$HOME2/.claude" XDG_STATE_HOME="$HOME2/.local/state" CS_CONFIG_DIR="$HOME2/.config/claude-share"
   echo '{"model":"sonnet","permissions":{"allow":["Read(**)"]}}' > "$CS_CONFIG_DIR/repo/claude/settings.base.json"
-  $CS sync >/dev/null || die "m2 conflict setup"
+  $CS share-sync >/dev/null || die "m2 conflict setup"
 )
 echo '{"model":"haiku","permissions":{"allow":["Read(**)"]}}' > "$CS_CONFIG_DIR/repo/claude/settings.base.json"
-if $CS sync >/dev/null 2>&1; then die "conflict should block"; fi
+if $CS share-sync >/dev/null 2>&1; then die "conflict should block"; fi
 [ -f "$XDG_STATE_HOME/cs/blocked-config" ] || die "blocked marker"
 git -C "$CS_CONFIG_DIR/repo" rebase --abort 2>/dev/null && die "left mid-rebase" || true
-$CS sync --resolve theirs >/dev/null || die "resolve"
+$CS share-sync --resolve theirs >/dev/null || die "resolve"
 grep -q sonnet "$CS_CONFIG_DIR/repo/claude/settings.base.json" || die "theirs applied"
 grep -q sonnet "$HOME/.claude/settings.json" || die "settings re-rendered after pull"
 pass conflict-abort-resolve
@@ -173,6 +173,19 @@ grep -A3 '^\[projects.delta\]' "$CS_CONFIG_DIR/repo/projects.toml" | grep -q 'id
 $CS doctor >/dev/null || die "doctor clean"
 pass status-doctor
 
+# --- hooks are written with cs share-sync; an old-style `cs sync …` hook command is replaced on re-install
+python3 - "$CS_CONFIG_DIR/repo/claude/settings.base.json" <<'PY'
+import json,sys; f=sys.argv[1]; d=json.load(open(f))
+d["hooks"]={"Stop":[{"hooks":[{"type":"command","command":"command -v cs >/dev/null 2>&1 && cs sync --push-only --quiet || true"}]}]}
+json.dump(d,open(f,"w"))
+PY
+(cd "$CS_CONFIG_DIR/repo" && git add -A && git commit -qm "old hooks")
+$CS hooks install --no-timer >/dev/null || die "hooks install"
+grep -q 'cs share-sync --push-only' "$CS_CONFIG_DIR/repo/claude/settings.base.json" && ! grep -q 'cs sync --push-only' "$CS_CONFIG_DIR/repo/claude/settings.base.json" || die "old hook command replaced"
+grep -q 'cs share-sync --pull-only.*cs note --print' "$CS_CONFIG_DIR/repo/claude/settings.base.json" || die "session-start hook prints the handoff note"
+grep -q 'cs handoff --mark' "$CS_CONFIG_DIR/repo/claude/settings.base.json" || die "session-end hook marks dirty work"
+pass hooks
+
 # --- cs new (fake GitHub): dir, git init on default branch, first commit, repo created, pushed, registered, linked
 $CS new fresh --test -d "a fresh one" >/dev/null || die "cs new"
 [ -d "$HOME/gh/test/fresh.git" ] && git -C "$HOME/gh/test/fresh.git" log --oneline | grep -q init || die "repo created and pushed"
@@ -198,7 +211,7 @@ grep -q '^\[identities.extra2\]' "$CS_CONFIG_DIR/repo/projects.toml" && ! grep -
 [ ! -f "$HOME/.config/git/identity-extra.inc" ] || die "stale include pruned"
 pass identity
 
-# --- secrets (only when sops + age are installed): init, set, get, exec, enroll a second machine, guard
+# --- secrets (only when sops + age are installed): init, set, get, exec, trust a second machine, guard
 if command -v sops >/dev/null && command -v age-keygen >/dev/null; then
   export SOPS_AGE_KEY_FILE="$HOME/.config/sops/age/keys.txt"
   $CS secrets init >/dev/null || die "secrets init"
@@ -211,25 +224,25 @@ if command -v sops >/dev/null && command -v age-keygen >/dev/null; then
   echo "PLAIN=1" > "$CS_CONFIG_DIR/repo/secrets/projects/x.env"
   (cd "$CS_CONFIG_DIR/repo" && git add -A && git -c user.name=t -c user.email=t@x commit -qm plain >/dev/null 2>&1) && die "guard should refuse plaintext"
   rm "$CS_CONFIG_DIR/repo/secrets/projects/x.env"; (cd "$CS_CONFIG_DIR/repo" && git reset -q)
-  $CS sync >/dev/null || die "sync secrets"
-  # second machine: not a recipient until enrolled
+  $CS share-sync >/dev/null || die "sync secrets"
+  # second machine: not a recipient until trusted
   ( export HOME="$HOME2" CLAUDE_CONFIG_DIR="$HOME2/.claude" XDG_STATE_HOME="$HOME2/.local/state" CS_CONFIG_DIR="$HOME2/.config/claude-share" SOPS_AGE_KEY_FILE="$HOME2/.config/sops/age/keys.txt"
-    $CS sync >/dev/null; $CS secrets init >/dev/null 2>&1 || die "m2 secrets init"
-    $CS secrets get global API_KEY --show >/dev/null 2>&1 && die "m2 must not decrypt before enroll"
-    $CS sync >/dev/null || die "m2 publish pub" )
-  $CS sync >/dev/null && $CS enroll t2 >/dev/null || die "enroll"
-  $CS sync >/dev/null
+    $CS share-sync >/dev/null; $CS secrets init >/dev/null 2>&1 || die "m2 secrets init"
+    $CS secrets get global API_KEY --show >/dev/null 2>&1 && die "m2 must not decrypt before trust"
+    $CS share-sync >/dev/null || die "m2 publish pub" )
+  $CS share-sync >/dev/null && $CS trust t2 >/dev/null || die "trust"
+  $CS share-sync >/dev/null
   ( export HOME="$HOME2" CLAUDE_CONFIG_DIR="$HOME2/.claude" XDG_STATE_HOME="$HOME2/.local/state" CS_CONFIG_DIR="$HOME2/.config/claude-share" SOPS_AGE_KEY_FILE="$HOME2/.config/sops/age/keys.txt"
-    $CS sync >/dev/null; [ "$($CS secrets get global API_KEY --show)" = "abc123" ] || die "m2 decrypts after enroll" )
-  $CS revoke t2 >/dev/null 2>&1 || die "revoke"
-  # recovery key: generated here, used on the revoked machine to enroll itself through the wizard
+    $CS share-sync >/dev/null; [ "$($CS secrets get global API_KEY --show)" = "abc123" ] || die "m2 decrypts after trust" )
+  $CS untrust t2 >/dev/null 2>&1 || die "untrust"
+  # recovery key: generated here, used on the untrusted machine to trust itself through the wizard
   RKEY="$($CS secrets recovery 2>/dev/null | grep -o 'AGE-SECRET-KEY-1[A-Z0-9]*' | head -1)"; [ -n "$RKEY" ] || die "recovery key printed"
-  $CS sync >/dev/null || die "sync recovery"
+  $CS share-sync >/dev/null || die "sync recovery"
   ( export HOME="$HOME2" CLAUDE_CONFIG_DIR="$HOME2/.claude" XDG_STATE_HOME="$HOME2/.local/state" CS_CONFIG_DIR="$HOME2/.config/claude-share" SOPS_AGE_KEY_FILE="$HOME2/.config/sops/age/keys.txt"
-    $CS sync >/dev/null 2>&1 || true
-    $CS secrets get global API_KEY --show >/dev/null 2>&1 && die "m2 must be revoked"
-    CS_ANSWERS='["n","n","recovery","'"$RKEY"'","n"]' $CS init --skip deps,ssh,hooks,doctor,apply,link > "$HOME2/recovery.log" 2>&1 || { tail -15 "$HOME2/recovery.log"; die "wizard recovery enroll"; }
-    [ "$($CS secrets get global API_KEY --show)" = "abc123" ] || die "m2 decrypts after recovery enroll"
+    $CS share-sync >/dev/null 2>&1 || true
+    $CS secrets get global API_KEY --show >/dev/null 2>&1 && die "m2 must be untrusted"
+    CS_ANSWERS='["n","n","recovery","'"$RKEY"'","n"]' $CS init --skip deps,ssh,hooks,doctor,apply,link > "$HOME2/recovery.log" 2>&1 || { tail -15 "$HOME2/recovery.log"; die "wizard recovery trust"; }
+    [ "$($CS secrets get global API_KEY --show)" = "abc123" ] || die "m2 decrypts after recovery trust"
     [ ! -f "$HOME2/.cache/cs-recovery-"* ] 2>/dev/null || true )
   pass secrets
 else
@@ -245,8 +258,8 @@ git init -q --bare "$HOME3/share.git"
   CS_ANSWERS='["wiz1","create","<default>","'"$HOME3"'/share.git","personal","custom","~/code","personal","someone","Some One","some@example.com","skip","n"]' \
     $CS init --skip deps,hooks,doctor >/dev/null || die "wizard create"
   grep -q 'workspace = "~/code"' "$CS_CONFIG_DIR/machine.toml" || die "custom workspace saved"
-  [ -f "$HOME3/.ssh/cs/master" ] || die "master key generated"
-  [ "$(git -C "$CS_CONFIG_DIR/repo" config core.sshCommand)" = "ssh -i ~/.ssh/cs/master -o IdentitiesOnly=yes" ] || die "config repo pinned to master key"
+  [ -f "$HOME3/.ssh/cs/master" ] || die "share key generated"
+  [ "$(git -C "$CS_CONFIG_DIR/repo" config core.sshCommand)" = "ssh -i ~/.ssh/cs/master -o IdentitiesOnly=yes" ] || die "share pinned to the share key"
   grep -q '^\[identities.personal\]' "$CS_CONFIG_DIR/repo/projects.toml" || die "first identity"
   [ -f "$HOME3/.ssh/cs/personal" ] || die "identity key generated"
   [ -f "$CS_CONFIG_DIR/repo/machines/wiz1/ssh/personal.pub" ] || die "pubkey published"
@@ -292,12 +305,12 @@ cat >> "$CS_CONFIG_DIR/repo/projects.toml" <<TOML
 extra = ["local.conf"]
 TOML
 (cd "$CS_CONFIG_DIR/repo" && git add -A && git -c user.name=t -c user.email=t@x commit -qm "alpha handoff extra" >/dev/null)
-m1 $CS sync >/dev/null
+m1 $CS share-sync >/dev/null
 BEFORE="$(cd "$A1" && git status --porcelain)"
 (cd "$A1" && m1 $CS handoff -m "continue with the notes" >/dev/null) || die "handoff"
 [ "$(cd "$A1" && git status --porcelain)" = "$BEFORE" ] || die "sender tree untouched"
 [ -z "$(cd "$A1" && git diff --cached)" ] || die "sender index untouched"
-git -C "$HOME/remote.git" show-ref | grep -q "wip/test-user/main" || die "wip branch pushed"
+git -C "$HOME/remote.git" show-ref | grep -q "wip/test-user/main" || die "handoff ref pushed"
 ! git -C "$HOME/remote.git" ls-tree -r --name-only "wip/test-user/main" | grep -q "build/out" || die "gitignored file must not travel"
 git -C "$HOME/remote.git" ls-tree -r --name-only "wip/test-user/main" | grep -q "local.conf" || die "handoff.extra travels"
 # lease: a second machine cannot overwrite a parcel from another machine without --overwrite
@@ -305,11 +318,11 @@ echo "m2 change" >> "$A2/README"
 (cd "$A2" && m2 $CS handoff >/dev/null 2>&1) && die "lease should refuse" || true
 (cd "$A2" && git checkout -q -- README)
 # resume on machine 2
-(cd "$A2" && m2 $CS sync >/dev/null; m2 $CS resume >/dev/null) || die "resume"
+(cd "$A2" && m2 $CS share-sync >/dev/null; m2 $CS resume >/dev/null) || die "resume"
 [ "$(cd "$A2" && git status --porcelain | sort)" = "$(echo "$BEFORE" | sort)" ] || die "identical dirty tree on receiver"
 grep -q "changed" "$A2/README" && [ "$(cat "$A2/notes.txt")" = "new file" ] && [ "$(cat "$A2/local.conf")" = "keep me" ] || die "contents restored"
 [ ! -d "$A2/.cs-handoff" ] || die "sidecar removed"
-! git -C "$HOME/remote.git" show-ref | grep -q "wip/test-user/main" || die "wip branch deleted after resume"
+! git -C "$HOME/remote.git" show-ref | grep -q "wip/test-user/main" || die "handoff ref deleted after resume"
 [ "$(cd "$A2" && m2 $CS note --print | tail -1)" = "continue with the notes" ] || die "note printed"
 (cd "$A2" && m2 $CS note --print >/dev/null 2>&1) && die "note printed only once" || true
 # worktree layout: hand off from wt-feat on machine 1, resume on machine 2 where the worktree does not exist

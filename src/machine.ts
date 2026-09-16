@@ -2,7 +2,7 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 import { parse, stringify } from "smol-toml";
-import { expand, machineFile, repoDirDefault } from "./paths.js";
+import { expand, machineFile, shareDirDefault } from "./paths.js";
 
 export interface Machine {
   name: string;
@@ -12,7 +12,7 @@ export interface Machine {
   repo?: string;
   secretsBackend: "sops" | "none";
 }
-export const repoDir = (m: Machine) => (m.repo ? expand(m.repo) : repoDirDefault());
+export const shareDir = (m: Machine) => (m.repo ? expand(m.repo) : shareDirDefault());
 
 export function machineExists() { return existsSync(machineFile()); }
 export function loadMachine(): Machine {

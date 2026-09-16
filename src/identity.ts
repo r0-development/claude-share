@@ -4,7 +4,7 @@ import { join } from "node:path";
 import * as git from "./git.js";
 import * as github from "./github.js";
 import { expand } from "./paths.js";
-import type { Machine } from "./config.js";
+import type { Machine } from "./machine.js";
 import { appendIdentity, keyPath, loadManifest, NAME_RE, type Identity, type Manifest } from "./manifest.js";
 import { applyGit } from "./apply.js";
 import * as ui from "./ui.js";

@@ -5,7 +5,7 @@ import { spawnSync } from "node:child_process";
 import * as git from "../git.js";
 import { contract, home, toolRoot } from "../paths.js";
 import { which } from "../deps.js";
-import type { Machine } from "../config.js";
+import type { Machine } from "../machine.js";
 import { dumpDotenv, envFile, parseDotenv, type Backend } from "./index.js";
 import * as ui from "../ui.js";
 
@@ -30,7 +30,7 @@ export function recipients(repo: string): string[] {
   const m2 = t.match(/age:\s*(\S.*)/); return m2 ? m2[1].split(",").map((x) => x.trim()).filter(Boolean) : [];
 }
 export function writeRecipients(repo: string, recs: string[]) {
-  writeFileSync(join(repo, ".sops.yaml"), `# sops recipients — managed by cs secrets init / cs enroll / cs revoke\ncreation_rules:\n  - path_regex: ${RULE}\n    age: >-\n` + recs.map((r) => `      ${r}`).join(",\n") + "\n");
+  writeFileSync(join(repo, ".sops.yaml"), `# sops recipients — managed by cs secrets init / cs trust / cs untrust\ncreation_rules:\n  - path_regex: ${RULE}\n    age: >-\n` + recs.map((r) => `      ${r}`).join(",\n") + "\n");
 }
 export const machinePubFile = (repo: string, machine: string) => join(repo, "machines", machine, "age.pub");
 const isEncrypted = (f: string) => { try { return readFileSync(f, "utf8").includes("sops_version="); } catch { return false; } };
@@ -49,7 +49,7 @@ export const SopsBackend: Backend = {
     if (!existsSync(pf) || readFileSync(pf, "utf8").trim() !== pub) { mkdirSync(dirname(pf), { recursive: true }); writeFileSync(pf, pub + "\n"); git.git(["add", relative(repo, pf)], repo); git.commit(repo, `machines: ${m.name} age.pub`, "cs", `cs@${m.name}`); ui.ok(`published ${contract(pf)}`); }
     const recs = recipients(repo);
     if (!recs.length) { writeRecipients(repo, [pub]); git.git(["add", ".sops.yaml"], repo); git.commit(repo, "secrets: first recipient", "cs", `cs@${m.name}`); ui.ok("this is the first machine: registered as the only recipient");
-      const hook = join(repo, ".git", "hooks", "pre-commit"), src = join(toolRoot(), "hooks", "pre-commit-secrets-guard.sh"); if (existsSync(src) && !existsSync(hook)) { copyFileSync(src, hook); chmodSync(hook, 0o755); ui.ok("installed pre-commit plaintext guard in the config repo"); } }
+      const hook = join(repo, ".git", "hooks", "pre-commit"), src = join(toolRoot(), "hooks", "pre-commit-secrets-guard.sh"); if (existsSync(src) && !existsSync(hook)) { copyFileSync(src, hook); chmodSync(hook, 0o755); ui.ok("installed pre-commit plaintext guard in the share"); } }
     else if (recs.includes(pub)) ui.ok("this machine can decrypt secrets"); else ui.step("this machine is not a recipient yet");
     mkdirSync(join(repo, "secrets", "projects"), { recursive: true });
   },
@@ -63,7 +63,7 @@ export const SopsBackend: Backend = {
   status(repo, m) {
     const pub = publicKey(), recs = recipients(repo);
     ui.kv("age key", contract(keyFile()) + (existsSync(keyFile()) ? "" : ui.red("  missing")));
-    ui.kv("recipient", pub && recs.includes(pub) ? ui.green("yes") : ui.red("no — cs enroll " + m.name));
+    ui.kv("recipient", pub && recs.includes(pub) ? ui.green("yes") : ui.red("no — cs trust " + m.name));
     const names: Record<string, string> = {}; const md = join(repo, "machines"); if (existsSync(md)) for (const d of readdirSync(md)) { const pf = join(md, d, "age.pub"); if (existsSync(pf)) names[readFileSync(pf, "utf8").trim()] = d; }
     ui.kv("recipients", recs.map((r) => names[r] ?? r.slice(0, 14) + "…").join(", ") || "-");
     ui.kv("files", envFiles(repo).map((f) => relative(repo, f)).join(", ") || "-");

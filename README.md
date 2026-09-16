@@ -5,14 +5,14 @@ Keep your projects **and** your Claude Code setup identical on every machine.
 - **Projects manifest** — one `projects.toml` says where each project lives (which GitHub owner, which identity),
   which machines get it, and whether it is a normal git repo, an auto-synced notes repo, or local-only.
 - **Claude Code config** — `~/.claude/settings.json` (layered base → profile → machine), `CLAUDE.md`, rules, skills,
-  agents, keybindings, plans: rendered/linked from a private config repo.
-- **Per-project Claude state** — `CLAUDE.md`, `.claude/**`, `.mcp.json` and **auto-memory** live in a side-store in the
-  config repo and are copied into every checkout (and worktree) without ever being committed to the project repo.
+  agents, keybindings, plans: rendered/linked from a private share.
+- **Per-project Claude state** — `CLAUDE.md`, `.claude/**`, `.mcp.json` and **auto-memory** live in a project state in the
+  share and are copied into every checkout (and worktree) without ever being committed to the project repo.
 - **Git identity follows the remote URL** (`includeIf hasconfig`), so work and personal repos can sit side by side.
 - **Secrets** — sops + age, per-machine keys, decrypted into `claude`'s environment at launch so `${VAR}` in `.mcp.json` resolve. Never plaintext in git.
 - **Automatic sync** — Claude Code hooks push after each response and pull at session start; a timer syncs every 15 min.
 
-Two repos: this tool (public) and your own config repo (private, holds all your data). Node 18+ and git — nothing else
+Two repos: this tool (public) and your own share (private, holds all your data). Node 18+ and git — nothing else
 (the installer brings Node if it's missing). WSL2 on Windows, macOS, Linux. Windows-native is unsupported.
 
 ## Quick start
@@ -22,8 +22,8 @@ curl -fsSL https://raw.githubusercontent.com/r0-development/claude-share/master/
 ```
 
 One command on a fresh WSL2 Ubuntu or macOS: installs prerequisites (apt on Debian/Ubuntu, Node 22 user-local from
-nodejs.org), the tool to `~/.local/share/claude-share`, links `~/.local/bin/cs`, and starts `cs init` — a wizard: join an existing share (paste its GitHub URL) or create a new one; a per-machine **master key**
-gets this machine into the config repo (deploy key); pick a machine name and profiles; identities from the repo get their
+nodejs.org), the tool to `~/.local/share/claude-share`, links `~/.local/bin/cs`, and starts `cs init` — a wizard: join an existing share (paste its GitHub URL) or create a new one; a per-machine **share key**
+gets this machine into the share (deploy key); pick a machine name and profiles; identities from the repo get their
 SSH keys and tokens; choose where projects live (default `~/dev`); then everything is applied and projects can be cloned. Details: `docs/BOOTSTRAP.md`.
 
 ```sh
@@ -68,7 +68,7 @@ There is deliberately **no global `user.email`**: a repo that matches no identit
 | `cs identity add <id> --owner <owner> --name "<name>" --email <email>` | add it, render git includes, offer to store a token for `<owner>` (`--key <path>` to use an existing key, `--no-token`) |
 | `cs identity rename <old> <new>` | rename everywhere (manifest, projects, key files, published pubkeys, includes) |
 | `cs ssh setup` / `cs ssh check` | create missing identity keys, publish public halves, register on GitHub (user accounts, via token) or print for pasting; verify |
-| `cs ssh master` | the machine's **master key** `~/.ssh/cs/master`: reaches the config repo only (deploy key); nothing else uses it |
+| `cs ssh share-key` | the machine's **share key** `~/.ssh/cs/master`: reaches the share only (deploy key); nothing else uses it |
 | `cs token set\|check\|rm\|ls <owner>` | API tokens |
 | `cs doctor --fix` | report identity mismatches; rewrite remotes that use an old owner name or SSH alias |
 
@@ -114,18 +114,18 @@ cs clone                                  # on a new machine after cs init
 
 ## Claude Code config and memory
 
-`~/.claude` is rendered from `<config repo>/claude/` by `cs apply`; per-project files come from `<config repo>/projects/<name>/`
+`~/.claude` is rendered from `<share>/claude/` by `cs apply`; per-project files come from `<share>/projects/<name>/`
 via `cs link`.
 
 | command | what it does |
 |---|---|
-| `cs apply [--check]` | `settings.json` = `settings.base.json` ⊕ `settings.<profile>.json` ⊕ `settings.<machine>.json`; symlink `CLAUDE.md`, `rules/`, `skills/*`, `agents/`, `themes/`, `keybindings.json`, `plans/`; `~/.agents/skills` → `claude/skills` so `npx skills add … -g` (skills.sh) installs into the config repo; git identity includes; shell rc block |
-| `cs link [name…] [--check]` | copy `CLAUDE.md`, `.claude/**`, `.mcp.json` from the side-store into each checkout and worktree (hidden from git via `.git/info/exclude`); point `autoMemoryDirectory` at the config repo; newer content flows back |
-| `cs adopt memory <name>` | move existing auto-memory from `~/.claude/projects/…/memory` into the side-store |
-| `cs adopt project <name>` | take existing Claude files from a checkout into the side-store |
-| `cs adopt mcp <name>` | move MCP servers (with secrets) from `~/.claude.json` into the side-store `.mcp.json` with `${VAR}` placeholders |
+| `cs apply [--check]` | `settings.json` = `settings.base.json` ⊕ `settings.<profile>.json` ⊕ `settings.<machine>.json`; symlink `CLAUDE.md`, `rules/`, `skills/*`, `agents/`, `themes/`, `keybindings.json`, `plans/`; `~/.agents/skills` → `claude/skills` so `npx skills add … -g` (skills.sh) installs into the share; git identity includes; shell rc block |
+| `cs link [name…] [--check]` | copy `CLAUDE.md`, `.claude/**`, `.mcp.json` from the project state into each checkout and worktree (hidden from git via `.git/info/exclude`); point `autoMemoryDirectory` at the share; newer content flows back |
+| `cs import memory <name>` | move existing auto-memory from `~/.claude/projects/…/memory` into the project state |
+| `cs import project <name>` | take existing Claude files from a checkout into the project state |
+| `cs import mcp <name>` | move MCP servers (with secrets) from `~/.claude.json` into the project state `.mcp.json` with `${VAR}` placeholders |
 
-Global rules for all projects: `claude/CLAUDE.md` and `claude/rules/*.md` in the config repo (`cs apply` links them to `~/.claude`, so editing
+Global rules for all projects: `claude/CLAUDE.md` and `claude/rules/*.md` in the share (`cs apply` links them to `~/.claude`, so editing
 `~/.claude/CLAUDE.md` edits the repo). Global skills: `claude/skills/<name>/SKILL.md` — write them there or `npx skills add <owner/repo> -g`.
 
 ---
@@ -139,7 +139,7 @@ cs secrets set global COOLIFY_TOKEN=…     # shared across projects
 cs secrets set <project> DB_PASSWORD=…    # project-scoped (overrides global)
 cs secrets get global                      # masked; --show for values
 cs secrets push <project>                  # encrypt the project's .env into the store; pull / diff for the other direction
-cs enroll <machine>                        # grant a new machine access (run where you already have it)
+cs trust <machine>                        # grant a new machine access (run where you already have it)
 cs secrets recovery                        # print a recovery key once → password manager
 ```
 
@@ -152,7 +152,7 @@ cs secrets recovery                        # print a recovery key once → passw
 ```sh
 cs handoff -m "where I stopped"      # snapshot the cwd project's working tree → wip/<user>/<branch> on its remote
 cs resume                            # on the other machine: back to uncommitted changes, branch deleted, note shown
-cs wip                               # parcels waiting · cs wip gc --older-than 14
+cs handoffs                               # handoffs waiting · cs handoffs gc --older-than 14
 ```
 
 Manual by design — nothing is pushed to a company remote by itself; `cs status` reminds you when a session ended with
@@ -165,7 +165,7 @@ created on demand. See `docs/HANDOFF.md`.
 
 | command | what it does |
 |---|---|
-| `cs sync` | commit → pull --rebase → push the config repo (+ `synced` projects). Memory/plan collisions union-merge; other conflicts abort cleanly: `cs sync --resolve ours\|theirs` |
+| `cs sync` | commit → pull --rebase → push the share (+ `synced` projects). Memory/plan collisions union-merge; other conflicts abort cleanly: `cs sync --resolve ours\|theirs` |
 | `cs hooks install\|status\|remove` | Claude Code hooks (push after each response, pull at session start) + a 15-min timer (systemd user / launchd) |
 | `cs doctor [--fix]` | platform, tools, links, settings drift, identities, remotes, leftover local-scope MCP secrets |
 | `cs deps [--install]` | prerequisites; installs age, sops, fnm, claude user-locally |
