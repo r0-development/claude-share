@@ -186,6 +186,17 @@ grep -q 'cs share-sync --pull-only.*cs note --print' "$CS_CONFIG_DIR/repo/claude
 grep -q 'cs handoff --mark' "$CS_CONFIG_DIR/repo/claude/settings.base.json" || die "session-end hook marks dirty work"
 pass hooks
 
+# --- command surface: --help shows exactly the visible tier; hidden commands still run
+VISIBLE="$($CS --help | sed -n '/^Commands:/,/^$/p' | grep -E '^  [a-z]' | awk '{print $1}' | tr '\n' ' ')"
+[ "$VISIBLE" = "sync new add clone secrets identity trust doctor update init help " ] || die "visible tier: $VISIBLE"
+SEC="$($CS secrets --help | sed -n '/^Commands:/,/^$/p' | grep -E '^  [a-z]' | awk '{print $1}' | tr '\n' ' ')"
+[ "$SEC" = "set get edit help " ] || die "secrets visible tier: $SEC"
+$CS apply >/dev/null && $CS link >/dev/null && $CS share path >/dev/null && $CS hooks >/dev/null && $CS handoffs >/dev/null && $CS status >/dev/null || die "hidden commands callable"
+($CS doctor || true) | grep -q "hooks installed" || die "doctor reports hooks"
+($CS doctor || true) | grep -q "timer" || die "doctor reports the timer"
+($CS doctor || true) | grep -q "last share sync" || die "doctor reports the last share sync"
+pass help-tiers
+
 # --- cs new (fake GitHub): dir, git init on default branch, first commit, repo created, pushed, registered, linked
 $CS new fresh --test -d "a fresh one" >/dev/null || die "cs new"
 [ -d "$HOME/gh/test/fresh.git" ] && git -C "$HOME/gh/test/fresh.git" log --oneline | grep -q init || die "repo created and pushed"

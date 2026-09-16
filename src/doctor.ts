@@ -10,9 +10,15 @@ import { applySettings } from "./apply.js";
 import * as ui from "./ui.js";
 import { which } from "./deps.js";
 import { unregisteredDirs } from "./status.js";
+import { hooksStatus } from "./hooks.js";
 import { add, fixRemote } from "./projects.js";
 
 type R = ["ok" | "warn" | "fail", string];
+/** "3 min ago" / "2 h ago" / "5 d ago" (or the raw text when it is not a time, e.g. "offline"). */
+export function ago(iso: string): string {
+  const t = Date.parse(iso); if (isNaN(t)) return iso; const s = Math.max(0, (Date.now() - t) / 1000);
+  return s < 90 ? "just now" : s < 3600 ? `${Math.round(s / 60)} min ago` : s < 86400 ? `${Math.round(s / 3600)} h ago` : `${Math.round(s / 86400)} d ago`;
+}
 const LINKS = ["CLAUDE.md", "rules", "agents", "themes", "keybindings.json", "plans"];
 
 /** Registered projects (present here) and workspace directories that have no remote yet — the ensure-remote candidates. */
@@ -65,6 +71,16 @@ export async function runDoctor(repo: string, m: Machine, man: Manifest, doFix =
     else if (url && p.url && url !== p.url) idr.push(["warn", `${p.name}: remote uses alias/other form ${url}; manifest ${p.url}  (cs doctor --fix)`]);
     if (ident && email !== ident.email) idr.push(["fail", `${p.name}: user.email resolves to '${email || "UNSET"}', expected ${ident.email}`]); }
   res.push(...(idr.length ? idr : [["ok", "git identities resolve per manifest"] as R]));
+  const hs = hooksStatus(repo);
+  res.push(hs.complete ? ["ok", "hooks installed (Stop, SessionStart, SessionEnd)"] : ["warn", `hooks ${hs.events.length ? "outdated" : "not installed"}  (cs sync re-installs them)`]);
+  res.push(hs.timerActive ? ["ok", "timer active (share sync every 15 min)"] : hs.timerFiles ? ["warn", "timer installed but not active  (cs sync re-installs it)"] : ["warn", "timer not installed  (cs sync installs it)"]);
+  res.push(hs.lastSync ? ["ok", `last share sync ${ago(hs.lastSync)}`] : ["warn", "the share has never synced here  (cs sync)"]);
+  if (m.secretsBackend !== "none" && existsSync(join(repo, ".sops.yaml"))) {
+    const machines = existsSync(join(repo, "machines")) ? readdirSync(join(repo, "machines")).filter((d) => existsSync(join(repo, "machines", d, "age.pub"))) : [];
+    if (!machines.includes("recovery")) res.push(["warn", "secrets have no recovery key — cs secrets recovery (print it once, keep it in your password manager)"]);
+    const others = machines.filter((d) => d !== m.name && d !== "recovery");
+    if (others.length) res.push(["ok", `machines trusted with the secrets: ${others.join(", ")}  (cs untrust <machine> when one is retired)`]);
+  }
   const rl = remoteless(man, m);
   for (const p of rl.projects) res.push(["fail", `${p.name}: no remote  (cs doctor --fix)`]);
   for (const d of rl.dirs) res.push(["warn", `${contract(join(ws, d.name))}: not registered${d.remote ? "" : ", no remote"}  (cs add ${contract(join(ws, d.name))})`]);

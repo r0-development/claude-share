@@ -47,14 +47,22 @@ export function installTimer(remove = false): string {
   const r = spawnSync("systemctl", ["--user", "daemon-reload"], { encoding: "utf8" }); if (r.status !== 0) return `systemd --user unavailable (${r.stderr?.trim()}); timer files written, not enabled`;
   const e = spawnSync("systemctl", ["--user", "enable", "--now", "cs-sync.timer"], { encoding: "utf8" }); return "systemd user timer every 15 min" + (e.status === 0 ? "" : ` (enable failed: ${e.stderr?.trim()})`);
 }
+/** Are the hooks in the share (all three events, with the current commands), is the timer active, when did the share last sync. */
+export function hooksStatus(repo: string): { events: string[]; complete: boolean; timerActive: boolean; timerFiles: boolean; lastSync?: string } {
+  const f = join(repo, "claude", "settings.base.json"); const data: any = existsSync(f) ? loads(readFileSync(f, "utf8")) : {};
+  const want = entries(); const events = Object.keys(want).filter((ev) => (data.hooks?.[ev] ?? []).some(ours));
+  const complete = Object.entries(want).every(([ev, es]) => JSON.stringify((data.hooks?.[ev] ?? []).filter(ours)) === JSON.stringify(es));
+  const timerFiles = platform.isMac() ? existsSync(join(home(), "Library", "LaunchAgents", "dev.claude-share.sync.plist")) : existsSync(join(home(), ".config", "systemd", "user", "cs-sync.timer"));
+  const timerActive = platform.isMac() ? timerFiles : spawnSync("systemctl", ["--user", "is-active", "cs-sync.timer"], { encoding: "utf8" }).stdout?.trim() === "active";
+  const last = join(stateDir(), "last-config"); const lastSync = existsSync(last) ? readFileSync(last, "utf8").trim() : undefined;
+  return { events, complete, timerActive, timerFiles, lastSync };
+}
 export function runHooks(repo: string, m: Machine, action: string, timer = true): number {
   if (action === "status") {
-    const f = join(repo, "claude", "settings.base.json"); const data: any = existsSync(f) ? loads(readFileSync(f, "utf8")) : {};
-    const have = Object.entries<any[]>(data.hooks ?? {}).filter(([, es]) => es.some(ours)).map(([ev]) => ev);
-    ui.kv("hooks", have.length ? have.join(", ") : ui.dim("not installed"));
-    const active = platform.isMac() ? existsSync(join(home(), "Library", "LaunchAgents", "dev.claude-share.sync.plist")) : spawnSync("systemctl", ["--user", "is-active", "cs-sync.timer"], { encoding: "utf8" }).stdout?.trim() === "active";
-    ui.kv("timer", active ? ui.green("active") : ui.dim("not active"));
-    const last = join(stateDir(), "last-config"); ui.kv("last sync", existsSync(last) ? readFileSync(last, "utf8").trim() : ui.dim("never")); return 0;
+    const st = hooksStatus(repo);
+    ui.kv("hooks", st.events.length ? st.events.join(", ") + (st.complete ? "" : ui.yellow("  (outdated — cs hooks install)")) : ui.dim("not installed"));
+    ui.kv("timer", st.timerActive ? ui.green("active") : ui.dim("not active"));
+    ui.kv("last sync", st.lastSync ?? ui.dim("never")); return 0;
   }
   const remove = action === "remove";
   installHooks(repo, m, remove) ? ui.ok(`${remove ? "removed" : "installed"} Claude Code hooks in claude/settings.base.json (run cs apply)`) : ui.skip(`hooks already ${remove ? "absent" : "present"}`);
