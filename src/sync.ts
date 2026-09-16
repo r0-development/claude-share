@@ -8,7 +8,7 @@ import { acquire } from "./lock.js";
 import type { Machine } from "./machine.js";
 import { checkoutRoot, loadManifest, selectedProjects, workspace, type Manifest } from "./manifest.js";
 import { applyGit, applyLinks, applySettings, applyShellRc } from "./apply.js";
-import { checkouts, syncProject } from "./link.js";
+import { checkouts, sweepRemoved, syncProject } from "./link.js";
 import { hooksStatus, installHooks, installTimer } from "./hooks.js";
 import { describe, newest, shareGitSync, type Side, type SyncOpts as ShareOpts } from "./sharesync.js";
 import { clone } from "./projects.js";
@@ -116,6 +116,7 @@ export async function runSync(repo: string, m: Machine, man: Manifest, o: SyncOp
     if (!hs.timerFiles || (hs.timerSupported && !hs.timerActive)) ui.step(`timer: ${await installTimer()}`);
     const changes: string[] = []; applySettings(repo, m, false, changes); applyLinks(repo, false, changes); applyGit(man, false, changes); applyShellRc(false, changes);
     for (const p of selectedProjects(man, m)) if (checkouts(p, ws).length) for (const c of syncProject(repo, p, ws)) changes.push(`${p.name}: ${c}`);
+    changes.push(...sweepRemoved(man, ws));   // a project removed from the share on another machine: its checkout here loses the pointer we wrote
     for (const c of changes) ui.step(c);
   }, { done: "nothing to repair" });
 

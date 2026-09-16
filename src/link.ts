@@ -1,5 +1,5 @@
 /** cs link: project state (<share>/projects/<name>/) ⇄ every checkout, newer wins; autoMemoryDirectory injected. */
-import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, statSync, unlinkSync, utimesSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, statSync, unlinkSync, utimesSync, writeFileSync } from "node:fs";
 import { dirname, join, relative } from "node:path";
 import * as git from "./git.js";
 import { contract, stateDir } from "./paths.js";
@@ -16,8 +16,9 @@ const NOT_SYNCED = new Set(["memory", "secrets"]);
 
 export const projectState = (repo: string, p: Project) => join(repo, "projects", p.name);
 export const memoryDir = (repo: string, p: Project) => join(projectState(repo, p), "memory");
-export function checkouts(p: Project, ws: string): string[] {
-  const root = checkoutRoot(p, ws);
+export function checkouts(p: Project, ws: string): string[] { return checkoutsAt(checkoutRoot(p, ws)); }
+/** The checkout at `root` and its worktrees; nothing when the directory is absent. */
+function checkoutsAt(root: string): string[] {
   if (!existsSync(root)) return [];
   if (!git.isRepo(root)) return [root];
   const w = git.worktrees(root); return w.length ? w : [root];
@@ -46,9 +47,34 @@ function localize(rel: string, data: Buffer, mem: string): Buffer {
   d.autoMemoryDirectory = contract(mem); return Buffer.from(dumps(d));
 }
 /** Which files the project state placed last time, so a file deleted from the state is removed from the checkouts. */
-const stateFile = (p: Project) => join(stateDir(), "project-state", `${p.name}.json`);
+const placedDir = () => join(stateDir(), "project-state");
+const stateFile = (p: Project) => join(placedDir(), `${p.name}.json`);
 const loadState = (p: Project): Set<string> => { try { return new Set(JSON.parse(readFileSync(stateFile(p), "utf8")).files); } catch { return new Set(); } };
 const saveState = (p: Project, files: Set<string>) => { mkdirSync(dirname(stateFile(p)), { recursive: true }); writeFileSync(stateFile(p), JSON.stringify({ files: [...files].sort() }, null, 2)); };
+export const dropPlacedRecord = (name: string) => rmSync(join(placedDir(), `${name}.json`), { force: true });
+/** The one thing cs wrote into a checkout that points at the share: the auto-memory location in .claude/settings.local.json.
+ *  Removes the key; the file goes when nothing else is left in it. Nothing else in the checkout is touched. True when it changed something. */
+export function stripPointer(checkout: string): boolean {
+  const f = join(checkout, SETTINGS_LOCAL); if (!existsSync(f)) return false;
+  let d: any; try { d = JSON.parse(readFileSync(f, "utf8") || "{}"); } catch { return false; }
+  if (!("autoMemoryDirectory" in d)) return false;
+  delete d.autoMemoryDirectory;
+  Object.keys(d).length ? writeFileSync(f, dumps(d)) : unlinkSync(f);
+  return true;
+}
+/** A placed-files record whose name is no longer in the manifest means the project was removed from the share (cs remove
+ *  on another machine): strip the pointer from the checkout at the project's default location — plain or `<name>/repo`
+ *  with its worktrees — and drop the record. Returns one line per checkout changed. */
+export function sweepRemoved(man: Manifest, ws: string): string[] {
+  const changes: string[] = []; if (!existsSync(placedDir())) return changes;
+  for (const f of readdirSync(placedDir())) {
+    if (!f.endsWith(".json")) continue; const name = f.slice(0, -5); if (man.projects[name]) continue;
+    const root = existsSync(join(ws, name, "repo", ".git")) ? join(ws, name, "repo") : join(ws, name);
+    for (const c of checkoutsAt(root)) if (stripPointer(c)) changes.push(`${name}: auto-memory pointer removed from ${contract(c)} (project removed from the share)`);
+    dropPlacedRecord(name);
+  }
+  return changes;
+}
 function write(path: string, data: Buffer, mtime?: number) {
   mkdirSync(dirname(path), { recursive: true }); const tmp = path + ".cs-tmp"; writeFileSync(tmp, data);
   if (mtime) utimesSync(tmp, mtime, mtime); renameSync(tmp, path);
@@ -92,6 +118,7 @@ export function runLink(repo: string, m: Machine, man: Manifest, names: string[]
   const ws = workspace(man, m);
   const unknown = names.filter((n) => !man.projects[n]); if (unknown.length) throw new Error(`cs: unknown project(s): ${unknown.join(", ")}`);
   let total = 0;
+  if (!names.length && !check) for (const c of sweepRemoved(man, ws)) { ui.step(c); total++; }
   for (const p of selectedProjects(man, m)) { if (names.length && !names.includes(p.name)) continue; if (!checkouts(p, ws).length) continue;
     const ch = syncProject(repo, p, ws, check); for (const c of ch) check ? ui.info(`${p.name}: ${c}`) : ui.step(`${p.name}: ${c}`); total += ch.length; }
   if (!total) ui.ok("project files in sync");

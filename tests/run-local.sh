@@ -208,7 +208,7 @@ pass hooks
 
 # --- command surface: --help shows exactly the visible tier; hidden commands still run
 VISIBLE="$($CS --help | sed -n '/^Commands:/,/^$/p' | grep -E '^  [a-z]' | awk '{print $1}' | tr '\n' ' ')"
-[ "$VISIBLE" = "sync new add clone secrets identity trust doctor update init help " ] || die "visible tier: $VISIBLE"
+[ "$VISIBLE" = "sync new add remove clone secrets identity trust doctor update init help " ] || die "visible tier: $VISIBLE"
 SEC="$($CS secrets --help | sed -n '/^Commands:/,/^$/p' | grep -E '^  [a-z]' | awk '{print $1}' | tr '\n' ' ')"
 [ "$SEC" = "set get edit help " ] || die "secrets visible tier: $SEC"
 $CS apply >/dev/null && $CS link >/dev/null && $CS share path >/dev/null && $CS hooks >/dev/null && $CS handoffs >/dev/null || die "hidden commands callable"
@@ -759,5 +759,67 @@ CS_ANSWERS='[]' desk $CS sync > "$HOME6/mig-sync.log" 2>&1 || { cat "$HOME6/mig-
 [ "$(git -C "$S/share.git" rev-parse HEAD)" = "$(git -C "$CFG6/share" rev-parse HEAD)" ] || die "the share still syncs from its new place"
 CS_ANSWERS='[]' laptop $CS sync >/dev/null 2>&1 && grep -q '^owner = "test"$' "$HOME7/.config/claude-share/share/projects.toml" || die "the rewritten manifest reaches the other machine"
 pass migration
+
+# --- cs remove (#24): a project goes out of the share — manifest block and sub-tables, project state, secrets — in one commit named after it,
+#     after one confirmation; its checkout and remote are never touched, only the auto-memory pointer cs wrote is taken back; the other
+#     machine tidies its own copy on its next cs sync; status and doctor offer cs remove instead of pointing at a machine that may be gone
+echo '# one guidance' > "$ONE6/CLAUDE.md"; echo '{"permissions":{"allow":["Bash(ls)"]}}' > "$ONE6/.claude/settings.local.json"
+CS_ANSWERS='[]' desk $CS sync >/dev/null 2>&1 || die "desk sync before remove"
+git -C "$CFG6/share" ls-files --error-unmatch projects/one/CLAUDE.md >/dev/null 2>&1 || die "one has project state in the share"
+grep -q autoMemoryDirectory "$ONE6/.claude/settings.local.json" && grep -q 'Bash(ls)' "$ONE6/.claude/settings.local.json" || die "pointer and own settings present before remove"
+printf '\n[projects.one.handoff]\nextra = ["dist/"]\n' >> "$CFG6/share/projects.toml"
+mkdir -p "$CFG6/share/secrets/projects" && printf 'API=ENC[x]\nsops_version=3.9.0\n' > "$CFG6/share/secrets/projects/one.env"   # the shape the share's plaintext guard accepts
+(cd "$CFG6/share" && git add -A && git commit -qm "one: handoff table + secrets")
+# an unknown name removes nothing and lists what is known; no terminal and no --yes refuses; "n" changes nothing
+(desk $CS remove nope > "$HOME6/rm-nope.log" 2>&1) && die "unknown name must fail" || true
+grep -q "unknown project 'nope'" "$HOME6/rm-nope.log" && grep -q "known: one" "$HOME6/rm-nope.log" || { cat "$HOME6/rm-nope.log"; die "unknown name names the known projects"; }
+(desk $CS remove one > "$HOME6/rm-noyes.log" 2>&1) && die "no terminal, no --yes must refuse" || true
+grep -q "add --yes" "$HOME6/rm-noyes.log" || { cat "$HOME6/rm-noyes.log"; die "refusal hints at --yes"; }
+CS_ANSWERS='["n"]' desk $CS remove one > "$HOME6/rm-n.log" 2>&1 || { cat "$HOME6/rm-n.log"; die "declining is not a failure"; }
+grep -q "nothing removed" "$HOME6/rm-n.log" && grep -q '^\[projects.one\]' "$CFG6/share/projects.toml" && [ -f "$CFG6/share/projects/one/CLAUDE.md" ] && [ -f "$CFG6/share/secrets/projects/one.env" ] || die "n changes nothing"
+# "y": the summary names what goes and what is kept; everything named goes in one commit; the checkout keeps everything but the pointer
+BEFORE_RM="$(git -C "$CFG6/share" rev-parse HEAD)"
+CS_ANSWERS='["y"]' desk $CS remove one > "$HOME6/rm-y.log" 2>&1 || { cat "$HOME6/rm-y.log"; die "cs remove one"; }
+for want in "manifest entry" "[projects.one]" "[projects.one.handoff]" "project state" "projects/one/" "secrets/projects/one.env" "kept   checkout" "~/dev/one" "kept   remote" \
+  "removed one from the share" "checkout kept at ~/dev/one" "the remote stays" "undo: git -C ~/.config/claude-share/share revert"; do
+  grep -qF -- "$want" "$HOME6/rm-y.log" || { cat "$HOME6/rm-y.log"; die "remove output: $want"; }
+done
+! grep -q '^\[projects.one' "$CFG6/share/projects.toml" && grep -q '^\[identities.test\]' "$CFG6/share/projects.toml" || die "manifest block and sub-table gone, the rest kept"
+[ ! -e "$CFG6/share/projects/one" ] && [ ! -e "$CFG6/share/secrets/projects/one.env" ] || die "project state and secrets gone"
+[ "$(git -C "$CFG6/share" log -1 --format=%s)" = "remove one" ] && [ "$(git -C "$CFG6/share" rev-parse HEAD~1)" = "$BEFORE_RM" ] && [ -z "$(git -C "$CFG6/share" status --porcelain)" ] || die "one share commit named after the project"
+[ -d "$ONE6/.git" ] && [ -f "$ONE6/CLAUDE.md" ] && [ -f "$ONE6/README" ] && git -C "$S/one.git" rev-parse HEAD >/dev/null || die "checkout and remote untouched"
+! grep -q autoMemoryDirectory "$ONE6/.claude/settings.local.json" && grep -q 'Bash(ls)' "$ONE6/.claude/settings.local.json" || die "pointer stripped, own settings kept"
+grep -q '^\.claude/$' "$ONE6/.git/info/exclude" || die "exclude lines kept"
+[ ! -e "$ST6/project-state/one.json" ] || die "placed-files record dropped"
+git -C "$CFG6/share" revert --no-edit HEAD >/dev/null && grep -q '^\[projects.one.handoff\]' "$CFG6/share/projects.toml" && [ -f "$CFG6/share/projects/one/CLAUDE.md" ] && [ -f "$CFG6/share/secrets/projects/one.env" ] || die "git revert brings everything back"
+git -C "$CFG6/share" reset -q --hard HEAD~1
+# leftovers: state or secrets for names no manifest entry knows → doctor points at cs remove; several names go in one call (--yes), --no-commit leaves the commit to the user
+mkdir -p "$CFG6/share/projects/ghost" "$CFG6/share/secrets/projects" && echo x > "$CFG6/share/projects/ghost/CLAUDE.md" && printf 'K=ENC[v]\nsops_version=3.9.0\n' | tee "$CFG6/share/secrets/projects/ghost2.env" > "$CFG6/share/secrets/projects/ghost3.env"
+(cd "$CFG6/share" && git add -A && git commit -qm "leftovers")
+(desk $CS doctor > "$HOME6/doctor-ghost.log" 2>&1 || true)
+grep -q "ghost: state/secrets in the share but not registered  (cs remove ghost)" "$HOME6/doctor-ghost.log" && grep -q "(cs remove ghost2)" "$HOME6/doctor-ghost.log" || { cat "$HOME6/doctor-ghost.log"; die "doctor flags the leftovers"; }
+desk $CS remove ghost ghost2 --yes >/dev/null 2>&1 || die "remove two orphans with --yes"
+[ ! -e "$CFG6/share/projects/ghost" ] && [ ! -e "$CFG6/share/secrets/projects/ghost2.env" ] && [ "$(git -C "$CFG6/share" log -1 --format=%s)" = "remove ghost, ghost2" ] || die "orphans removed in one commit"
+desk $CS remove ghost3 --yes --no-commit >/dev/null 2>&1 || die "remove --no-commit"
+[ ! -e "$CFG6/share/secrets/projects/ghost3.env" ] && git -C "$CFG6/share" status --porcelain | grep -q "secrets/projects/ghost3.env" || die "--no-commit leaves the deletion uncommitted"
+(cd "$CFG6/share" && git add -A && git commit -qm "remove ghost3")
+(desk $CS doctor > "$HOME6/doctor-clean.log" 2>&1 || true); grep -q "registered projects only" "$HOME6/doctor-clean.log" || { cat "$HOME6/doctor-clean.log"; die "doctor clean after removal"; }
+# a project with no remote that is not here: status offers cs remove beside the machine that has it; doctor's "no remote" line does the same
+printf '\n[projects.phantom]\nprofiles = ["all"]\n' >> "$CFG6/share/projects.toml"; (cd "$CFG6/share" && git add -A && git commit -qm "phantom")
+(desk $CS status --no-fetch > "$HOME6/status-phantom.log" 2>&1 || true)
+grep -q "phantom.*no remote, not here.*cs doctor --fix on the machine that has it · or cs remove phantom" "$HOME6/status-phantom.log" || { cat "$HOME6/status-phantom.log"; die "status offers cs remove"; }
+mkdir -p "$HOME6/dev/phantom" && (cd "$HOME6/dev/phantom" && git init -q -b master && echo p > p && git add p && git commit -qm p)
+(desk $CS doctor > "$HOME6/doctor-phantom.log" 2>&1 || true); grep -q "phantom: no remote  (cs doctor --fix · or cs remove phantom)" "$HOME6/doctor-phantom.log" || { cat "$HOME6/doctor-phantom.log"; die "doctor offers cs remove"; }
+desk $CS remove phantom --yes >/dev/null 2>&1 && ! grep -q phantom "$CFG6/share/projects.toml" && [ -f "$HOME6/dev/phantom/p" ] || die "phantom removed, its directory kept"
+# the other machine: its next cs sync strips the pointer from its own checkout of the removed project and drops its record — nothing else
+grep -q autoMemoryDirectory "$ONE7/.claude/settings.local.json" || die "laptop still has the pointer before its sync"
+desk $CS share-sync >/dev/null 2>&1 || die "desk pushes the share"
+CS_ANSWERS='[]' laptop $CS sync > "$HOME7/sync-removed.log" 2>&1 || { cat "$HOME7/sync-removed.log"; die "laptop sync after the removal"; }
+grep -q "one: auto-memory pointer removed from ~/dev/one" "$HOME7/sync-removed.log" || { cat "$HOME7/sync-removed.log"; die "laptop reports the tidy-up"; }
+[ -d "$ONE7/.git" ] && [ -f "$ONE7/README" ] || die "laptop checkout kept"
+{ [ ! -e "$ONE7/.claude/settings.local.json" ] || ! grep -q autoMemoryDirectory "$ONE7/.claude/settings.local.json"; } || die "laptop pointer stripped"
+[ ! -e "$HOME7/.local/state/cs/project-state/one.json" ] || die "laptop record dropped"
+CS_ANSWERS='[]' laptop $CS sync > "$HOME7/sync-removed2.log" 2>&1 && ! grep -q "pointer removed" "$HOME7/sync-removed2.log" || die "the tidy-up happens once"
+pass remove
 
 echo "ALL PASS (HOME=$HOME)"

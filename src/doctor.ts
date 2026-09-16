@@ -14,6 +14,7 @@ import { ago } from "./plan.js";
 import { HOOK_EVENTS, hooksStatus } from "./hooks.js";
 import { add, fixRemote } from "./projects.js";
 import { findOldNames, migrate } from "./migrate.js";
+import { orphans } from "./remove.js";
 
 type R = ["ok" | "warn" | "fail", string];
 const LINKS = ["CLAUDE.md", "rules", "agents", "themes", "keybindings.json", "plans"];
@@ -86,9 +87,12 @@ export async function runDoctor(repo: string, m: Machine, man: Manifest, doFix =
   for (const o of old) res.push(["warn", `old name — ${o.what}: ${o.move}${o.then ? `; ${o.then}` : ""}  ${o.apply ? "(cs doctor --fix; docs/MIGRATION.md)" : "(by hand; docs/MIGRATION.md)"}`]);
   if (!old.length) res.push(["ok", "on-disk names current (share key, share, handoffs, state)"]);
   const rl = remoteless(man, m);
-  for (const p of rl.projects) res.push(["fail", `${p.name}: no remote  (cs doctor --fix)`]);
+  for (const p of rl.projects) res.push(["fail", `${p.name}: no remote  (cs doctor --fix · or cs remove ${p.name})`]);
   for (const d of rl.dirs) res.push(["warn", `${contract(join(ws, d.name))}: not registered${d.remote ? "" : ", no remote"}  (cs add ${contract(join(ws, d.name))})`]);
   if (!rl.projects.length && !rl.dirs.length) res.push(["ok", "every project has a remote; nothing unregistered under the workspace"]);
+  const left = orphans(repo, man);   // state or secrets for a name no longer in the manifest: never fixed by --fix, removal always asks (or takes --yes)
+  for (const n of left) res.push(["warn", `${n}: state/secrets in the share but not registered  (cs remove ${n})`]);
+  if (!left.length) res.push(["ok", "the share holds state and secrets for registered projects only"]);
   const sym = { ok: ui.green("✓"), warn: ui.yellow("!"), fail: ui.red("✗") };
   if (compact) { const bad = res.filter(([l]) => l !== "ok"); if (bad.length) ui.table(bad.map(([l, msg]) => [sym[l], msg])); ui.step(`${res.length - bad.length} of ${res.length} checks passed`); }
   else ui.table(res.map(([l, msg]) => [sym[l], msg]));
