@@ -22,7 +22,7 @@ interface Unit { path: string; branch: string; rel: string }
 const userSlug = (p: string) => git.slug(git.configGet(p, "user.name") || userInfo().username);
 const wipRef = (user: string, branch: string) => `wip/${user}/${git.slug(branch)}`;
 const hoff = (p: Project): Record<string, any> => (p.handoff ?? {}) as Record<string, any>;
-const enabled = (p: Project) => p.kind === "git" && (p.handoff as any) !== false && hoff(p).enabled !== false;
+const enabled = (p: Project) => (p.handoff as any) !== false && hoff(p).enabled !== false;
 
 function units(p: Project, ws: string): Unit[] {
   const cont = container(p, ws);
@@ -197,6 +197,6 @@ export function pending(): Record<string, string> { try { return JSON.parse(read
 export function clearPending(name: string) { const cur = pending(); delete cur[name]; writeFileSync(pendingFile(), JSON.stringify(cur)); }
 export const projectsFor = (man: Manifest, m: Machine, names: string[], all: boolean): Project[] => {
   if (names.length) return names.map((n) => { const p = man.projects[n]; if (!p) throw new Error(`cs: unknown project '${n}'`); return p; });
-  if (all) return selectedProjects(man, m).filter((p) => p.kind === "git");
+  if (all) return selectedProjects(man, m);
   const p = projectForPath(man, m, process.cwd()); if (!p) throw new Error("cs: not inside a registered project (pass a name or --all)"); return [p];
 };

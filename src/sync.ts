@@ -1,10 +1,10 @@
-/** cs sync: commit → fetch → ff/rebase (union attrs) → on conflict abort + blocked marker → push. */
+/** share sync: commit → fetch → ff/rebase (union attrs) → on conflict abort + blocked marker → push. */
 import { closeSync, existsSync, mkdirSync, openSync, readFileSync, statSync, unlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import * as git from "./git.js";
 import { contract, stateDir } from "./paths.js";
 import type { Machine } from "./config.js";
-import { checkoutRoot, loadManifest, selectedProjects, workspace, type Manifest } from "./manifest.js";
+import { loadManifest, selectedProjects, workspace, type Manifest } from "./manifest.js";
 import { runApply } from "./apply.js";
 import { checkouts, runLink, syncProject } from "./link.js";
 import * as ui from "./ui.js";
@@ -60,7 +60,7 @@ export async function gitSync(repo: string, label: string, machine: string, o: S
     return true;
   } finally { try { unlock(label, fd); } catch {} }
 }
-export async function runSync(repo: string, m: Machine, man: Manifest, o: SyncOpts & { projects?: boolean; debounce?: number } = {}): Promise<number> {
+export async function runSync(repo: string, m: Machine, man: Manifest, o: SyncOpts & { debounce?: number } = {}): Promise<number> {
   const ws = workspace(man, m); let rc = 0;
   if (o.debounce) { const last = join(stateDir(), "last-config"); if (existsSync(last) && Date.now() - statSync(last).mtimeMs < o.debounce * 1000) return 0; }
   const before = git.out(["rev-parse", "HEAD"], repo);
@@ -72,6 +72,5 @@ export async function runSync(repo: string, m: Machine, man: Manifest, o: SyncOp
     if (o.pullOnly || changed.split("\n").some((x) => x.startsWith("claude/") || x.startsWith("projects.toml") || x.startsWith("plans/"))) runApply(repo, m, man);
     runLink(repo, m, loadManifest(repo));
   }
-  if (o.projects !== false && !o.pullOnly) for (const p of selectedProjects(man, m)) if (p.kind === "synced") { const root = checkoutRoot(p, ws); if (existsSync(root) && git.isRepo(root) && !(await gitSync(root, p.name, m.name, { timeout: o.timeout }))) rc = 2; }
   return rc;
 }

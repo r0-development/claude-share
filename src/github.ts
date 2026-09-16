@@ -5,6 +5,9 @@ import { csConfigDir } from "./paths.js";
 import * as ui from "./ui.js";
 
 export class GitHubError extends Error {}
+/** Test seam: with CS_FAKE_GITHUB=<dir>, "GitHub" is that directory — repos are bare clones at <dir>/<owner>/<name>.git. */
+export const fakeDir = () => process.env.CS_FAKE_GITHUB;
+export const repoUrl = (owner: string, name: string) => (fakeDir() ? join(fakeDir()!, owner, `${name}.git`) : `git@github.com:${owner}/${name}.git`);
 export const tokenFile = (owner: string) => join(csConfigDir(), "tokens", owner.toLowerCase());
 export function getToken(owner: string): string | undefined {
   const env = process.env[`CS_GITHUB_TOKEN_${owner.toUpperCase().replace(/-/g, "_")}`];
@@ -45,6 +48,7 @@ export async function createRepo(o: string, n: string, t: string, priv = true, d
   return api("POST", "/user/repos", t, body);
 }
 export async function ensureToken(owner: string, interactive = true): Promise<string> {
+  if (fakeDir()) return "fake";
   const t = getToken(owner);
   if (t) return t;
   if (!interactive) throw new GitHubError(`no GitHub token for '${owner}' — run cs token set ${owner}`);
@@ -55,6 +59,7 @@ export async function ensureToken(owner: string, interactive = true): Promise<st
   return tok;
 }
 export async function ensureRepo(o: string, n: string, t: string, priv = true, description = "") {
+  if (fakeDir()) { const d = repoUrl(o, n); if (existsSync(d)) return false; mkdirSync(d, { recursive: true }); const { exec } = await import("./proc.js"); await exec("git", ["init", "-q", "--bare", d]); return true; }
   if (await repoExists(o, n, t)) return false;
   await createRepo(o, n, t, priv, description);
   return true;

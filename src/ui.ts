@@ -14,6 +14,8 @@ export const isTTY = () => Boolean(process.stdin.isTTY && process.stdout.isTTY);
 const scripted: string[] | null = process.env.CS_ANSWERS ? JSON.parse(process.env.CS_ANSWERS) : null;
 function nextAnswer(): string | undefined { return scripted && scripted.length ? scripted.shift() : undefined; }
 export const isScripted = () => scripted !== null;
+/** A prompt can be answered: a terminal, or scripted answers still queued. Otherwise callers take defaults. */
+export const canAsk = () => isTTY() || Boolean(scripted && scripted.length);
 
 export const c = pc;
 export const dim = pc.dim, bold = pc.bold, green = pc.green, yellow = pc.yellow, red = pc.red, cyan = pc.cyan, gray = pc.gray, magenta = pc.magenta;

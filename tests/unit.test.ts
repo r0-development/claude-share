@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { mergeLayers, diffKeys } from "../src/jsonmerge.ts";
-import { parseManifest, validate, selected, identityForUrl, projectBlock, globs, globMatch } from "../src/manifest.ts";
+import { parseManifest, validate, selected, identityForUrl, projectBlock, globs, globMatch, hasRemote } from "../src/manifest.ts";
 import { canonicalGithub } from "../src/git.ts";
 import { parseRepoUrl } from "../src/master.ts";
 import { envVarName } from "../src/adopt.ts";
@@ -14,11 +14,14 @@ test("jsonmerge: dicts recurse, scalars override, permission lists union, plain 
   assert.deepEqual((mergeLayers({ permissions: { allow: ["A", "B"] } }, { permissions: { allow: ["B", "C"] } }) as any).permissions.allow, ["A", "B", "C"]);
   assert.deepEqual(diffKeys({ a: { x: 1 }, b: 1 }, { a: { x: 2 }, c: 1 }), ["a.x", "b", "c"]);
 });
-const TOML = `schema_version = 1\n[workspace]\nroot = "~/dev"\n[identities.work]\nname = "W"\nemail = "w@x"\nowner = "acme"\n[projects.a]\nkind = "git"\nurl = "git@github.com:acme/a.git"\nidentity = "work"\nprofiles = ["work"]\n[projects.b]\nkind = "synced"\nprofiles = ["all"]\n[projects.c]\nkind = "local"\nmachines = ["m1"]\n`;
+const TOML = `schema_version = 1\n[workspace]\nroot = "~/dev"\n[identities.work]\nname = "W"\nemail = "w@x"\nowner = "acme"\n[projects.a]\nkind = "git"\nurl = "git@github.com:acme/a.git"\nidentity = "work"\nprofiles = ["work"]\n[projects.b]\nkind = "synced"\nprofiles = ["all"]\n[projects.c]\nmachines = ["m1"]\n`;
 test("manifest: parse, validate, select, identity globs, block round-trip", () => {
   const m = parseManifest(TOML);
   assert.deepEqual(validate(m), []);
   assert.deepEqual(Object.keys(m.projects).sort(), ["a", "b", "c"]);
+  // `kind` is ignored: a project is a project; one without a url is merely remote-less (flagged by cs / cs doctor)
+  assert.ok(!("kind" in m.projects.a) && hasRemote(m.projects.a) && !hasRemote(m.projects.b) && !hasRemote(m.projects.c));
+  assert.ok(!projectBlock(m.projects.a).includes("kind"));
   const mach = (name: string, profiles: string[], exclude: string[] = []) => ({ name, profiles, exclude, secretsBackend: "sops" as const });
   assert.deepEqual(Object.values(m.projects).filter((p) => selected(p, mach("m1", ["work"]))).map((p) => p.name), ["a", "b", "c"]);
   assert.deepEqual(Object.values(m.projects).filter((p) => selected(p, mach("m2", ["personal"], ["b"]))).map((p) => p.name), []);
@@ -30,7 +33,7 @@ test("manifest: parse, validate, select, identity globs, block round-trip", () =
   assert.ok(globMatch("**/.env*", ".env.local") && globMatch("*token*", "my-token.txt") && !globMatch("*.pem", "a/b.pem"));
   const bad = parseManifest(TOML + "[projects.d]\nkind = \"git\"\nurl = \"git@github.com:other/d.git\"\nidentity = \"work\"\n");
   assert.ok(validate(bad).some((e) => e.includes("does not match identity")));
-  const again = parseManifest(TOML + "\n" + projectBlock({ name: "x", kind: "git", url: "git@github.com:acme/x.git", identity: "work", profiles: ["work"], machines: [], layout: "worktrees", handoff: {}, sync: {} })).projects.x;
+  const again = parseManifest(TOML + "\n" + projectBlock({ name: "x", url: "git@github.com:acme/x.git", identity: "work", profiles: ["work"], machines: [], layout: "worktrees", handoff: {} })).projects.x;
   assert.deepEqual([again.url, again.identity, again.layout, again.profiles], ["git@github.com:acme/x.git", "work", "worktrees", ["work"]]);
 });
 test("git: canonical GitHub url forms collapse", () => {

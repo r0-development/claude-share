@@ -19,7 +19,7 @@ export const memoryDir = (repo: string, p: Project) => join(sideStore(repo, p), 
 export function checkouts(p: Project, ws: string): string[] {
   const root = checkoutRoot(p, ws);
   if (!existsSync(root)) return [];
-  if (p.kind !== "git" || !git.isRepo(root)) return [root];
+  if (!git.isRepo(root)) return [root];
   const w = git.worktrees(root); return w.length ? w : [root];
 }
 function walk(dir: string, fn: (f: string) => void, skipDir?: (rel: string) => boolean, base = dir) {

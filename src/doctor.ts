@@ -5,18 +5,36 @@ import * as git from "./git.js";
 import { claudeDir, claudeJson, contract } from "./paths.js";
 import * as platform from "./platform.js";
 import type { Machine } from "./config.js";
-import { checkoutRoot, identityMatches, selectedProjects, workspace, type Manifest } from "./manifest.js";
+import { checkoutRoot, identityMatches, loadManifest, selectedProjects, workspace, type Manifest, type Project } from "./manifest.js";
 import { applySettings } from "./apply.js";
 import * as ui from "./ui.js";
 import { which } from "./deps.js";
+import { unregisteredDirs } from "./status.js";
+import { add, fixRemote } from "./projects.js";
 
 type R = ["ok" | "warn" | "fail", string];
 const LINKS = ["CLAUDE.md", "rules", "agents", "themes", "keybindings.json", "plans"];
 
-export function fix(repo: string, m: Machine, man: Manifest) {
+/** Registered projects (present here) and workspace directories that have no remote yet — the ensure-remote candidates. */
+export function remoteless(man: Manifest, m: Machine): { projects: Project[]; dirs: { name: string; remote: string }[] } {
   const ws = workspace(man, m);
+  const projects = selectedProjects(man, m).filter((p) => { const root = checkoutRoot(p, ws); return existsSync(root) && (!p.url || !git.isRepo(root) || !git.remoteUrl(root)); });
+  return { projects, dirs: unregisteredDirs(ws, new Set(Object.values(man.projects).map((p) => p.path || p.name))) };
+}
+export async function fix(repo: string, m: Machine, man: Manifest) {
+  const ws = workspace(man, m);
+  const { projects, dirs } = remoteless(man, m);
+  for (const p of projects) {
+    if (!ui.canAsk()) { ui.warn(`${p.name}: no remote — run cs doctor --fix in a terminal to create one`); continue; }
+    if (await ui.confirm(`${p.name} has no remote — create a private GitHub repo and push it?`, true)) { if (await fixRemote(repo, m, man, p)) man = loadManifest(repo); }
+  }
+  for (const d of dirs) {
+    const path = join(ws, d.name);
+    if (!ui.canAsk()) { ui.warn(`${d.name}: not registered — cs add ${contract(path)}`); continue; }
+    if (await ui.confirm(`${d.name} is not registered — register it${d.remote ? "" : " (creating a private GitHub repo)"}?`, true)) { try { await add(repo, m, man, path, { profiles: [], description: "", noCommit: false }); man = loadManifest(repo); } catch (e: any) { ui.fail(e.message); } }
+  }
   for (const p of selectedProjects(man, m)) {
-    const root = checkoutRoot(p, ws); if (p.kind !== "git" || !existsSync(root) || !git.isRepo(root) || !p.url) continue;
+    const root = checkoutRoot(p, ws); if (!existsSync(root) || !git.isRepo(root) || !p.url) continue;
     const url = git.remoteUrl(root); if (url === p.url) continue;
     const cur = git.canonicalGithub(url), want = git.canonicalGithub(p.url);
     let same = cur === want; const ident = p.identity ? man.identities[p.identity] : undefined;
@@ -25,8 +43,8 @@ export function fix(repo: string, m: Machine, man: Manifest) {
     else ui.warn(`${p.name}: remote ${url} is a different repo than manifest ${p.url}; not changing it`);
   }
 }
-export function runDoctor(repo: string, m: Machine, man: Manifest, doFix = false, compact = false): number {
-  if (doFix) fix(repo, m, man);
+export async function runDoctor(repo: string, m: Machine, man: Manifest, doFix = false, compact = false): Promise<number> {
+  if (doFix) { await fix(repo, m, man); man = loadManifest(repo); }
   const res: R[] = [];
   platform.refuseUnsupported(); res.push(["ok", platform.describe()]);
   res.push(["ok", `node ${process.versions.node}`]);
@@ -41,12 +59,16 @@ export function runDoctor(repo: string, m: Machine, man: Manifest, doFix = false
     res.push(hits.length ? ["warn", `local-scope MCP servers with secrets in ~/.claude.json (machine-only): ${hits.join(", ")} — keep until cs secrets provides the \${VAR}s, then \`claude mcp remove <name> -s local\``] : ["ok", "no secret-bearing local-scope MCP servers"]); } catch { res.push(["warn", "~/.claude.json unparsable"]); } }
   res.push(process.env.GH_TOKEN || process.env.GITHUB_TOKEN ? ["warn", "GH_TOKEN/GITHUB_TOKEN is exported in this shell; gh ignores its stored logins while set"] : ["ok", "no GH_TOKEN override in env"]);
   const idr: R[] = [];
-  for (const p of selectedProjects(man, m)) { const root = checkoutRoot(p, ws); if (p.kind !== "git" || !existsSync(root) || !git.isRepo(root)) continue;
+  for (const p of selectedProjects(man, m)) { const root = checkoutRoot(p, ws); if (!existsSync(root) || !git.isRepo(root)) continue;
     const ident = p.identity ? man.identities[p.identity] : undefined; const email = git.configGet(root, "user.email"); const url = git.remoteUrl(root);
     if (p.url && git.canonicalGithub(url) !== git.canonicalGithub(p.url)) idr.push(["warn", `${p.name}: remote ${url} ≠ manifest ${p.url}  (cs doctor --fix)`]);
     else if (url && p.url && url !== p.url) idr.push(["warn", `${p.name}: remote uses alias/other form ${url}; manifest ${p.url}  (cs doctor --fix)`]);
     if (ident && email !== ident.email) idr.push(["fail", `${p.name}: user.email resolves to '${email || "UNSET"}', expected ${ident.email}`]); }
   res.push(...(idr.length ? idr : [["ok", "git identities resolve per manifest"] as R]));
+  const rl = remoteless(man, m);
+  for (const p of rl.projects) res.push(["fail", `${p.name}: no remote  (cs doctor --fix)`]);
+  for (const d of rl.dirs) res.push(["warn", `${contract(join(ws, d.name))}: not registered${d.remote ? "" : ", no remote"}  (cs add ${contract(join(ws, d.name))})`]);
+  if (!rl.projects.length && !rl.dirs.length) res.push(["ok", "every project has a remote; nothing unregistered under the workspace"]);
   const sym = { ok: ui.green("✓"), warn: ui.yellow("!"), fail: ui.red("✗") };
   if (compact) { const bad = res.filter(([l]) => l !== "ok"); if (bad.length) ui.table(bad.map(([l, msg]) => [sym[l], msg])); ui.step(`${res.length - bad.length} of ${res.length} checks passed`); }
   else ui.table(res.map(([l, msg]) => [sym[l], msg]));

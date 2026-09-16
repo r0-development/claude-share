@@ -6,6 +6,7 @@ export HOME="$(mktemp -d)"
 export CLAUDE_CONFIG_DIR="$HOME/.claude"
 export XDG_STATE_HOME="$HOME/.local/state"
 export CS_CONFIG_DIR="$HOME/.config/claude-share"
+export CS_FAKE_GITHUB="$HOME/gh"   # "GitHub" is a directory of bare repos: <owner>/<name>.git
 unset GH_TOKEN GITHUB_TOKEN
 export GIT_AUTHOR_NAME=test GIT_AUTHOR_EMAIL=test@example.com GIT_COMMITTER_NAME=test GIT_COMMITTER_EMAIL=test@example.com
 CS="$ROOT/bin/cs"
@@ -42,10 +43,10 @@ cat >> "$HOME/cfg-src/projects.toml" <<TOML
 [identities.test]
 name = "Test User"
 email = "test@example.com"
+owner = "test"
 url_globs = ["$HOME/remote.git", "$HOME/remote.git/**"]
 
 [projects.alpha]
-kind = "git"
 url = "$HOME/remote.git"
 identity = "test"
 profiles = ["all"]
@@ -58,7 +59,6 @@ profiles = ["work"]
 layout = "worktrees"
 
 [projects.gamma]
-kind = "git"
 url = "$HOME/remote.git"
 identity = "test"
 profiles = ["personal"]
@@ -148,19 +148,41 @@ grep -q sonnet "$CS_CONFIG_DIR/repo/claude/settings.base.json" || die "theirs ap
 grep -q sonnet "$HOME/.claude/settings.json" || die "settings re-rendered after pull"
 pass conflict-abort-resolve
 
-$CS status >/dev/null; $CS doctor >/dev/null || die "doctor"
-$CS >/dev/null || die "dashboard"
+# --- every project has a remote (ADR-0001): a registered project without one and an unregistered dir are flagged with the fixing command
+printf '\n[projects.orphan]\nprofiles = ["all"]\n' >> "$CS_CONFIG_DIR/repo/projects.toml"; (cd "$CS_CONFIG_DIR/repo" && git add -A && git commit -qm "orphan: registered before it had a remote")
+mkdir -p "$HOME/dev/orphan" && (cd "$HOME/dev/orphan" && git init -q -b master && echo x > f && git add f && git commit -qm init)
+($CS status || true) | grep -q "orphan.*no remote.*cs doctor --fix" || die "status flags the remote-less project"
+($CS status || true) | grep -q "notes: not registered, no remote.*cs add" || die "status flags the unregistered dir"
+($CS doctor || true) | grep -q "orphan: no remote" || die "doctor flags the remote-less project"
+$CS doctor >/dev/null && die "doctor must fail while a project has no remote" || true
+$CS >/dev/null 2>&1 || true
+#            orphan: create repo? y   notes: register? n
+CS_ANSWERS='["y","n"]' $CS doctor --fix >/dev/null || die "doctor --fix"
+[ -d "$HOME/gh/test/orphan.git" ] || die "doctor --fix created the (fake) GitHub repo"
+[ "$(git -C "$HOME/dev/orphan" remote get-url origin)" = "$HOME/gh/test/orphan.git" ] || die "origin added"
+git -C "$HOME/gh/test/orphan.git" log --oneline | grep -q init || die "pushed"
+grep -A3 '^\[projects.orphan\]' "$CS_CONFIG_DIR/repo/projects.toml" | grep -q 'url = ' || die "manifest url recorded"
+($CS doctor || true) | grep -q "orphan" && die "orphan must be clean after --fix" || true
+# cs add on a directory without a remote: same ensure-remote step
+mkdir -p "$HOME/dev/notes" && (cd "$HOME/dev/notes" && git init -q -b master && echo n > n.md && git add n.md && git commit -qm notes)
+$CS add "$HOME/dev/notes" >/dev/null || die "cs add remote-less"
+[ -d "$HOME/gh/test/notes.git" ] && grep -q '^\[projects.notes\]' "$CS_CONFIG_DIR/repo/projects.toml" || die "cs add created the repo and registered"
+# cs add on a directory that already has a remote: registered as is, identity inferred from the url
+git clone -q "$HOME/remote.git" "$HOME/dev/delta" && $CS add "$HOME/dev/delta" >/dev/null || die "cs add with remote"
+grep -A3 '^\[projects.delta\]' "$CS_CONFIG_DIR/repo/projects.toml" | grep -q 'identity = "test"' || die "identity inferred"
+$CS doctor >/dev/null || die "doctor clean"
 pass status-doctor
 
-# --- cs new (no GitHub in tests): dir, git init on default branch, first commit, registered, linked
-$CS new fresh --test --no-github -d "a fresh one" >/dev/null || die "cs new"
+# --- cs new (fake GitHub): dir, git init on default branch, first commit, repo created, pushed, registered, linked
+$CS new fresh --test -d "a fresh one" >/dev/null || die "cs new"
+[ -d "$HOME/gh/test/fresh.git" ] && git -C "$HOME/gh/test/fresh.git" log --oneline | grep -q init || die "repo created and pushed"
 [ "$(git -C "$HOME/dev/fresh" symbolic-ref --short HEAD)" = "master" ] || die "default branch master"
 [ "$(git -C "$HOME/dev/fresh" config user.email)" = "test@example.com" ] || die "new project identity"
 git -C "$HOME/dev/fresh" log --oneline | grep -q init || die "first commit"
 grep -q '^\[projects.fresh\]' "$CS_CONFIG_DIR/repo/projects.toml" || die "registered"
 grep -q autoMemoryDirectory "$HOME/dev/fresh/.claude/settings.local.json" || die "linked"
 [ -z "$(git -C "$HOME/dev/fresh" status --porcelain)" ] || die "fresh stays clean"
-if $CS new fresh --test --no-github >/dev/null 2>&1; then die "duplicate name refused"; fi
+if $CS new fresh --test >/dev/null 2>&1; then die "duplicate name refused"; fi
 pass cs-new
 
 # --- identity add: appended before the Projects marker, includes re-rendered, usable as --flag
@@ -168,7 +190,7 @@ $CS identity add extra --owner extra-org --name "Extra" --email extra@example.co
 grep -q '^\[identities.extra\]' "$CS_CONFIG_DIR/repo/projects.toml" || die "identity in manifest"
 grep -q 'git@github.com:extra-org/\*\*' "$HOME/.config/git/claude-share.inc" || die "includeIf for new identity"
 $CS identity ls | grep -q extra || die "identity ls"
-$CS new viaflag --extra-org --no-github >/dev/null 2>&1 || die "new via --owner flag"
+$CS new viaflag --extra-org >/dev/null 2>&1 || die "new via --owner flag"
 [ "$(git -C "$HOME/dev/viaflag" config user.email)" = "extra@example.com" ] || die "identity applied to new project"
 $CS identity rename extra extra2 >/dev/null || die "identity rename"
 grep -q '^\[identities.extra2\]' "$CS_CONFIG_DIR/repo/projects.toml" && ! grep -q '^\[identities.extra\]' "$CS_CONFIG_DIR/repo/projects.toml" || die "renamed in manifest"
@@ -206,7 +228,7 @@ if command -v sops >/dev/null && command -v age-keygen >/dev/null; then
   ( export HOME="$HOME2" CLAUDE_CONFIG_DIR="$HOME2/.claude" XDG_STATE_HOME="$HOME2/.local/state" CS_CONFIG_DIR="$HOME2/.config/claude-share" SOPS_AGE_KEY_FILE="$HOME2/.config/sops/age/keys.txt"
     $CS sync >/dev/null 2>&1 || true
     $CS secrets get global API_KEY --show >/dev/null 2>&1 && die "m2 must be revoked"
-    CS_ANSWERS='["n","recovery","'"$RKEY"'","n"]' $CS init --skip deps,ssh,hooks,doctor,apply,link > "$HOME2/recovery.log" 2>&1 || { tail -15 "$HOME2/recovery.log"; die "wizard recovery enroll"; }
+    CS_ANSWERS='["n","n","recovery","'"$RKEY"'","n"]' $CS init --skip deps,ssh,hooks,doctor,apply,link > "$HOME2/recovery.log" 2>&1 || { tail -15 "$HOME2/recovery.log"; die "wizard recovery enroll"; }
     [ "$($CS secrets get global API_KEY --show)" = "abc123" ] || die "m2 decrypts after recovery enroll"
     [ ! -f "$HOME2/.cache/cs-recovery-"* ] 2>/dev/null || true )
   pass secrets

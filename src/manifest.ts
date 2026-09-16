@@ -7,18 +7,18 @@ import type { Machine } from "./config.js";
 
 export const SUPPORTED_SCHEMA = 1;
 export const NAME_RE = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/;
-export const KINDS = ["git", "synced", "local"] as const;
-export type Kind = (typeof KINDS)[number];
 
 export interface Identity { id: string; name: string; email: string; owner: string; sshKey?: string; urlGlobs?: string[] }
+/** Every project is a git checkout with a remote. `url`/`identity` are optional only so that a project registered
+ *  before it had a remote still loads — `cs` and `cs doctor` flag it and `cs doctor --fix` creates the remote. */
 export interface Project {
-  name: string; kind: Kind; path?: string; url?: string; identity?: string; profiles: string[]; machines: string[];
-  branch?: string; layout: "plain" | "worktrees"; postClone?: string; description?: string; handoff: Record<string, unknown>; sync: Record<string, unknown>;
+  name: string; path?: string; url?: string; identity?: string; profiles: string[]; machines: string[];
+  branch?: string; layout: "plain" | "worktrees"; postClone?: string; description?: string; handoff: Record<string, unknown>; env?: false | { local?: string[] };
 }
 export interface Manifest { workspaceRoot: string; defaultBranch: string; identities: Record<string, Identity>; projects: Record<string, Project>; schemaVersion: number; path?: string }
 
 export const keyPath = (i: Identity) => i.sshKey || `~/.ssh/cs/${i.id}`;
-export const globs = (i: Identity) => (i.urlGlobs?.length ? i.urlGlobs : i.owner ? [`git@github.com:${i.owner}/**`] : []);
+export const globs = (i: Identity) => [...(i.urlGlobs?.length ? i.urlGlobs : i.owner ? [`git@github.com:${i.owner}/**`] : []), ...(process.env.CS_FAKE_GITHUB && i.owner ? [`${process.env.CS_FAKE_GITHUB}/${i.owner}/**`] : [])];
 export function globMatch(pattern: string, s: string): boolean {
   let re = "^";
   for (let i = 0; i < pattern.length; i++) {
@@ -46,6 +46,8 @@ export const workspace = (man: Manifest, m?: Machine) => expand(m?.workspace || 
 export const container = (p: Project, ws: string) => join(ws, p.path || p.name);
 export const checkoutRoot = (p: Project, ws: string) => (p.layout === "worktrees" ? join(container(p, ws), "repo") : container(p, ws));
 export const selectedProjects = (man: Manifest, m: Machine) => Object.values(man.projects).filter((p) => selected(p, m));
+/** Registered without a remote (registered before it was pushed anywhere) — `cs doctor --fix` creates one. */
+export const hasRemote = (p: Project) => Boolean(p.url);
 export function projectForPath(man: Manifest, m: Machine, path: string): Project | undefined {
   const ws = resolve(workspace(man, m)); const r = resolve(path);
   if (!(r === ws || r.startsWith(ws + "/"))) return undefined;
@@ -60,8 +62,8 @@ export function parseManifest(text: string, path?: string): Manifest {
     identities[id] = { id, name: v.name ?? "", email: v.email ?? "", owner: v.owner ?? v.github_owner ?? "", sshKey: v.ssh_key, urlGlobs: v.url_globs };
   const projects: Record<string, Project> = {};
   for (const [name, v] of Object.entries<any>(d.projects ?? {}))
-    projects[name] = { name, kind: v.kind ?? "git", path: v.path, url: v.url, identity: v.identity, profiles: v.profiles ?? ["all"], machines: v.machines ?? [],
-      branch: v.branch, layout: v.layout ?? "plain", postClone: v.post_clone, description: v.description, handoff: v.handoff ?? {}, sync: v.sync ?? {} };
+    projects[name] = { name, path: v.path, url: v.url || undefined, identity: v.identity || undefined, profiles: v.profiles ?? ["all"], machines: v.machines ?? [],
+      branch: v.branch, layout: v.layout ?? "plain", postClone: v.post_clone, description: v.description, handoff: v.handoff ?? {}, env: v.env === false ? false : v.env && typeof v.env === "object" ? { local: v.env.local } : undefined };
   return { workspaceRoot: d.workspace?.root ?? "~/dev", defaultBranch: d.workspace?.default_branch ?? "master", identities, projects, schemaVersion: d.schema_version ?? 1, path };
 }
 export function validate(m: Manifest): string[] {
@@ -70,13 +72,11 @@ export function validate(m: Manifest): string[] {
   for (const i of Object.values(m.identities)) if (!i.owner && !i.urlGlobs?.length) errs.push(`identity ${i.id}: needs owner (GitHub user/org)`);
   for (const p of Object.values(m.projects)) {
     if (!NAME_RE.test(p.name)) errs.push(`${p.name}: invalid project name`);
-    if (!KINDS.includes(p.kind)) errs.push(`${p.name}: kind must be one of ${KINDS.join("|")}`);
-    if (p.kind === "git") {
-      if (!p.url) errs.push(`${p.name}: kind=git requires url`);
-      if (!p.identity) errs.push(`${p.name}: kind=git requires identity`);
+    if (p.url) {
+      if (!p.identity) errs.push(`${p.name}: url requires identity`);
       else if (!m.identities[p.identity]) errs.push(`${p.name}: unknown identity '${p.identity}'`);
-      else if (p.url && !identityMatches(m.identities[p.identity], p.url)) errs.push(`${p.name}: url ${p.url} does not match identity '${p.identity}'`);
-    }
+      else if (!identityMatches(m.identities[p.identity], p.url)) errs.push(`${p.name}: url ${p.url} does not match identity '${p.identity}'`);
+    } else if (p.identity && !m.identities[p.identity]) errs.push(`${p.name}: unknown identity '${p.identity}'`);
     if (p.path && (isAbsolute(p.path) || p.path.split("/").includes(".."))) errs.push(`${p.name}: path must be relative and inside the workspace`);
   }
   return errs;
@@ -96,8 +96,7 @@ function block(header: string, values: Record<string, unknown>) {
   return `[${header}]\n` + stringify(clean).trimEnd() + "\n";
 }
 export function projectBlock(p: Project) {
-  return block(`projects.${p.name}`, { kind: p.kind, path: p.path && p.path !== p.name ? p.path : undefined, url: p.kind === "git" ? p.url : undefined,
-    identity: p.kind === "git" ? p.identity : undefined, branch: p.kind === "git" ? p.branch : undefined, profiles: p.profiles,
+  return block(`projects.${p.name}`, { path: p.path && p.path !== p.name ? p.path : undefined, url: p.url, identity: p.identity, branch: p.branch, profiles: p.profiles,
     machines: p.machines, layout: p.layout !== "plain" ? p.layout : undefined, post_clone: p.postClone, description: p.description });
 }
 export function identityBlock(i: Identity) {
@@ -108,6 +107,15 @@ export function appendProject(repo: string, p: Project) {
   const f = join(repo, "projects.toml"); let t = readFileSync(f, "utf8");
   if (new RegExp(`^\\[projects\\.${p.name.replace(/[.]/g, "\\.")}\\]\\s*$`, "m").test(t)) throw new Error(`cs: project '${p.name}' already registered (edit projects.toml to change it)`);
   writeFileSync(f, t.replace(/\n*$/, "\n\n") + projectBlock(p));
+}
+/** Rewrite the main `[projects.<name>]` block in place; sub-tables (`[projects.<name>.handoff]`) are left untouched. */
+export function updateProject(repo: string, p: Project) {
+  const f = join(repo, "projects.toml"); const lines = readFileSync(f, "utf8").split("\n");
+  const start = lines.findIndex((l) => new RegExp(`^\\[projects\\.${p.name.replace(/[.]/g, "\\.")}\\]\\s*$`).test(l));
+  if (start < 0) throw new Error(`cs: project '${p.name}' not found in projects.toml`);
+  let end = start + 1; while (end < lines.length && !/^\[/.test(lines[end])) end++;
+  while (end > start + 1 && lines[end - 1].trim() === "") end--;
+  writeFileSync(f, [...lines.slice(0, start), projectBlock(p).trimEnd(), ...lines.slice(end)].join("\n"));
 }
 export function appendIdentity(repo: string, i: Identity) {
   const f = join(repo, "projects.toml"); let t = readFileSync(f, "utf8");

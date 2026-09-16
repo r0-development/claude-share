@@ -23,13 +23,12 @@ default_branch = "master"     # branch `cs new` creates
 # url_globs = ["git@github.com:acme-org/**", "git@github.com:acme-old-name/**"]   # optional override (renamed org)
 
 # ---- Projects ---------------------------------------------------------------
-# kind:     git (clone from url) | synced (private auto-committed repo, no manual git) | local (never leaves one machine)
+# Every project is a git checkout with a remote (`cs new` / `cs add` create the GitHub repo when needed).
 # profiles: which machine profiles want it (machine.toml `profiles`); "all" = every machine
 # machines: optional hard allowlist of machine names
 # layout:   plain | worktrees  (checkout lives in <name>/repo, siblings are git worktrees)
 
 # [projects.example]
-# kind = "git"
 # url = "git@github.com:your-org/example.git"
 # identity = "personal"
 # profiles = ["all"]

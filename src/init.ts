@@ -90,7 +90,7 @@ async function machinePhase(repo: string, nm: string, profiles: string[], ws: st
     let projects: Project[] = []; try { projects = Object.values(loadManifest(repo).projects); } catch {}
     if (interactive && projects.length) {
       const groups: Record<string, { value: string; label: string; hint?: string }[]> = {};
-      for (const p of projects) { const g = p.profiles.includes("all") ? "every machine" : p.profiles.join(", "); (groups[g] ??= []).push({ value: p.name, label: p.name, hint: p.kind === "git" ? `${p.identity} · ${p.url?.replace(/^git@github\.com:/, "").replace(/\.git$/, "")}` : p.kind }); }
+      for (const p of projects) { const g = p.profiles.includes("all") ? "every machine" : p.profiles.join(", "); (groups[g] ??= []).push({ value: p.name, label: p.name, hint: p.url ? `${p.identity} · ${p.url.replace(/^git@github\.com:/, "").replace(/\.git$/, "")}` : "no remote yet" }); }
       const names = new Set(projects.map((p) => p.name));
       let picked = new Set<string>(); let initial = projects.map((p) => p.name);
       for (;;) {
@@ -159,8 +159,8 @@ async function finish(repo: string, m: Machine, interactive: boolean, skip: stri
   if (!skip.includes("secrets") && m.secretsBackend !== "none") { const sc = await import("./secretscmd.js"); await ui.group("secrets", () => sc.init(repo, m, interactive)); secretsOk = await sc.ensureRecipient(repo, m, interactive); }
   if (!skip.includes("hooks")) await ui.group("automatic sync", async () => { (await import("./hooks.js")).runHooks(repo, m, "install"); runApply(repo, m, loadManifest(repo)); });
   await ui.group("config repo", () => push(repo), { done: "nothing to push" });
-  let rc = 0; if (!skip.includes("doctor")) rc = await ui.group("doctor", () => runDoctor(repo, m, man, false, true), { done: "all checks passed" });
-  const ws = workspace(man, m); const missing = selectedProjects(man, m).filter((p) => p.kind !== "local" && !existsSync(checkoutRoot(p, ws)));
+  let rc = 0; if (!skip.includes("doctor")) rc = await ui.group("doctor", () => runDoctor(repo, m, loadManifest(repo), false, true), { done: "all checks passed" });
+  const ws = workspace(man, m); const missing = selectedProjects(man, m).filter((p) => p.url && !existsSync(checkoutRoot(p, ws)));
   if (missing.length && interactive && (await ui.confirm(`clone ${missing.length} project(s) now (${missing.slice(0, 6).map((p) => p.name).join(", ")}${missing.length > 6 ? "…" : ""})?`, true))) await ui.group(`clone ${missing.length} project(s)`, async () => (await import("./projects.js")).clone(repo, m, man, []));
   const rcFile = platform.shellRc().split("/").pop();
   ui.note([`${ui.bold("open a new terminal")} ${ui.dim(`(or: source ~/${rcFile})`)} — that gives you ${ui.bold("cs")} on PATH and the ${ui.bold("claude")} wrapper`,
