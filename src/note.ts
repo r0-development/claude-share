@@ -6,8 +6,8 @@ import { existsSync, mkdirSync, readdirSync, readFileSync, statSync } from "node
 import { join } from "node:path";
 import * as git from "./git.js";
 import { claudeDir, stateDir } from "./paths.js";
-import { candidatePaths, claudeProjectKey } from "./import.js";
-import type { Project } from "./manifest.js";
+import { claudeProjectKey } from "./import.js";
+import type { Checkout } from "./checkout.js";
 import { which } from "./deps.js";
 import { exec } from "./proc.js";
 import { count, when } from "./plan.js";
@@ -93,10 +93,10 @@ async function generate(unit: { path: string; branch: string }, t: { file: strin
 /** The note for a handoff about to be sent. `explicit` is -m and always wins. `earlier` is my own handoff being replaced:
  *  a note typed into it stays unless a session newer than it produced a Claude summary; a generated note is regenerated.
  *  The transcript is the unit's own when it has one (worktrees), else the project's newest. */
-export async function pickNote(unit: { path: string; branch: string }, p: Project, ws: string, explicit: string | undefined, earlier?: Note & { at: string }): Promise<Note> {
+export async function pickNote(unit: { path: string; branch: string }, c: Checkout, explicit: string | undefined, earlier?: Note & { at: string }): Promise<Note> {
   if (explicit) return { note: explicit, source: "explicit" };
   const typed = earlier?.source === "explicit" && earlier.note ? earlier : undefined;
-  const t = latestTranscript([unit.path]) ?? latestTranscript(candidatePaths(p, ws));
+  const t = latestTranscript([unit.path]) ?? latestTranscript([...new Set([c.container, c.root, ...c.units.map((u) => u.path)])]);
   if (typed && !(t && t.ended > typed.at)) return { note: typed.note, source: "explicit" };   // nothing newer to summarise
   const g = await generate(unit, t);
   return typed && g.source === "git" ? { note: typed.note, source: "explicit" } : g;

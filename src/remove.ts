@@ -6,9 +6,9 @@ import { join, relative } from "node:path";
 import * as git from "./git.js";
 import { contract } from "./paths.js";
 import type { Machine } from "./machine.js";
-import { checkoutRoot, NAME_RE, projectTableRe, removeProjectText, workspace, type Manifest, type Project } from "./manifest.js";
-import { checkouts, dropPlacedRecord, stripPointer } from "./link.js";
-import { fetchHandoffs, userSlug } from "./handoff.js";
+import { NAME_RE, projectTableRe, removeProjectText, workspace, type Manifest, type Project } from "./manifest.js";
+import { dirs, fetchWaiting, locate, present } from "./checkout.js";
+import { dropPlacedRecord, stripPointer } from "./link.js";
 import { fileOf } from "./env.js";
 import { parseRepoUrl } from "./sharekey.js";
 import * as ui from "./ui.js";
@@ -41,7 +41,7 @@ function resolve(repo: string, m: Machine, man: Manifest, names: string[]): Targ
   return names.map((name) => {
     if (!NAME_RE.test(name)) throw new Error(`cs: '${name}' is not a project name`);
     const project = man.projects[name]; const state = join(repo, "projects", name);
-    const t: Target = { name, project, state: existsSync(state) ? state : undefined, secrets: secretsFiles(repo, man, name), here: project ? checkouts(project, ws) : [] };
+    const t: Target = { name, project, state: existsSync(state) ? state : undefined, secrets: secretsFiles(repo, man, name), here: project ? dirs(project, ws) : [] };
     if (!t.project && !t.state && !t.secrets.length) throw new Error(`cs: unknown project '${name}'\nknown: ${known.join(", ") || "(none)"}`);
     return t;
   });
@@ -51,9 +51,9 @@ function resolve(repo: string, m: Machine, man: Manifest, names: string[]): Targ
 async function warnings(t: Target, ws: string) {
   if (t.secrets.length) ui.warn(`${t.name}: .env values stored in the share go with it — the checkout's own .env files stay`);
   if (!t.project?.url) return;
-  const root = checkoutRoot(t.project, ws);
-  if (existsSync(root) && git.isRepo(root)) {   // what the last fetch brought, no network: a handoff left on the remote stays there
-    for (const h of (await fetchHandoffs(root, userSlug(root), 0, false)).list) ui.warn(`${t.name}: a handoff from ${h.machine} (${h.branch}) is waiting on the remote — it stays there, the remote is not touched`);
+  const c = locate(t.project, ws);
+  if (present(c)) {   // what the last fetch brought, no network: a handoff left on the remote stays there
+    for (const h of (await fetchWaiting(c, { fetch: false })).list) ui.warn(`${t.name}: a handoff from ${h.machine} (${h.branch}) is waiting on the remote — it stays there, the remote is not touched`);
   } else ui.warn(`${t.name}: no checkout here to look for waiting handoffs — one left on the remote stays there (cs handoffs on a machine that has it)`);
 }
 function summary(t: Target, manifestText: string) {

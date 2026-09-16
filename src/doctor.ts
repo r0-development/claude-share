@@ -5,7 +5,8 @@ import * as git from "./git.js";
 import { claudeDir, claudeJson, contract } from "./paths.js";
 import * as platform from "./platform.js";
 import type { Machine } from "./machine.js";
-import { checkoutRoot, identityMatches, loadManifest, selectedProjects, workspace, type Manifest, type Project } from "./manifest.js";
+import { identityMatches, loadManifest, selectedProjects, workspace, type Manifest, type Project } from "./manifest.js";
+import { locate, present } from "./checkout.js";
 import { applySettings } from "./apply.js";
 import * as ui from "./ui.js";
 import { which } from "./deps.js";
@@ -22,7 +23,7 @@ const LINKS = ["CLAUDE.md", "rules", "agents", "themes", "keybindings.json", "pl
 /** Registered projects (present here) and workspace directories that have no remote yet — the ensure-remote candidates. */
 export function remoteless(man: Manifest, m: Machine): { projects: Project[]; dirs: { name: string; remote: string }[] } {
   const ws = workspace(man, m);
-  const projects = selectedProjects(man, m).filter((p) => { const root = checkoutRoot(p, ws); return existsSync(root) && (!p.url || !git.isRepo(root) || !git.remoteUrl(root)); });
+  const projects = selectedProjects(man, m).filter((p) => { const c = locate(p, ws); return present(c) ? !p.url : c.why !== "missing"; });
   return { projects, dirs: unregisteredDirs(ws, new Set(Object.values(man.projects).map((p) => p.path || p.name))) };
 }
 /** Returns the share's path: the old-name moves may have relocated it. */
@@ -41,7 +42,7 @@ export async function fix(repo: string, m: Machine, man: Manifest): Promise<stri
     if (await ui.confirm(`${d.name} is not registered — register it${d.remote ? "" : " (creating a private GitHub repo)"}?`, true)) { try { await add(repo, m, man, path, { profiles: [], description: "", noCommit: false }); man = loadManifest(repo); } catch (e: any) { ui.fail(e.message); } }
   }
   for (const p of selectedProjects(man, m)) {
-    const root = checkoutRoot(p, ws); if (!existsSync(root) || !git.isRepo(root) || !p.url) continue;
+    const c = locate(p, ws); if (!present(c) || !p.url) continue; const root = c.root;
     const url = git.remoteUrl(root); if (url === p.url) continue;
     const cur = git.canonicalGithub(url), want = git.canonicalGithub(p.url);
     let same = cur === want; const ident = p.identity ? man.identities[p.identity] : undefined;
@@ -67,7 +68,7 @@ export async function runDoctor(repo: string, m: Machine, man: Manifest, doFix =
     res.push(hits.length ? ["warn", `local-scope MCP servers with secrets in ~/.claude.json (machine-only): ${hits.join(", ")} — keep until cs secrets provides the \${VAR}s, then \`claude mcp remove <name> -s local\``] : ["ok", "no secret-bearing local-scope MCP servers"]); } catch { res.push(["warn", "~/.claude.json unparsable"]); } }
   res.push(process.env.GH_TOKEN || process.env.GITHUB_TOKEN ? ["warn", "GH_TOKEN/GITHUB_TOKEN is exported in this shell; gh ignores its stored logins while set"] : ["ok", "no GH_TOKEN override in env"]);
   const idr: R[] = [];
-  for (const p of selectedProjects(man, m)) { const root = checkoutRoot(p, ws); if (!existsSync(root) || !git.isRepo(root)) continue;
+  for (const p of selectedProjects(man, m)) { const c = locate(p, ws); if (!present(c) && c.why !== "no remote") continue; const root = c.root;   // a remote-less repo still has an identity to check
     const ident = p.identity ? man.identities[p.identity] : undefined; const email = git.configGet(root, "user.email"); const url = git.remoteUrl(root);
     if (p.url && git.canonicalGithub(url) !== git.canonicalGithub(p.url)) idr.push(["warn", `${p.name}: remote ${url} ≠ manifest ${p.url}  (cs doctor --fix)`]);
     else if (url && p.url && url !== p.url) idr.push(["warn", `${p.name}: remote uses alias/other form ${url}; manifest ${p.url}  (cs doctor --fix)`]);

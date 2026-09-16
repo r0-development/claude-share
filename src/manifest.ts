@@ -43,8 +43,6 @@ export function selected(p: Project, m: Machine): boolean {
   return p.profiles.includes("all") || p.profiles.some((x) => m.profiles.includes(x));
 }
 export const workspace = (man: Manifest, m?: Machine) => expand(m?.workspace || man.workspaceRoot);
-export const container = (p: Project, ws: string) => join(ws, p.path || p.name);
-export const checkoutRoot = (p: Project, ws: string) => (p.layout === "worktrees" ? join(container(p, ws), "repo") : container(p, ws));
 export const selectedProjects = (man: Manifest, m: Machine) => Object.values(man.projects).filter((p) => selected(p, m));
 /** Registered without a remote (registered before it was pushed anywhere) — `cs doctor --fix` creates one. */
 export const hasRemote = (p: Project) => Boolean(p.url);

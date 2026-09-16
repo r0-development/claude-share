@@ -6,7 +6,8 @@ import { join } from "node:path";
 import * as git from "./git.js";
 import { contract } from "./paths.js";
 import type { Machine } from "./machine.js";
-import { checkoutRoot, selected, workspace, type Manifest } from "./manifest.js";
+import { selected, workspace, type Manifest } from "./manifest.js";
+import { locate, present, sniff } from "./checkout.js";
 import { gather } from "./gather.js";
 import { hooksStatus } from "./hooks.js";
 import { behindCount, behindHint, startUpdateCheck } from "./update.js";
@@ -17,7 +18,7 @@ import * as ui from "./ui.js";
 export function unregisteredDirs(ws: string, known: Set<string>): { name: string; remote: string }[] {
   if (!existsSync(ws)) return [];
   return readdirSync(ws, { withFileTypes: true }).filter((d) => d.isDirectory() && !d.name.startsWith(".") && !known.has(d.name)).map((d) => d.name).sort()
-    .map((name) => { const root = existsSync(join(ws, name, "repo", ".git")) ? join(ws, name, "repo") : join(ws, name); return { name, remote: git.isRepo(root) ? git.remoteUrl(root) : "" }; });
+    .map((name) => { const { root } = sniff(join(ws, name)); return { name, remote: git.isRepo(root) ? git.remoteUrl(root) : "" }; });
 }
 
 const SYNC = ui.dim("  cs sync"), FIX = ui.dim("  cs doctor --fix");
@@ -50,18 +51,19 @@ export async function runStatus(repo: string, m: Machine, man: Manifest, fetch =
   ui.info(`${ui.dim("profiles")} ${m.profiles.join(", ")}  ${ui.dim("workspace")} ${contract(ws)}${fetch ? "" : ui.dim("  (not fetched)")}`);
   const share = await shareLine(repo, fetch, timeout);
   const { facts, envSkipped } = await ui.spin("fetching projects…", () => gather(repo, m, man, { timeout, fetch }));
-  const byName = new Map(facts.map((f) => [f.project, f]));
+  const byName = new Map(facts.map((f) => [f.checkout.project.name, f]));
   let pending = share.pending, attention = share.broken, stuck = false;
   const rows: string[][] = [share.row]; const known = new Set<string>();
   for (const p of Object.values(man.projects)) {
     known.add(p.path || p.name); const sel = selected(p, m); if (!sel && !showAll) continue;
-    const root = checkoutRoot(p, ws); const kind = ui.dim(p.layout === "worktrees" ? "⑂" : "");
-    const f = byName.get(p.name);
+    const kind = ui.dim(p.layout === "worktrees" ? "⑂" : "");
+    const f = byName.get(p.name); const c = sel && !f ? locate(p, ws) : undefined;   // not gathered: absent, and the reason says which row
     if (!sel) rows.push([p.name, kind, "", ui.dim("skipped (profile)")]);
-    else if (!existsSync(root)) { rows.push([p.name, kind, "", p.url ? ui.red("missing here") + SYNC : ui.red("no remote, not here") + ui.dim(`  cs doctor --fix on the machine that has it · or cs remove ${p.name}`)]); if (p.url) pending = true; else attention = true; }
-    else if (!git.isRepo(root)) { rows.push([p.name, kind, "", ui.red("not a git repo") + FIX]); attention = true; }
-    else if (!f) { rows.push([p.name, kind, branchOf(root), ui.red("no remote") + FIX]); attention = true; }
-    else { const line = projectLine(f, m.name); rows.push([p.name, kind, f.units[0]?.branch || ui.red("DETACHED"), line.state]); pending ||= line.pending; stuck ||= line.stuck; }
+    else if (f) { const line = projectLine(f, m.name); rows.push([p.name, kind, f.checkout.units[0]?.branch || ui.red("DETACHED"), line.state]); pending ||= line.pending; stuck ||= line.stuck; }
+    else if (!c || present(c)) continue;
+    else if (c.why === "missing") { rows.push([p.name, kind, "", p.url ? ui.red("missing here") + SYNC : ui.red("no remote, not here") + ui.dim(`  cs doctor --fix on the machine that has it · or cs remove ${p.name}`)]); if (p.url) pending = true; else attention = true; }
+    else if (c.why === "not a git repo") { rows.push([p.name, kind, "", ui.red("not a git repo") + FIX]); attention = true; }
+    else { rows.push([p.name, kind, branchOf(c.root), ui.red("no remote") + FIX]); attention = true; }
   }
   ui.table(rows, ["project", "", "branch", "state"]);
   for (const s of envSkipped) ui.warn(s);

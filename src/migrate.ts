@@ -9,11 +9,11 @@ import { parse } from "smol-toml";
 import * as git from "./git.js";
 import { contract, expand, legacyShareDir, legacyShareKey, machineFile, shareDirDefault, shareKeyDefault, stateDir } from "./paths.js";
 import { saveMachine, shareDir, type Machine } from "./machine.js";
-import { checkoutRoot, selectedProjects, workspace, type Manifest } from "./manifest.js";
+import { selectedProjects, workspace, type Manifest } from "./manifest.js";
 import { configureRepo, keyPath, usesKey } from "./sharekey.js";
-import { REF_NS } from "./handoff.js";
+import { dirs, locate, present, REF_NS } from "./checkout.js";
 import { applyLinks } from "./apply.js";
-import { checkouts, syncProject } from "./link.js";
+import { syncProject } from "./link.js";
 
 const OLD_REF_NS = "wip";
 /** `move`: the move as the person would read it, `apply` performs it (without `apply` the instruction is all cs can offer);
@@ -45,7 +45,7 @@ export function findOldNames(repo: string, m: Machine, man: Manifest): OldName[]
         let target = repo;
         if (repo === legacyShareDir() && !existsSync(shareDirDefault())) { mkdirSync(join(shareDirDefault(), ".."), { recursive: true }); renameSync(legacyShareDir(), shareDirDefault()); target = shareDirDefault(); }
         if (oldKeyInToml || m.share) { m.share = m.share && expand(m.share) !== legacyShareDir() && expand(m.share) !== shareDirDefault() ? m.share : undefined; saveMachine(m); }
-        if (target !== repo) { const changes: string[] = []; applyLinks(target, false, changes); const ws = workspace(man, m); for (const p of selectedProjects(man, m)) if (checkouts(p, ws).length) syncProject(target, p, ws); }
+        if (target !== repo) { const changes: string[] = []; applyLinks(target, false, changes); const ws = workspace(man, m); for (const p of selectedProjects(man, m)) if (dirs(p, ws).length) syncProject(target, p, ws); }
       } });
   // state files: last-config → last-sync, link/ → project-state/; sync-config.lock, blocked-config, handoff/pending are gone
   const st = stateDir(), inState = `(in ${contract(st)})`;
@@ -56,7 +56,7 @@ export function findOldNames(repo: string, m: Machine, man: Manifest): OldName[]
   // fetch brought counts too) or a local leftover — reported with the exact command, never moved by cs
   const ws = workspace(man, m);
   for (const p of selectedProjects(man, m)) {
-    const root = checkoutRoot(p, ws); if (!existsSync(root) || !git.isRepo(root) || !git.remoteUrl(root)) continue;
+    const c = locate(p, ws); if (!present(c)) continue; const root = c.root;
     const at = (cmd: string) => `git -C ${contract(root)} ${cmd}`;
     const fetched = git.out(["for-each-ref", "--format=%(refname:short)", `refs/remotes/origin/${OLD_REF_NS}/`], root).split("\n").filter(Boolean).map((r) => r.replace(/^origin\//, ""));
     const remote = git.git(["ls-remote", "--heads", "origin", `refs/heads/${OLD_REF_NS}/*`], root, { check: false, timeout: 5 }).out.split("\n").filter(Boolean).map((l) => l.split(/\s+/)[1].replace(/^refs\/heads\//, ""));

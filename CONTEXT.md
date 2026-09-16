@@ -31,6 +31,16 @@ A project's Claude files (`CLAUDE.md`, `.claude/`, `.mcp.json`) and auto-memory,
 every checkout of the project without ever being committed to the project's own repo.
 _Avoid_: side-store, Claude files, per-project config
 
+**Checkout**:
+A project's presence on one machine: the directory it is cloned into (`repo` under the project's directory for the
+worktrees layout) together with every worktree of it. Exists only when that directory is a git repo with a remote
+(ADR-0001); anything else is an absence `cs doctor` reports.
+_Avoid_: working copy, local repo, local checkout
+
+**Unit**:
+One directory of a checkout — the root or one worktree — on one branch. What a handoff is sent from and applied into.
+_Avoid_: checkout directory, worktree unit
+
 **Handoff**:
 A snapshot of one project's uncommitted work (and local-only commits) waiting on that project's remote for another
 machine to pick up. One per branch.

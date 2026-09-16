@@ -7,7 +7,8 @@ import * as sharekey from "./sharekey.js";
 import { contract, expand, home, shareDirDefault, templatesDir } from "./paths.js";
 import * as platform from "./platform.js";
 import { loadMachine, machineExists, saveMachine, type Machine } from "./machine.js";
-import { checkoutRoot, loadManifest, NAME_RE, selectedProjects, workspace, type Manifest, type Project } from "./manifest.js";
+import { loadManifest, NAME_RE, selectedProjects, workspace, type Manifest, type Project } from "./manifest.js";
+import { locate, present } from "./checkout.js";
 import { runApply } from "./apply.js";
 import { runLink } from "./link.js";
 import { runDoctor } from "./doctor.js";
@@ -160,7 +161,7 @@ async function finish(repo: string, m: Machine, interactive: boolean, skip: stri
   if (!skip.includes("hooks")) await ui.group("automatic sync", async () => { await (await import("./hooks.js")).runHooks(repo, m, "install"); runApply(repo, m, loadManifest(repo)); });
   await ui.group("share", () => push(repo), { done: "nothing to push" });
   let rc = 0; if (!skip.includes("doctor")) rc = await ui.group("doctor", () => runDoctor(repo, m, loadManifest(repo), false, true), { done: "all checks passed" });
-  const ws = workspace(man, m); const missing = selectedProjects(man, m).filter((p) => p.url && !existsSync(checkoutRoot(p, ws)));
+  const ws = workspace(man, m); const missing = selectedProjects(man, m).filter((p) => { const c = locate(p, ws); return p.url && !present(c) && c.why === "missing"; });
   if (missing.length && interactive && (await ui.confirm(`clone ${missing.length} project(s) now (${missing.slice(0, 6).map((p) => p.name).join(", ")}${missing.length > 6 ? "…" : ""})?`, true))) await ui.group(`clone ${missing.length} project(s)`, async () => (await import("./projects.js")).clone(repo, m, man, []));
   const rcFile = platform.shellRc().split("/").pop();
   ui.note([`${ui.bold("open a new terminal")} ${ui.dim(`(or: source ~/${rcFile})`)} — that gives you ${ui.bold("cs")} on PATH and the ${ui.bold("claude")} wrapper`,

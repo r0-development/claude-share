@@ -3,14 +3,15 @@ import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, statSyn
 import { basename, dirname, extname, join, relative } from "node:path";
 import { claudeDir, claudeJson, contract } from "./paths.js";
 import type { Machine } from "./machine.js";
-import { checkoutRoot, container, workspace, type Manifest, type Project } from "./manifest.js";
-import { checkouts, memoryDir, projectState, syncProject } from "./link.js";
+import { workspace, type Manifest, type Project } from "./manifest.js";
+import { checkoutRoot, container, dirs } from "./checkout.js";
+import { memoryDir, projectState, syncProject } from "./link.js";
 import { dumps, loads } from "./jsonmerge.js";
 import * as ui from "./ui.js";
 
 export const claudeProjectKey = (p: string) => p.replace(/[^A-Za-z0-9]/g, "-");
 export function candidatePaths(p: Project, ws: string): string[] {
-  const c = [container(p, ws), checkoutRoot(p, ws), ...checkouts(p, ws)]; return [...new Set(c)];
+  const c = [container(p, ws), checkoutRoot(p, ws), ...dirs(p, ws)]; return [...new Set(c)];
 }
 export const unionLines = (a: string, b: string) => { const lines = a.split("\n").filter((x, i, arr) => !(i === arr.length - 1 && x === "")); const seen = new Set(lines);
   for (const l of b.split("\n")) if (l && !seen.has(l)) { lines.push(l); seen.add(l); } return lines.join("\n") + "\n"; };

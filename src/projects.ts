@@ -6,8 +6,9 @@ import * as git from "./git.js";
 import * as github from "./github.js";
 import { contract, expand } from "./paths.js";
 import type { Machine } from "./machine.js";
-import { appendProject, checkoutRoot, container, identityByFlag, identityForUrl, keyPath, loadManifest, NAME_RE, selectedProjects, updateProject, validate, workspace, type Identity, type Manifest, type Project } from "./manifest.js";
+import { appendProject, identityByFlag, identityForUrl, keyPath, loadManifest, NAME_RE, selectedProjects, updateProject, validate, workspace, type Identity, type Manifest, type Project } from "./manifest.js";
 import { runLink } from "./link.js";
+import { checkoutRoot, container, locate, present, sniff } from "./checkout.js";
 import * as ui from "./ui.js";
 
 /** Set the per-repo git identity when the includeIf rules do not resolve to the expected one. */
@@ -58,11 +59,11 @@ export async function chooseIdentity(man: Manifest, flag: string | undefined, fo
 
 /** cs add [path]: register an existing directory; creates the remote first when it has none. */
 export async function add(repo: string, m: Machine, man: Manifest, path: string | undefined, o: { profiles: string[]; identity?: string; name?: string; description: string; noCommit: boolean; priv?: boolean }): Promise<Project> {
-  const ws = workspace(man, m); let target = resolve(path ?? process.cwd()); let layout: Project["layout"] = "plain";
+  const ws = workspace(man, m); let target = resolve(path ?? process.cwd());
   const top = git.toplevel(target);
-  if (top) { target = top; if (basename(top) === "repo" && dirname(top) !== ws) { target = dirname(top); layout = "worktrees"; } }
+  if (top) { target = top; if (basename(top) === "repo" && dirname(top) !== ws && sniff(dirname(top)).layout === "worktrees") target = dirname(top); }   // inside a worktrees layout: the project is the directory above
   const rel = relative(ws, target); if (!rel || rel.startsWith("..") || rel.includes("/")) throw new Error(`cs: project must be a direct child of the workspace ${contract(ws)} (got ${target})`);
-  const name = o.name ?? rel; const checkout = layout === "worktrees" ? join(target, "repo") : target;
+  const name = o.name ?? rel; const { root: checkout, layout } = sniff(target);
   if (man.projects[name]) throw new Error(`cs: project '${name}' is already registered (edit projects.toml to change it)`);
   let url = git.remoteUrl(checkout); let ident: Identity | undefined;
   if (!url) { ident = await chooseIdentity(man, o.identity, name); const made = await ensureRemote(checkout, name, ident, git.currentBranch(checkout) || man.defaultBranch, { priv: o.priv, description: o.description }); if (!made) throw new Error(`cs: ${name} still has no remote`); url = made; }
@@ -89,8 +90,9 @@ export async function clone(repo: string, m: Machine, man: Manifest, names: stri
   const ws = workspace(man, m); let rc = 0; const cloned: string[] = [];
   for (const p of selectedProjects(man, m)) {
     if (names.length && !names.includes(p.name)) continue;
-    const root = checkoutRoot(p, ws), cont = container(p, ws);
-    if (existsSync(root)) { if (git.isRepo(root) && p.url && git.remoteUrl(root) && git.canonicalGithub(git.remoteUrl(root)) !== git.canonicalGithub(p.url)) { ui.fail(`${p.name}: exists with a different remote (${git.remoteUrl(root)}); not touching it`); rc = 1; } continue; }
+    const c = locate(p, ws); const root = c.root, cont = container(p, ws);
+    if (present(c)) { if (p.url && git.canonicalGithub(git.remoteUrl(root)) !== git.canonicalGithub(p.url)) { ui.fail(`${p.name}: exists with a different remote (${git.remoteUrl(root)}); not touching it`); rc = 1; } continue; }
+    if (c.why !== "missing") continue;
     if (!p.url) { ui.warn(`${p.name}: no remote recorded — cannot clone it here (on the machine that has it: cs doctor --fix)`); rc = 1; continue; }
     if (dryRun) { ui.step(`${p.name}: would clone ${p.url} → ${contract(root)}`); continue; }
     mkdirSync(cont, { recursive: true });

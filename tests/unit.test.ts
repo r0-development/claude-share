@@ -8,6 +8,8 @@ import { newProjectOptions, rewriteIdentityFlags } from "../src/projects.ts";
 import { envVarName } from "../src/import.ts";
 import { parseDotenv, dumpDotenv } from "../src/secrets/index.ts";
 import { plan, status, type Facts } from "../src/plan.ts";
+import type { Unit } from "../src/checkout.ts";
+import type { EnvState } from "../src/envfiles.ts";
 import { digest, gitNote } from "../src/note.ts";
 import { classify, storeName, fileOf, merge3, mergeKeys, patchDotenv, describeMerge, describeKeys, blank } from "../src/env.ts";
 
@@ -80,8 +82,14 @@ test("import: env var names; dotenv round trip", () => {
 });
 
 // cs sync plan: facts (what was observed) → actions with defaults + questions for a human. No I/O.
-const facts = (over: Partial<Facts>): Facts => ({ project: "p", layout: "plain", units: [{ rel: ".", branch: "main", dirty: 0, unpushed: 0 }], waiting: [], ...over });
-const w = (branch: string, machine: string) => ({ branch, machine, when: "2026-09-16T08:00:00+00:00", note: "", ref: `handoff/u/${branch}` });
+// facts are hand-typed here in the shape src/checkout.ts produces (tests/checkout.test.ts asserts that shape on real repositories)
+const facts = (over: { project?: string; layout?: "plain" | "worktrees"; units?: Omit<Unit, "path">[]; waiting?: Facts["waiting"]; env?: EnvState[]; offline?: boolean; disabled?: boolean } = {}): Facts => {
+  const name = over.project ?? "p", layout = over.layout ?? "plain", container = `/w/${name}`, root = layout === "worktrees" ? `${container}/repo` : container;
+  const project = { name, profiles: ["all"], machines: [], layout, handoff: over.disabled ? { enabled: false } : {}, url: `git@github.com:o/${name}.git` };
+  const units = (over.units ?? [{ rel: ".", branch: "main", dirty: 0, unpushed: 0 }]).map((u) => ({ path: u.rel === "." ? root : `${container}/${u.rel}`, ...u }));
+  return { checkout: { project, root, container, units }, waiting: over.waiting ?? [], ...(over.env ? { env: over.env } : {}), ...(over.offline ? { offline: true } : {}) };
+};
+const w = (branch: string, machine: string) => ({ branch, machine, when: "2026-09-16T08:00:00+00:00", note: "", ref: `handoff/u/${branch}`, sha: "s", base: "b", worktree: "." });
 test("plan: table of facts → actions", () => {
   const cases: [string, Facts, { actions: string[]; checked?: boolean[]; questions?: string[]; skipped?: number }][] = [
     ["clean, nothing waiting", facts({}), { actions: [] }],
@@ -117,19 +125,19 @@ test("plan: apply and send never both for one branch; two projects keep their or
   assert.deepEqual(pl.actions.map((a) => a.id), ["apply:a:main", "push:a:main", "send:b:x"]);
   assert.ok(pl.actions[0].label.includes("a") && pl.actions[0].hint.includes("laptop") && pl.actions[2].hint.includes("1 change"));
   const q = plan([facts({ units: [{ rel: ".", branch: "main", dirty: 1, unpushed: 0 }], waiting: [w("main", "laptop")] })], "desk").questions[0];
-  assert.ok(q.why.includes("laptop") && q.project === "p" && q.branch === "main");
+  assert.ok(q.why.includes("laptop") && q.checkout.project.name === "p" && q.handoff.branch === "main");
 });
 test("plan: a question names the dirty unit and whether it is on the waiting branch (only then can local be sent over the handoff)", () => {
   const same = plan([facts({ units: [{ rel: ".", branch: "main", dirty: 1, unpushed: 0 }], waiting: [w("main", "laptop")] })], "desk").questions[0];
-  assert.deepEqual([same.unit, same.sameBranch, same.when], [".", true, "2026-09-16T08:00:00+00:00"]);
+  assert.deepEqual([same.unit.rel, same.sameBranch, same.handoff.when], [".", true, "2026-09-16T08:00:00+00:00"]);
   const other = plan([facts({ units: [{ rel: ".", branch: "main", dirty: 1, unpushed: 0 }], waiting: [w("feat", "laptop")] })], "desk").questions[0];
-  assert.deepEqual([other.unit, other.sameBranch], [".", false]);
+  assert.deepEqual([other.unit.rel, other.sameBranch], [".", false]);
   const wt = plan([facts({ layout: "worktrees", units: [{ rel: "wt-b", branch: "b", dirty: 2, unpushed: 0 }], waiting: [w("b", "laptop")] })], "desk").questions[0];
-  assert.deepEqual([wt.unit, wt.sameBranch], ["wt-b", true]);
+  assert.deepEqual([wt.unit.rel, wt.sameBranch], ["wt-b", true]);
 });
 test("plan: a push row names the branch and the count, is never checked, and is not offered for a unit that is skipped or unreachable", () => {
   const pu = plan([facts({ units: [{ rel: ".", branch: "feat/x", dirty: 0, unpushed: 3 }] })], "desk").actions.find((a) => a.kind === "push")!;
-  assert.deepEqual([pu.id, pu.project, pu.branch, pu.checked], ["push:p:feat/x", "p", "feat/x", false]);
+  assert.deepEqual([pu.id, pu.checkout.project.name, pu.unit.branch, pu.checked], ["push:p:feat/x", "p", "feat/x", false]);
   assert.ok(pu.label.includes("feat/x") && pu.hint.includes("3 unpushed commits"));
   const wt = plan([facts({ layout: "worktrees", units: [{ rel: ".", branch: "main", dirty: 0, unpushed: 0 }, { rel: "wt-a", branch: "a", dirty: 0, unpushed: 1 }] })], "desk");
   assert.deepEqual(wt.actions.map((a) => a.id), ["send:p:a", "push:p:a"]);
@@ -170,7 +178,9 @@ test("status: facts → bits and pending", () => {
 });
 
 // .env files on the plan screen: one row per file with something to move (checked), one question per key changed on both sides
-const env = (over: Partial<Facts["env"] extends (infer E)[] | undefined ? E : never>) => ({ file: ".env", kind: "values" as const, merge: { result: {}, toLocal: [], toStore: [], conflicts: [] }, ...over });
+const env = (over: Partial<EnvState> & { from?: string; toFill?: string[] }): EnvState => { const { from, toFill, ...rest } = over; const file = over.file ?? ".env";
+  const st: EnvState = { project: "p", file, kind: "values", name: `p${file.slice(4)}`, path: `/w/p/${file}`, localText: "", merge: { result: {}, toLocal: [], toStore: [], conflicts: [] }, ...(from ? { storedFrom: from } : {}), ...rest };
+  if (toFill) st.merge = { ...st.merge, toFill } as EnvState["merge"]; return st; };
 test("plan: .env rows and per-key questions; unignored files are skipped with the fix; nothing to move → no row", () => {
   const store = plan([facts({ env: [env({ merge: { result: { A: "1", B: "2" }, toLocal: [], toStore: ["A", "B"], conflicts: [] } })] })], "desk");
   assert.deepEqual(store.actions.map((a) => [a.id, a.kind, a.checked, a.label, a.hint]), [["env:p:.env", "env", true, "p · .env", "store 2 keys"]]);
@@ -178,7 +188,7 @@ test("plan: .env rows and per-key questions; unignored files are skipped with th
   assert.deepEqual(take.actions.map((a) => [a.id, a.hint]), [["env:p:.env.production", "take 1 key from laptop"]]);
   const both = plan([facts({ env: [env({ from: "laptop", merge: { result: { B: "2" }, toLocal: ["B"], toStore: [], conflicts: [{ key: "A", local: "x", stored: "y" }, { key: "C", local: "1", stored: undefined }] } })] })], "desk");
   assert.deepEqual(both.actions.map((a) => a.id), ["env:p:.env"]);
-  assert.deepEqual(both.questions.map((q) => q.kind === "env-key" ? [q.project, q.file, q.key] : q.kind), [["p", ".env", "A"], ["p", ".env", "C"]]);
+  assert.deepEqual(both.questions.map((q) => q.kind === "env-key" ? [q.env.project, q.env.file, q.key] : q.kind), [["p", ".env", "A"], ["p", ".env", "C"]]);
   assert.ok(both.questions[0].why.includes("A") && both.questions[0].why.includes("laptop"), both.questions[0].why);
   assert.equal(plan([facts({ env: [env({})] })], "desk").actions.length, 0);
   const un = plan([facts({ env: [env({ kind: "unignored" })] })], "desk");

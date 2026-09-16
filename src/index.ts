@@ -146,7 +146,7 @@ program.command("resume [projects...]", HIDDEN).description("apply waiting hando
 const handoffs = program.command("handoffs", HIDDEN).description("handoffs waiting on remotes: ls | gc | drop");
 handoffs.command("ls", { isDefault: true }).option("--all").action(async (o) => { const { m, man } = ctx(); const h = await H(); const projects = h.projectsFor(man, m, [], o.all ?? true);
   ui.intro("cs handoffs"); const list = await h.waitingList(m, man, projects);
-  if (!list.length) ui.info(ui.dim("no handoffs waiting")); else ui.table(list.map((x) => [x.worktree, x.branch, x.machine, x.when.slice(0, 16), ui.dim(x.note)]), ["project", "branch", "from", "when", "note"]);
+  if (!list.length) ui.info(ui.dim("no handoffs waiting")); else ui.table(list.map((x) => [x.project, x.branch, x.machine, x.when.slice(0, 16), ui.dim(x.note)]), ["project", "branch", "from", "when", "note"]);
   ui.outro(ui.dim("cs sync · cs handoffs gc --older-than 14")); });
 handoffs.command("gc").option("--older-than <days>", "", "14").option("--all").action(async (o) => { const { m, man } = ctx(); const h = await H(); await ui.command("cs handoffs gc", async () => ui.group("dropped", () => h.handoffGc(m, man, h.projectsFor(man, m, [], true), +o.olderThan), { done: "nothing older than that" })); });
 handoffs.command("drop <branch>").description("delete one waiting handoff (branch name or full ref) for the cwd project").action(async (b) => { const { m, man } = ctx(); const h = await H(); const [p] = h.projectsFor(man, m, [], false); await ui.command("cs handoffs drop", () => h.handoffDrop(m, man, p, b)); });
