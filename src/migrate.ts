@@ -8,8 +8,8 @@ import { join } from "node:path";
 import { parse } from "smol-toml";
 import * as git from "./git.js";
 import { contract, expand, legacyShareDir, legacyShareKey, machineFile, shareDirDefault, shareKeyDefault, stateDir } from "./paths.js";
-import { saveMachine, shareDir, type Machine } from "./machine.js";
-import { selectedProjects, workspace, type Manifest } from "./manifest.js";
+import { saveMachine, shareDir } from "./machine.js";
+import { reload, selectedProjects, workspace, type Share } from "./share.js";
 import { configureRepo, keyPath, usesKey } from "./sharekey.js";
 import { dirs, locate, present, REF_NS } from "./checkout.js";
 import { applyLinks } from "./apply.js";
@@ -21,8 +21,8 @@ const OLD_REF_NS = "wip";
 export interface OldName { what: string; move: string; then?: string; apply?: () => void }
 
 /** Every old name still in use here or in the share, each with its move. */
-export function findOldNames(repo: string, m: Machine, man: Manifest): OldName[] {
-  const out: OldName[] = [];
+export function findOldNames(share: Share): OldName[] {
+  const repo = share.path, m = share.machine; const out: OldName[] = [];
   // the share key: ~/.ssh/cs/master → ~/.ssh/cs/share, and the share's core.sshCommand that names it
   if (existsSync(legacyShareKey()) && !existsSync(shareKeyDefault()))
     out.push({ what: `share key ${contract(legacyShareKey())}`, move: `mv ${contract(legacyShareKey())} ${contract(shareKeyDefault())} (and .pub)`,
@@ -45,7 +45,7 @@ export function findOldNames(repo: string, m: Machine, man: Manifest): OldName[]
         let target = repo;
         if (repo === legacyShareDir() && !existsSync(shareDirDefault())) { mkdirSync(join(shareDirDefault(), ".."), { recursive: true }); renameSync(legacyShareDir(), shareDirDefault()); target = shareDirDefault(); }
         if (oldKeyInToml || m.share) { m.share = m.share && expand(m.share) !== legacyShareDir() && expand(m.share) !== shareDirDefault() ? m.share : undefined; saveMachine(m); }
-        if (target !== repo) { const changes: string[] = []; applyLinks(target, false, changes); const ws = workspace(man, m); for (const p of selectedProjects(man, m)) if (dirs(p, ws).length) syncProject(target, p, ws); }
+        if (target !== repo) { const changes: string[] = []; applyLinks(target, false, changes); const ws = workspace(share); for (const p of selectedProjects(share)) if (dirs(p, ws).length) syncProject(target, p, ws); }
       } });
   // state files: last-config → last-sync, link/ → project-state/; sync-config.lock, blocked-config, handoff/pending are gone
   const st = stateDir(), inState = `(in ${contract(st)})`;
@@ -54,8 +54,8 @@ export function findOldNames(repo: string, m: Machine, man: Manifest): OldName[]
   for (const f of ["sync-config.lock", "blocked-config", "handoff/pending"]) if (existsSync(join(st, f))) out.push({ what: `state file ${f}`, move: `rm ${f} ${inState} — no longer read`, apply: () => rmSync(join(st, f), { force: true }) });
   // handoffs under the old ref namespace: on the project remote (asked with a short cap, offline tolerated; what the last
   // fetch brought counts too) or a local leftover — reported with the exact command, never moved by cs
-  const ws = workspace(man, m);
-  for (const p of selectedProjects(man, m)) {
+  const ws = workspace(share);
+  for (const p of selectedProjects(share)) {
     const c = locate(p, ws); if (!present(c)) continue; const root = c.root;
     const at = (cmd: string) => `git -C ${contract(root)} ${cmd}`;
     const fetched = git.out(["for-each-ref", "--format=%(refname:short)", `refs/remotes/origin/${OLD_REF_NS}/`], root).split("\n").filter(Boolean).map((r) => r.replace(/^origin\//, ""));
@@ -70,11 +70,12 @@ export function findOldNames(repo: string, m: Machine, man: Manifest): OldName[]
   return out;
 }
 
-/** Perform every move that has one. Returns the share's path afterwards (it may have moved) and one line per move for the report. */
-export function migrate(repo: string, m: Machine, man: Manifest): { repo: string; done: string[] } {
+/** Perform every move that has one; the Share follows (its path may have moved, its manifest may have been rewritten). One line per move for the report. */
+export function migrate(share: Share): string[] {
   const done: string[] = [];
-  for (const o of findOldNames(repo, m, man)) if (o.apply) { o.apply(); done.push(`${o.what}: ${o.move}${o.then ? ` — ${o.then}` : ""}`); }
-  return { repo: shareDir(m), done };
+  for (const o of findOldNames(share)) if (o.apply) { o.apply(); done.push(`${o.what}: ${o.move}${o.then ? ` — ${o.then}` : ""}`); }
+  share.path = shareDir(share.machine); reload(share);
+  return done;
 }
 
 function machineTomlHas(key: string): boolean { try { return key in (parse(readFileSync(machineFile(), "utf8")) as object); } catch { return false; } }

@@ -1,36 +1,35 @@
 /** cs identity add|rename|ls */
-import { existsSync, renameSync, readFileSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { existsSync, renameSync } from "node:fs";
 import * as git from "./git.js";
 import * as github from "./github.js";
 import { expand } from "./paths.js";
-import type { Machine } from "./machine.js";
-import { appendIdentity, keyPath, loadManifest, NAME_RE, type Identity, type Manifest } from "./manifest.js";
+import { keyPath, NAME_RE, type Identity, type Manifest } from "./manifest.js";
+import { addIdentity, commit, renameIdentity, type Share } from "./share.js";
 import { applyGit } from "./apply.js";
 import * as ui from "./ui.js";
 
-export async function add(repo: string, m: Machine, man: Manifest, id: string, o: { owner: string; name: string; email: string; key?: string; noToken?: boolean }): Promise<number> {
+export async function add(share: Share, id: string, o: { owner: string; name: string; email: string; key?: string; noToken?: boolean }): Promise<number> {
   if (!NAME_RE.test(id)) throw new Error(`cs: '${id}' is not a valid identity id`);
   const ident: Identity = { id, name: o.name, email: o.email, owner: o.owner, sshKey: o.key };
-  appendIdentity(repo, ident); git.git(["add", "projects.toml"], repo); git.commit(repo, `identities: add ${id}`, "cs", `cs@${m.name}`);
+  addIdentity(share, ident); commit(share, `identities: add ${id}`, ["projects.toml"]);
   ui.step(`identity ${ui.bold(id)}  ${ui.dim(`${o.name} <${o.email}> · github.com/${o.owner} · key ${keyPath(ident)}`)}`);
-  const ch: string[] = []; applyGit(loadManifest(repo), false, ch); if (ch.length) ui.step("git identity includes updated");
+  const ch: string[] = []; applyGit(share.manifest, false, ch); if (ch.length) ui.step("git identity includes updated");
   if (!existsSync(expand(keyPath(ident)))) ui.info(`no key at ${keyPath(ident)} yet — cs ssh setup generates and registers it`);
   if (!o.noToken && !github.getToken(o.owner)) { ui.info(`a GitHub token for ${o.owner} lets cs new --${id} create repos:`);
     try { await github.ensureToken(o.owner); ui.ok(`token for ${o.owner} stored`); } catch (e: any) { ui.warn(`no token stored (${e.message}); run cs token set ${o.owner} later`); } }
   return 0;
 }
-export function rename(repo: string, m: Machine, man: Manifest, oldId: string, newId: string): number {
+export function rename(share: Share, oldId: string, newId: string): number {
+  const man = share.manifest, repo = share.path;
   if (!man.identities[oldId]) throw new Error(`cs: unknown identity '${oldId}'`);
   if (man.identities[newId] || !NAME_RE.test(newId)) throw new Error(`cs: '${newId}' is taken or invalid`);
-  const ident = man.identities[oldId]; const f = join(repo, "projects.toml"); let t = readFileSync(f, "utf8");
-  t = t.replace(new RegExp(`^\\[identities\\.${oldId}\\]`, "m"), `[identities.${newId}]`).replace(new RegExp(`^(identity\\s*=\\s*)"${oldId}"`, "mg"), `$1"${newId}"`);
-  writeFileSync(f, t);
+  const ident = man.identities[oldId]; const n = Object.values(man.projects).filter((p) => p.identity === oldId).length;
+  renameIdentity(share, oldId, newId);
   if (!ident.sshKey) { for (const s of ["", ".pub"]) { const a = expand(`~/.ssh/cs/${oldId}${s}`), b = expand(`~/.ssh/cs/${newId}${s}`); if (existsSync(a)) renameSync(a, b); } ui.step(`~/.ssh/cs/${oldId} → ~/.ssh/cs/${newId}`); }
   for (const d of git.out(["ls-files", `machines/*/ssh/${oldId}.pub`], repo).split("\n").filter(Boolean)) git.git(["mv", d, d.replace(`${oldId}.pub`, `${newId}.pub`)], repo);
-  git.git(["add", "projects.toml"], repo); git.commit(repo, `identities: rename ${oldId} → ${newId}`, "cs", `cs@${m.name}`);
-  const n = Object.values(man.projects).filter((p) => p.identity === oldId).length; ui.ok(`identity ${oldId} → ${newId} (${n} projects updated)`);
-  const ch: string[] = []; applyGit(loadManifest(repo), false, ch); for (const c of ch) ui.step(c);
+  commit(share, `identities: rename ${oldId} → ${newId}`, ["projects.toml"]);
+  ui.ok(`identity ${oldId} → ${newId} (${n} projects updated)`);
+  const ch: string[] = []; applyGit(share.manifest, false, ch); for (const c of ch) ui.step(c);
   return 0;
 }
 export function ls(man: Manifest) {

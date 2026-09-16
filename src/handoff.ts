@@ -4,8 +4,8 @@
 import { existsSync, readFileSync, rmSync } from "node:fs";
 import * as git from "./git.js";
 import { contract } from "./paths.js";
-import type { Machine } from "./machine.js";
-import { projectForPath, selectedProjects, workspace, type Manifest, type Project } from "./manifest.js";
+import type { Project } from "./manifest.js";
+import { projectForPath, selectedProjects, workspace, type Share } from "./share.js";
 import { apply, enabled, fetchWaiting, handoffRef, loadState, locate, noteFile, present, send, userSlug, type Checkout, type Handoff } from "./checkout.js";
 import { runLink } from "./link.js";
 import { plan, type HandoffQuestion } from "./plan.js";
@@ -21,8 +21,8 @@ async function observe(p: Project, ws: string, o: { allow?: string[]; label: str
 const questions = (pl: ReturnType<typeof plan>) => pl.questions.filter((q): q is HandoffQuestion => q.kind === "dirty-vs-waiting");
 
 /** Send every dirty or unpushed unit of `projects` as the plan would; `overwrite` sends over another machine's waiting handoff (backed up first). */
-export async function handoff(repo: string, m: Machine, man: Manifest, projects: Project[], o: { note?: string; dryRun?: boolean; allow?: string[]; overwrite?: boolean }): Promise<number> {
-  const ws = workspace(man, m); let rc = 0;
+export async function handoff(share: Share, projects: Project[], o: { note?: string; dryRun?: boolean; allow?: string[]; overwrite?: boolean }): Promise<number> {
+  const ws = workspace(share); const m = share.machine; let rc = 0;
   for (const p of projects) {
     const f = await observe(p, ws, { allow: o.allow, label: "fetching handoffs" }); if (!f) continue;
     const pl = plan([f], m.name);
@@ -41,11 +41,11 @@ export async function handoff(repo: string, m: Machine, man: Manifest, projects:
 }
 
 /** Apply every waiting handoff of `projects` as the plan would; `replace` applies over a dirty unit (its changes backed up first). */
-export async function resume(repo: string, m: Machine, man: Manifest, projects: Project[], o: { replace?: boolean; keepRemote?: boolean; dryRun?: boolean }): Promise<number> {
-  const ws = workspace(man, m); let rc = 0;
+export async function resume(share: Share, projects: Project[], o: { replace?: boolean; keepRemote?: boolean; dryRun?: boolean }): Promise<number> {
+  const ws = workspace(share); const m = share.machine; let rc = 0;
   const one = async (c: Checkout, h: Handoff, replace: boolean) => {
     const r = await apply(c, h, m, { replace, keepRemote: o.keepRemote, dryRun: o.dryRun }); if (!r.ok) { if (!o.dryRun) rc = 1; return; }
-    const wasQuiet = ui.isQuiet(); ui.setQuiet(true); try { runLink(repo, m, man, [c.project.name]); } finally { ui.setQuiet(wasQuiet); }   // project state into the unit (a new worktree has none yet)
+    const wasQuiet = ui.isQuiet(); ui.setQuiet(true); try { runLink(share, [c.project.name]); } finally { ui.setQuiet(wasQuiet); }   // project state into the unit (a new worktree has none yet)
     if (r.note) ui.note(r.note.trim().split("\n"), `note from ${h.machine}`);
   };
   for (const p of projects) {
@@ -61,35 +61,35 @@ export async function resume(repo: string, m: Machine, man: Manifest, projects: 
   return rc;
 }
 
-export async function waitingList(m: Machine, man: Manifest, projects: Project[]): Promise<(Handoff & { project: string })[]> {
-  const ws = workspace(man, m); const all: (Handoff & { project: string })[] = [];
+export async function waitingList(share: Share, projects: Project[]): Promise<(Handoff & { project: string })[]> {
+  const ws = workspace(share); const all: (Handoff & { project: string })[] = [];
   for (const p of projects) { const f = await observe(p, ws, { label: "fetching handoffs" }); if (!f) continue; for (const h of f.waiting) all.push({ ...h, project: p.name }); }
   return all;
 }
-export async function handoffGc(m: Machine, man: Manifest, projects: Project[], olderThanDays: number): Promise<number> {
-  const ws = workspace(man, m); let n = 0;
+export async function handoffGc(share: Share, projects: Project[], olderThanDays: number): Promise<number> {
+  const ws = workspace(share); let n = 0;
   for (const p of projects) { const c = locate(p, ws); if (!present(c)) continue;
     for (const h of (await fetchWaiting(c)).list) { const age = (Date.now() - Date.parse(h.when)) / 86400000; if (age < olderThanDays) continue;
       await git.gitA(["push", "-q", "origin", "--delete", h.ref], c.root, { check: false }); ui.step(`${p.name}: dropped ${h.ref} (${Math.floor(age)} days old)`); n++; } }
   return n;
 }
-export async function handoffDrop(m: Machine, man: Manifest, p: Project, ref: string): Promise<void> {
-  const c = locate(p, workspace(man, m)); if (!present(c)) throw new Error(`cs: ${p.name}: ${c.why}`);
+export async function handoffDrop(share: Share, p: Project, ref: string): Promise<void> {
+  const c = locate(p, workspace(share)); if (!present(c)) throw new Error(`cs: ${p.name}: ${c.why}`);
   const full = ref.startsWith("handoff/") ? ref : handoffRef(userSlug(c.root), ref);
   await ui.spin(`removing ${full}…`, () => git.gitA(["push", "-q", "origin", "--delete", full], c.root, { timeout: 60 })); ui.ok(`dropped ${full}`);
 }
 
 /** Print (and forget) the note left by the last resume for the cwd's project. */
-export function printNote(man: Manifest, m: Machine, cwd = process.cwd()): boolean {
-  const p = projectForPath(man, m, cwd); if (!p) return false;
+export function printNote(share: Share, cwd = process.cwd()): boolean {
+  const p = projectForPath(share, cwd); if (!p) return false;
   const f = noteFile(p); if (!existsSync(f)) return false;
   const note = readFileSync(f, "utf8"); rmSync(f, { force: true });
   const st = loadState(p);
   process.stdout.write(`Handoff note for ${p.name}${st?.resumed?.from ? ` (from ${st.resumed.from}, resumed ${st.resumed.at?.slice(0, 16)})` : ""}:\n${note.trimEnd()}\n`);
   return true;
 }
-export const projectsFor = (man: Manifest, m: Machine, names: string[], all: boolean): Project[] => {
-  if (names.length) return names.map((n) => { const p = man.projects[n]; if (!p) throw new Error(`cs: unknown project '${n}'`); return p; });
-  if (all) return selectedProjects(man, m);
-  const p = projectForPath(man, m, process.cwd()); if (!p) throw new Error("cs: not inside a registered project (pass a name or --all)"); return [p];
+export const projectsFor = (share: Share, names: string[], all: boolean): Project[] => {
+  if (names.length) return names.map((n) => { const p = share.manifest.projects[n]; if (!p) throw new Error(`cs: unknown project '${n}'`); return p; });
+  if (all) return selectedProjects(share);
+  const p = projectForPath(share, process.cwd()); if (!p) throw new Error("cs: not inside a registered project (pass a name or --all)"); return [p];
 };

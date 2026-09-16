@@ -5,8 +5,8 @@ import { spawnSync } from "node:child_process";
 import * as git from "./git.js";
 import * as github from "./github.js";
 import { contract, expand } from "./paths.js";
-import type { Machine } from "./machine.js";
-import { appendProject, identityByFlag, identityForUrl, keyPath, loadManifest, NAME_RE, selectedProjects, updateProject, validate, workspace, type Identity, type Manifest, type Project } from "./manifest.js";
+import { identityByFlag, identityForUrl, keyPath, NAME_RE, validate, type Identity, type Manifest, type Project } from "./manifest.js";
+import { addProject, commit, selectedProjects, updateProject, workspace, type Share } from "./share.js";
 import { runLink } from "./link.js";
 import { checkoutRoot, container, locate, present, sniff } from "./checkout.js";
 import * as ui from "./ui.js";
@@ -58,8 +58,8 @@ export async function chooseIdentity(man: Manifest, flag: string | undefined, fo
 }
 
 /** cs add [path]: register an existing directory; creates the remote first when it has none. */
-export async function add(repo: string, m: Machine, man: Manifest, path: string | undefined, o: { profiles: string[]; identity?: string; name?: string; description: string; noCommit: boolean; priv?: boolean }): Promise<Project> {
-  const ws = workspace(man, m); let target = resolve(path ?? process.cwd());
+export async function add(share: Share, path: string | undefined, o: { profiles: string[]; identity?: string; name?: string; description: string; noCommit: boolean; priv?: boolean }): Promise<Project> {
+  const ws = workspace(share); const man = share.manifest; let target = resolve(path ?? process.cwd());
   const top = git.toplevel(target);
   if (top) { target = top; if (basename(top) === "repo" && dirname(top) !== ws && sniff(dirname(top)).layout === "worktrees") target = dirname(top); }   // inside a worktrees layout: the project is the directory above
   const rel = relative(ws, target); if (!rel || rel.startsWith("..") || rel.includes("/")) throw new Error(`cs: project must be a direct child of the workspace ${contract(ws)} (got ${target})`);
@@ -70,25 +70,25 @@ export async function add(repo: string, m: Machine, man: Manifest, path: string 
   else { if (url.includes("github")) url = git.canonicalGithub(url); ident = o.identity ? man.identities[o.identity] : identityForUrl(man, url); if (!ident) throw new Error(`cs: no identity matches ${url}; pass --identity or add url_globs in projects.toml`); }
   const p: Project = { name, path: rel !== name ? rel : undefined, url, identity: ident.id, profiles: o.profiles.length ? o.profiles : ["all"], machines: [], branch: git.currentBranch(checkout), layout, description: o.description, handoff: {} };
   const errs = validate({ ...man, projects: { [name]: p } }); if (errs.length) throw new Error("cs: " + errs.join("; "));
-  appendProject(repo, p); ui.ok(`registered ${name}  ${ui.dim(`${url} · profiles ${p.profiles.join(",")}`)}`);
-  if (!o.noCommit && git.isRepo(repo)) { git.git(["add", "projects.toml"], repo); git.commit(repo, `projects: add ${name}`, "cs", `cs@${m.name}`); }
-  ui.setQuiet(true); try { runLink(repo, m, loadManifest(repo), [name]); } finally { ui.setQuiet(false); }
+  addProject(share, p); ui.ok(`registered ${name}  ${ui.dim(`${url} · profiles ${p.profiles.join(",")}`)}`);
+  if (!o.noCommit) commit(share, `projects: add ${name}`, ["projects.toml"]);
+  ui.setQuiet(true); try { runLink(share, [name]); } finally { ui.setQuiet(false); }
   return p;
 }
 
 /** Give a registered project that has no remote one (cs doctor --fix): create, push, record url/identity/branch. */
-export async function fixRemote(repo: string, m: Machine, man: Manifest, p: Project, identityFlag?: string): Promise<boolean> {
-  const root = checkoutRoot(p, workspace(man, m));
+export async function fixRemote(share: Share, p: Project, identityFlag?: string): Promise<boolean> {
+  const man = share.manifest; const root = checkoutRoot(p, workspace(share));
   const ident = p.identity && man.identities[p.identity] ? man.identities[p.identity] : await chooseIdentity(man, identityFlag, p.name);
   const url = await ensureRemote(root, p.name, ident, git.currentBranch(root) || p.branch || man.defaultBranch); if (!url) return false;
-  updateProject(repo, { ...p, url, identity: ident.id, branch: git.currentBranch(root) || p.branch });
-  if (git.isRepo(repo)) { git.git(["add", "projects.toml"], repo); git.commit(repo, `projects: ${p.name} remote`, "cs", `cs@${m.name}`); }
+  updateProject(share, { ...p, url, identity: ident.id, branch: git.currentBranch(root) || p.branch });
+  commit(share, `projects: ${p.name} remote`, ["projects.toml"]);
   ui.ok(`${p.name}: remote recorded  ${ui.dim(url)}`); return true;
 }
 
-export async function clone(repo: string, m: Machine, man: Manifest, names: string[], dryRun = false): Promise<number> {
-  const ws = workspace(man, m); let rc = 0; const cloned: string[] = [];
-  for (const p of selectedProjects(man, m)) {
+export async function clone(share: Share, names: string[], dryRun = false): Promise<number> {
+  const ws = workspace(share); const man = share.manifest; let rc = 0; const cloned: string[] = [];
+  for (const p of selectedProjects(share)) {
     if (names.length && !names.includes(p.name)) continue;
     const c = locate(p, ws); const root = c.root, cont = container(p, ws);
     if (present(c)) { if (p.url && git.canonicalGithub(git.remoteUrl(root)) !== git.canonicalGithub(p.url)) { ui.fail(`${p.name}: exists with a different remote (${git.remoteUrl(root)}); not touching it`); rc = 1; } continue; }
@@ -109,7 +109,7 @@ export async function clone(repo: string, m: Machine, man: Manifest, names: stri
     if (p.postClone) spawnSync("bash", ["-lc", p.postClone], { cwd: cont, stdio: "inherit" });
     cloned.push(p.name);
   }
-  if (cloned.length) { const wasQuiet = ui.isQuiet(); ui.setQuiet(true); try { runLink(repo, m, man, cloned); } finally { ui.setQuiet(wasQuiet); } ui.step(`project state placed into ${cloned.length} project(s)`); }
+  if (cloned.length) { const wasQuiet = ui.isQuiet(); ui.setQuiet(true); try { runLink(share, cloned); } finally { ui.setQuiet(wasQuiet); } ui.step(`project state placed into ${cloned.length} project(s)`); }
   return rc;
 }
 
@@ -119,24 +119,26 @@ export function rewriteIdentityFlags(argv: string[], man: Manifest): string[] {
 }
 /** What `cs new` needs from its flags: the identity (required) and the profiles — given, else the identity's own when this
  *  machine has that profile, else all of this machine's. */
-export function newProjectOptions(man: Manifest, m: Machine, o: { identity?: string; profiles: string[] }): { ident: Identity; profiles: string[] } {
+export function newProjectOptions(share: Share, o: { identity?: string; profiles: string[] }): { ident: Identity; profiles: string[] } {
+  const man = share.manifest, m = share.machine;
   if (!o.identity) throw new Error(`cs: which identity? use one of ${Object.keys(man.identities).map((i) => "--" + i).join(", ")} (or --identity <id>)`);
   const ident = man.identities[o.identity] ?? identityByFlag(man, o.identity); if (!ident) throw new Error(`cs: unknown identity '${o.identity}'`);
   const profiles = o.profiles.length ? o.profiles : m.profiles.includes(ident.id) ? [ident.id] : [...m.profiles];
   return { ident, profiles };
 }
 /** cs new <name>: empty directory → git repo with a private GitHub remote, registered, project state placed. */
-export async function create(repo: string, m: Machine, man: Manifest, name: string, ident: Identity, o: { profiles: string[]; description?: string; priv?: boolean }): Promise<number> {
+export async function create(share: Share, name: string, ident: Identity, o: { profiles: string[]; description?: string; priv?: boolean }): Promise<number> {
+  const man = share.manifest;
   if (!NAME_RE.test(name)) throw new Error(`cs: '${name}' is not a valid project name`);
   if (man.projects[name]) throw new Error(`cs: project '${name}' is already registered`);
-  const ws = workspace(man, m), root = join(ws, name), branch = man.defaultBranch;
+  const ws = workspace(share), root = join(ws, name), branch = man.defaultBranch;
   ui.intro(`new project ${ui.bold(name)}`);
   ui.kv("identity", `${ident.id}  ${ui.dim(`${ident.name} <${ident.email}>`)}`); ui.kv("path", contract(root)); ui.kv("remote", github.repoUrl(ident.owner, name)); ui.kv("branch", branch); ui.kv("profiles", o.profiles.join(", "));
   const url = await ensureRemote(root, name, ident, branch, { priv: o.priv, description: o.description }); if (!url) return 1;
   const p: Project = { name, url, identity: ident.id, profiles: o.profiles, machines: [], branch: git.currentBranch(root) || branch, layout: "plain", description: o.description, handoff: {} };
-  appendProject(repo, p); if (git.isRepo(repo)) { git.git(["add", "projects.toml"], repo); git.commit(repo, `projects: add ${name}`, "cs", `cs@${m.name}`); }
+  addProject(share, p); commit(share, `projects: add ${name}`, ["projects.toml"]);
   ui.step(`registered in projects.toml  ${ui.dim(`profiles ${o.profiles.join(",")}`)}`);
-  ui.setQuiet(true); try { runLink(repo, m, loadManifest(repo), [name]); } finally { ui.setQuiet(false); }
+  ui.setQuiet(true); try { runLink(share, [name]); } finally { ui.setQuiet(false); }
   ui.step("project state placed (memory → share)");
   ui.outro(ui.bold(`cd ${contract(root)} && claude`));
   return 0;

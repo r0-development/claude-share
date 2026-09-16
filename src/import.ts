@@ -2,8 +2,8 @@
 import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { basename, dirname, extname, join, relative } from "node:path";
 import { claudeDir, claudeJson, contract } from "./paths.js";
-import type { Machine } from "./machine.js";
-import { workspace, type Manifest, type Project } from "./manifest.js";
+import type { Project } from "./manifest.js";
+import { workspace, type Share } from "./share.js";
 import { checkoutRoot, container, dirs } from "./checkout.js";
 import { memoryDir, projectState, syncProject } from "./link.js";
 import { dumps, loads } from "./jsonmerge.js";
@@ -70,8 +70,8 @@ export function importMcp(repo: string, p: Project, ws: string, check = false, s
   if (Object.keys(secrets).length) { ui.warn(`${p.name}: values replaced by \${VAR} placeholders — store them: cs secrets set global ${Object.keys(secrets).map((k) => `${k}=…`).join(" ")}  (full values: cs import mcp ${p.name} --show)`); }
   return Object.keys(found).length;
 }
-export function runImport(repo: string, m: Machine, man: Manifest, what: string, names: string[], check: boolean, show: boolean) {
-  const ws = workspace(man, m);
+export function runImport(share: Share, what: string, names: string[], check: boolean, show: boolean) {
+  const repo = share.path, m = share.machine, man = share.manifest; const ws = workspace(share);
   if (!names.length) throw new Error("cs: import needs a project name (or --all)");
   for (const n of names) { const p = man.projects[n]; if (!p) throw new Error(`cs: unknown project '${n}'`);
     if (what === "memory") importMemory(repo, p, ws, m.name, check); else if (what === "project") importProjectFiles(repo, p, ws, check); else if (what === "mcp") importMcp(repo, p, ws, check, show); else throw new Error(`cs: unknown import target '${what}'`); }

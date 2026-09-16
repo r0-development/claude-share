@@ -3,8 +3,8 @@ import { existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, readlinkSy
 import { basename, dirname, join, resolve } from "node:path";
 import { claudeDir, contract, expand, home, stateDir, toolRoot } from "./paths.js";
 import { shellRc } from "./platform.js";
-import type { Machine } from "./machine.js";
 import { globs, keyPath, type Manifest } from "./manifest.js";
+import type { Share } from "./share.js";
 import { diffKeys, dumps, loads, mergeLayers } from "./jsonmerge.js";
 import * as ui from "./ui.js";
 
@@ -42,16 +42,16 @@ function link(src: string, dst: string, check: boolean, changes: string[]) {
   changes.push(`link ${contract(dst)}`); if (!check) { mkdirSync(dirname(dst), { recursive: true }); symlinkSync(src, dst); }
 }
 
-export function settingsLayers(repo: string, m: Machine): [string, Record<string, unknown>][] {
-  const names = ["settings.base.json", ...m.profiles.map((p) => `settings.${p}.json`), `settings.${m.name}.json`];
-  return names.filter((n) => existsSync(join(repo, "claude", n))).map((n) => [n, loads(readFileSync(join(repo, "claude", n), "utf8"))]);
+export function settingsLayers(share: Share): [string, Record<string, unknown>][] {
+  const m = share.machine; const names = ["settings.base.json", ...m.profiles.map((p) => `settings.${p}.json`), `settings.${m.name}.json`];
+  return names.filter((n) => existsSync(join(share.path, "claude", n))).map((n) => [n, loads(readFileSync(join(share.path, "claude", n), "utf8"))]);
 }
-export const renderSettings = (repo: string, m: Machine) => mergeLayers(...settingsLayers(repo, m).map(([, d]) => d));
+export const renderSettings = (share: Share) => mergeLayers(...settingsLayers(share).map(([, d]) => d));
 
-export function applySettings(repo: string, m: Machine, check: boolean, changes: string[]) {
-  if (!settingsLayers(repo, m).length) return;
+export function applySettings(share: Share, check: boolean, changes: string[]) {
+  if (!settingsLayers(share).length) return;
   const target = join(claudeDir(), "settings.json");
-  const desired = renderSettings(repo, m);
+  const desired = renderSettings(share);
   const current = existsSync(target) ? loads(readFileSync(target, "utf8")) : {};
   if (JSON.stringify(current) === JSON.stringify(desired)) return;
   const keys = diffKeys(current, desired);
@@ -96,9 +96,9 @@ export function applyShellRc(check: boolean, changes: string[]) {
   const next = text.includes(GIT_MARK) ? text.slice(0, text.indexOf(GIT_MARK)) + block + text.slice(text.indexOf(GIT_END) + GIT_END.length + 1) : text + (text && !text.endsWith("\n") ? "\n" : "") + block;
   if (next !== text) { changes.push(`${contract(rc)}: source shell/cs.sh (claude() wrapper, PATH)`); if (!check) writeFileSync(rc, next); }
 }
-export function runApply(repo: string, m: Machine, man: Manifest, check = false): string[] {
+export function runApply(share: Share, check = false): string[] {
   const changes: string[] = [];
-  applySettings(repo, m, check, changes); applyLinks(repo, check, changes); applyGit(man, check, changes); applyShellRc(check, changes);
+  applySettings(share, check, changes); applyLinks(share.path, check, changes); applyGit(share.manifest, check, changes); applyShellRc(check, changes);
   for (const c of changes) check ? ui.info(c) : ui.step(c);
   if (!changes.length) ui.ok("~/.claude up to date");
   return changes;
