@@ -52,7 +52,7 @@ shareSyncOpts(program.command("share-sync", HIDDEN).description("commit / pull -
 program.command("new <name>").description("create a project: dir, git, private GitHub repo, first push, registered, Claude wired in")
   .option("--identity <id>", "identity id (or --<id> / --<github-owner>, e.g. --personal)").option("--profiles <list>").option("-d, --description <text>", "", "").option("--public")
   .action(async (name, o) => { const share = open(); const { create, newProjectOptions } = await import("./projects.js");
-    const { ident, profiles } = newProjectOptions(share.manifest, share.machine, { identity: o.identity, profiles: csv(o.profiles) });
+    const { ident, profiles } = newProjectOptions(share, { identity: o.identity, profiles: csv(o.profiles) });
     process.exitCode = await create(share, name, ident, { profiles, description: o.description, priv: !o.public }); });
 program.command("add [path]").description("register an existing directory as a project (default: cwd); creates its private GitHub repo when it has no remote").option("--profiles <list>").option("--identity <id>").option("--name <name>").option("--description <text>", "", "").option("--public").option("--no-commit")
   .action(async (p, o) => { const share = open(); const { add } = await import("./projects.js"); await ui.command("cs add", () => add(share, p, { profiles: csv(o.profiles), identity: o.identity, name: o.name, description: o.description, noCommit: !o.commit, priv: !o.public })); });

@@ -96,11 +96,12 @@ test("cs new: --<id> / --<owner> become --identity; profiles default to the iden
   assert.deepEqual(rewriteIdentityFlags(["new", "x", "--work", "--public"], m), ["new", "x", "--identity", "work", "--public"]);
   assert.deepEqual(rewriteIdentityFlags(["new", "x", "--acme", "--profiles=work"], m), ["new", "x", "--identity", "work", "--profiles=work"]);
   assert.deepEqual(rewriteIdentityFlags(["new", "x", "--nope"], m), ["new", "x", "--nope"]);
-  assert.deepEqual(newProjectOptions(m, mach(["work", "all"]), { identity: "work", profiles: [] }), { ident: m.identities.work, profiles: ["work"] });
-  assert.deepEqual(newProjectOptions(m, mach(["all"]), { identity: "acme", profiles: [] }).profiles, ["all"]);
-  assert.deepEqual(newProjectOptions(m, mach(["all"]), { identity: "work", profiles: ["p", "q"] }).profiles, ["p", "q"]);
-  assert.throws(() => newProjectOptions(m, mach(["all"]), { profiles: [] }), /which identity\? use one of --work/);
-  assert.throws(() => newProjectOptions(m, mach(["all"]), { identity: "nope", profiles: [] }), /unknown identity 'nope'/);
+  const share = (profiles: string[]) => ({ path: "/share", machine: mach(profiles), manifest: m });
+  assert.deepEqual(newProjectOptions(share(["work", "all"]), { identity: "work", profiles: [] }), { ident: m.identities.work, profiles: ["work"] });
+  assert.deepEqual(newProjectOptions(share(["all"]), { identity: "acme", profiles: [] }).profiles, ["all"]);
+  assert.deepEqual(newProjectOptions(share(["all"]), { identity: "work", profiles: ["p", "q"] }).profiles, ["p", "q"]);
+  assert.throws(() => newProjectOptions(share(["all"]), { profiles: [] }), /which identity\? use one of --work/);
+  assert.throws(() => newProjectOptions(share(["all"]), { identity: "nope", profiles: [] }), /unknown identity 'nope'/);
 });
 test("git: canonical GitHub url forms collapse", () => {
   for (const u of ["git@github.com:org/repo", "git@github-personal:org/repo.git", "https://github.com/org/repo", "ssh://git@github.com/org/repo.git"]) assert.equal(canonicalGithub(u), "git@github.com:org/repo.git", u);

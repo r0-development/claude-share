@@ -78,6 +78,7 @@ test("commit: a share that is not a git repo yet is left alone", () => {
 // ---------------------------------------------------------------- stampOf: when and from which machine — the contract commit() encodes
 test("stampOf: a file committed by this machine reads back its machine and commit time; modified since → the mtime and no machine", () => {
   const s = share(); writeFileSync(join(s.path, "a.txt"), "a"); commit(s, "a", ["a.txt"]);
+  assert.equal(sh(["log", "-1", "--format=%B", "--", "a.txt"], s.path), "a\n\nCs-Machine: desk");   // the wire form: subject as given, the machine a trailer
   const st = stampOf(s, "a.txt");
   assert.deepEqual(st, { when: sh(["log", "-1", "--format=%cI", "--", "a.txt"], s.path), from: "desk" });
   assert.deepEqual(stampOf(s, join(s.path, "a.txt")), st);                              // absolute path, same answer

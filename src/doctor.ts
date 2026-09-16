@@ -29,7 +29,7 @@ export function remoteless(share: Share): { projects: Project[]; dirs: { name: s
 /** The old-name moves may relocate the share: `migrate` updates the Share in place. */
 export async function fix(share: Share): Promise<void> {
   for (const d of migrate(share)) ui.ok(d);
-  const ws = workspace(share); const man = share.manifest;
+  const ws = workspace(share);
   const { projects, dirs } = remoteless(share);
   for (const p of projects) {
     if (!ui.canAsk()) { ui.warn(`${p.name}: no remote — run cs doctor --fix in a terminal to create one`); continue; }
@@ -44,7 +44,7 @@ export async function fix(share: Share): Promise<void> {
     const c = locate(p, ws); if (!present(c) || !p.url) continue; const root = c.root;
     const url = git.remoteUrl(root); if (url === p.url) continue;
     const cur = git.canonicalGithub(url), want = git.canonicalGithub(p.url);
-    let same = cur === want; const ident = p.identity ? man.identities[p.identity] : undefined;
+    let same = cur === want; const ident = p.identity ? share.manifest.identities[p.identity] : undefined;
     if (!same && ident && identityMatches(ident, cur) && cur.split("/").pop() === want.split("/").pop()) same = true;
     if (same) { git.git(["remote", "set-url", "origin", p.url], root); ui.ok(`${p.name}: remote url ${url} → ${p.url}`); }
     else ui.warn(`${p.name}: remote ${url} is a different repo than manifest ${p.url}; not changing it`);

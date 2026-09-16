@@ -1,11 +1,11 @@
 /** cs remove <names...>: take projects out of the share — manifest entry, project state, secrets — in one share commit, after
  *  one confirmation that lists exactly what goes. Checkouts and remotes are never touched; the only tidy-up inside a
  *  checkout is the auto-memory pointer cs wrote there. The share's history keeps everything (undo: git revert). */
-import { existsSync, readdirSync, readFileSync, rmSync } from "node:fs";
+import { existsSync, readdirSync, rmSync } from "node:fs";
 import { join, relative } from "node:path";
 import { contract } from "./paths.js";
 import { NAME_RE, projectTableRe, type Project } from "./manifest.js";
-import { commit, removeProject, workspace, type Share } from "./share.js";
+import { commit, manifestText, removeProject, workspace, type Share } from "./share.js";
 import { dirs, fetchWaiting, locate, present } from "./checkout.js";
 import { dropPlacedRecord, stripPointer } from "./link.js";
 import { fileOf } from "./env.js";
@@ -69,7 +69,7 @@ function summary(t: Target, manifestText: string) {
 
 export async function remove(share: Share, names: string[], o: { yes?: boolean; noCommit?: boolean } = {}): Promise<string> {
   const repo = share.path; const targets = resolve(share, [...new Set(names)]); const ws = workspace(share);
-  const text = readFileSync(join(repo, "projects.toml"), "utf8");
+  const text = manifestText(share);
   for (const t of targets) ui.note(summary(t, text), t.name);
   for (const t of targets) await warnings(t, ws);
   const label = targets.map((t) => t.name).join(", ");

@@ -120,7 +120,7 @@ export async function runShareSync(share: Share, o: SyncOpts & { debounce?: numb
   const after = git.out(["rev-parse", "HEAD"], repo);
   if (after !== before || o.pullOnly) {
     const changed = before ? git.out(["diff", "--name-only", before, after], repo) : "";
-    if (o.pullOnly || changed.split("\n").some((x) => x.startsWith("claude/") || x.startsWith("projects.toml") || x.startsWith("plans/"))) runApply(share);
+    if (o.pullOnly || changed.split("\n").some((x) => x.startsWith("claude/") || x.startsWith("projects.toml") || x.startsWith("plans/"))) runApply(reload(share));   // the pull may have changed the manifest
     runLink(reload(share));
   }
   return rc;

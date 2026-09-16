@@ -5,7 +5,6 @@ import { spawnSync } from "node:child_process";
 import * as git from "./git.js";
 import * as github from "./github.js";
 import { contract, expand } from "./paths.js";
-import type { Machine } from "./machine.js";
 import { identityByFlag, identityForUrl, keyPath, NAME_RE, validate, type Identity, type Manifest, type Project } from "./manifest.js";
 import { addProject, commit, selectedProjects, updateProject, workspace, type Share } from "./share.js";
 import { runLink } from "./link.js";
@@ -120,7 +119,8 @@ export function rewriteIdentityFlags(argv: string[], man: Manifest): string[] {
 }
 /** What `cs new` needs from its flags: the identity (required) and the profiles — given, else the identity's own when this
  *  machine has that profile, else all of this machine's. */
-export function newProjectOptions(man: Manifest, m: Machine, o: { identity?: string; profiles: string[] }): { ident: Identity; profiles: string[] } {
+export function newProjectOptions(share: Share, o: { identity?: string; profiles: string[] }): { ident: Identity; profiles: string[] } {
+  const man = share.manifest, m = share.machine;
   if (!o.identity) throw new Error(`cs: which identity? use one of ${Object.keys(man.identities).map((i) => "--" + i).join(", ")} (or --identity <id>)`);
   const ident = man.identities[o.identity] ?? identityByFlag(man, o.identity); if (!ident) throw new Error(`cs: unknown identity '${o.identity}'`);
   const profiles = o.profiles.length ? o.profiles : m.profiles.includes(ident.id) ? [ident.id] : [...m.profiles];

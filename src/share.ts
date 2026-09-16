@@ -26,8 +26,12 @@ export const projectForPath = (share: Share, path: string) => manifest.projectFo
 
 // ---------------------------------------------------------------- manifest writes: read → pure transform → write → reload
 const manifestFile = (share: Share) => join(share.path, "projects.toml");
+/** The manifest as text — what a command shows before it edits (cs remove lists the tables that go). */
+export const manifestText = (share: Share) => readFileSync(manifestFile(share), "utf8");
 function edit(share: Share, transform: (text: string) => string) {
-  const f = manifestFile(share); writeFileSync(f, transform(readFileSync(f, "utf8"))); reload(share);
+  const before = manifestText(share), after = transform(before);
+  if (after === before) return;   // nothing to write, nothing to reload
+  writeFileSync(manifestFile(share), after); reload(share);
 }
 export const addProject = (share: Share, p: Project) => edit(share, (t) => addProjectText(t, p));
 export const updateProject = (share: Share, p: Project) => edit(share, (t) => updateProjectText(t, p));
@@ -57,9 +61,9 @@ export function commit(share: Share, message: string, paths?: string[]): string 
  *  no machine. The stored `.env` merge uses this to say whose value is newest. */
 export function stampOf(share: Share, file: string): { when: string; from?: string } {
   const rel = isAbsolute(file) ? relative(share.path, file) : file;
-  const [when, subject, email, sha] = git.out(["log", "-1", "--format=%cI%n%s%n%ae%n%H", "--", rel], share.path).split("\n");
+  const [when, subject, email, trailer] = git.out(["log", "-1", "--format=%cI%n%s%n%ae%n%(trailers:key=Cs-Machine,valueonly,separator=%x20)", "--", rel], share.path).split("\n");
   if (when && git.git(["diff", "--quiet", "--", rel], share.path, { check: false }).code === 0) {
-    const from = git.trailers(share.path, sha)["Cs-Machine"] || subject?.match(/^sync\(([^)]+)\):/)?.[1] || (email?.startsWith("cs@") ? email.slice(3) : undefined);
+    const from = trailer?.trim() || subject?.match(/^sync\(([^)]+)\):/)?.[1] || (email?.startsWith("cs@") ? email.slice(3) : undefined);
     return from ? { when, from } : { when };
   }
   return { when: new Date(statSync(join(share.path, rel)).mtimeMs).toISOString() };
