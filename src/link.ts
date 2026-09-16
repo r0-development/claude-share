@@ -4,7 +4,8 @@ import { dirname, join, relative } from "node:path";
 import * as git from "./git.js";
 import { contract, stateDir } from "./paths.js";
 import type { Machine } from "./machine.js";
-import { checkoutRoot, selectedProjects, workspace, type Manifest, type Project } from "./manifest.js";
+import { selectedProjects, workspace, type Manifest, type Project } from "./manifest.js";
+import { checkoutRoot, dirs, dirsAt, sniff } from "./checkout.js";
 import { dumps } from "./jsonmerge.js";
 import * as ui from "./ui.js";
 
@@ -16,13 +17,6 @@ const NOT_SYNCED = new Set(["memory", "secrets"]);
 
 export const projectState = (repo: string, p: Project) => join(repo, "projects", p.name);
 export const memoryDir = (repo: string, p: Project) => join(projectState(repo, p), "memory");
-export function checkouts(p: Project, ws: string): string[] { return checkoutsAt(checkoutRoot(p, ws)); }
-/** The checkout at `root` and its worktrees; nothing when the directory is absent. */
-function checkoutsAt(root: string): string[] {
-  if (!existsSync(root)) return [];
-  if (!git.isRepo(root)) return [root];
-  const w = git.worktrees(root); return w.length ? w : [root];
-}
 function walk(dir: string, fn: (f: string) => void, skipDir?: (rel: string) => boolean, base = dir) {
   if (!existsSync(dir)) return;
   for (const e of readdirSync(dir, { withFileTypes: true })) {
@@ -70,8 +64,8 @@ export function sweepRemoved(man: Manifest, ws: string): string[] {
   for (const f of readdirSync(placedDir())) {
     if (!f.endsWith(".json")) continue; const name = f.slice(0, -5); if (man.projects[name]) continue;
     let root = ""; try { root = JSON.parse(readFileSync(join(placedDir(), f), "utf8")).root ?? ""; } catch {}
-    root ||= existsSync(join(ws, name, "repo", ".git")) ? join(ws, name, "repo") : join(ws, name);
-    for (const c of checkoutsAt(root)) if (stripPointer(c)) changes.push(`${name}: auto-memory pointer removed from ${contract(c)} (project removed from the share)`);
+    root ||= sniff(join(ws, name)).root;
+    for (const c of dirsAt(root)) if (stripPointer(c)) changes.push(`${name}: auto-memory pointer removed from ${contract(c)} (project removed from the share)`);
     dropPlacedRecord(name);
   }
   return changes;
@@ -89,7 +83,7 @@ export function ensureExclude(checkout: string, check: boolean, changes: string[
   if (!check) { mkdirSync(dirname(ex), { recursive: true }); writeFileSync(ex, text + (!text || text.endsWith("\n") ? "" : "\n") + "# claude-share managed files\n" + missing.join("\n") + "\n"); }
 }
 export function syncProject(repo: string, p: Project, ws: string, check = false): string[] {
-  const changes: string[] = []; const side = projectState(repo, p); const targets = checkouts(p, ws);
+  const changes: string[] = []; const side = projectState(repo, p); const targets = dirs(p, ws);
   if (!targets.length) return changes;
   const mem = memoryDir(repo, p); if (!existsSync(mem) && !check) mkdirSync(mem, { recursive: true });
   const previously = loadState(p);
@@ -120,7 +114,7 @@ export function runLink(repo: string, m: Machine, man: Manifest, names: string[]
   const unknown = names.filter((n) => !man.projects[n]); if (unknown.length) throw new Error(`cs: unknown project(s): ${unknown.join(", ")}`);
   let total = 0;
   if (!names.length && !check) for (const c of sweepRemoved(man, ws)) { ui.step(c); total++; }
-  for (const p of selectedProjects(man, m)) { if (names.length && !names.includes(p.name)) continue; if (!checkouts(p, ws).length) continue;
+  for (const p of selectedProjects(man, m)) { if (names.length && !names.includes(p.name)) continue; if (!dirs(p, ws).length) continue;
     const ch = syncProject(repo, p, ws, check); for (const c of ch) check ? ui.info(`${p.name}: ${c}`) : ui.step(`${p.name}: ${c}`); total += ch.length; }
   if (!total) ui.ok("project files in sync");
   return total;

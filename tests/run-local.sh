@@ -322,60 +322,7 @@ export HOME5="$(mktemp -d)"
   ($CS status || true) | grep -q " beta " && die "beta must not be listed" || true )
 pass project-picker
 
-# --- M2: handoff / resume between machine 1 (HOME1) and machine 2 (HOME2), same bare remote
-m1() { ( export HOME="$HOME1" CLAUDE_CONFIG_DIR="$HOME1/.claude" XDG_STATE_HOME="$HOME1/.local/state" CS_CONFIG_DIR="$HOME1/.config/claude-share" SOPS_AGE_KEY_FILE="$HOME1/.config/sops/age/keys.txt"; "$@" ); }
-m2() { ( export HOME="$HOME2" CLAUDE_CONFIG_DIR="$HOME2/.claude" XDG_STATE_HOME="$HOME2/.local/state" CS_CONFIG_DIR="$HOME2/.config/claude-share" SOPS_AGE_KEY_FILE="$HOME2/.config/sops/age/keys.txt"; "$@" ); }
-A1="$HOME1/dev/alpha"; A2="$HOME2/dev/alpha"
-git -C "$A1" config user.name "Test User"; git -C "$A2" config user.name "Test User"
-# dirty state on machine 1: modified tracked, new untracked, gitignored (must not travel), handoff.extra (must travel)
-printf 'build/\nlocal.conf\n' > "$A1/.gitignore"; (cd "$A1" && git add .gitignore && git -c user.email=t@x -c user.name=t commit -qm gitignore && git push -q origin HEAD)
-(cd "$A2" && git pull -q)
-echo "changed" >> "$A1/README"; echo "new file" > "$A1/notes.txt"; mkdir -p "$A1/build" && echo "junk" > "$A1/build/out"; echo "keep me" > "$A1/local.conf"
-cat >> "$CS_CONFIG_DIR/share/projects.toml" <<TOML
-
-[projects.alpha.handoff]
-extra = ["local.conf"]
-TOML
-(cd "$CS_CONFIG_DIR/share" && git add -A && git -c user.name=t -c user.email=t@x commit -qm "alpha handoff extra" >/dev/null)
-m1 $CS share-sync >/dev/null
-BEFORE="$(cd "$A1" && git status --porcelain)"
-(cd "$A1" && m1 $CS handoff -m "continue with the notes" >/dev/null) || die "handoff"
-[ "$(cd "$A1" && git status --porcelain)" = "$BEFORE" ] || die "sender tree untouched"
-[ -z "$(cd "$A1" && git diff --cached)" ] || die "sender index untouched"
-git -C "$HOME/remote.git" show-ref | grep -q "handoff/test-user/main" || die "handoff ref pushed"
-! git -C "$HOME/remote.git" ls-tree -r --name-only "handoff/test-user/main" | grep -q "build/out" || die "gitignored file must not travel"
-git -C "$HOME/remote.git" ls-tree -r --name-only "handoff/test-user/main" | grep -q "local.conf" || die "handoff.extra travels"
-# lease: a second machine cannot overwrite a parcel from another machine without --overwrite
-echo "m2 change" >> "$A2/README"
-(cd "$A2" && m2 $CS handoff >/dev/null 2>&1) && die "lease should refuse" || true
-(cd "$A2" && git checkout -q -- README)
-# resume on machine 2
-(cd "$A2" && m2 $CS share-sync >/dev/null; m2 $CS resume >/dev/null) || die "resume"
-[ "$(cd "$A2" && git status --porcelain | sort)" = "$(echo "$BEFORE" | sort)" ] || die "identical dirty tree on receiver"
-grep -q "changed" "$A2/README" && [ "$(cat "$A2/notes.txt")" = "new file" ] && [ "$(cat "$A2/local.conf")" = "keep me" ] || die "contents restored"
-[ ! -d "$A2/.cs-handoff" ] || die "sidecar removed"
-! git -C "$HOME/remote.git" show-ref | grep -q "handoff/test-user/main" || die "handoff ref deleted after resume"
-[ "$(cd "$A2" && m2 $CS note --print | tail -1)" = "continue with the notes" ] || die "note printed"
-(cd "$A2" && m2 $CS note --print >/dev/null 2>&1) && die "note printed only once" || true
-# worktree layout: hand off from wt-feat on machine 1, resume on machine 2 where the worktree does not exist
-B1="$HOME1/dev/beta"; B2="$HOME2/dev/beta"
-git -C "$B1/repo" config user.name "Test User"; git -C "$B2/repo" config user.name "Test User"
-echo "feat work" > "$B1/wt-feat/feat.txt"
-(cd "$B1/wt-feat" && m1 $CS handoff >/dev/null) || die "handoff from worktree"
-(cd "$B2/repo" && m2 $CS resume >/dev/null) || die "resume into new worktree"
-[ -d "$B2/wt-feat" ] && [ "$(cat "$B2/wt-feat/feat.txt")" = "feat work" ] && [ "$(git -C "$B2/wt-feat" symbolic-ref --short HEAD)" = "feat" ] || die "worktree created with parcel"
-# deny list
-echo "sk-123" > "$A1/api.key"
-(cd "$A1" && m1 $CS handoff >/dev/null 2>&1) && die "deny list should abort" || true
-rm "$A1/api.key"
-# --replace keeps a backup ref
-(cd "$A1" && m1 $CS handoff -m "again" >/dev/null) || die "handoff again"
-echo "conflicting local edit" > "$A2/notes.txt"
-(cd "$A2" && m2 $CS resume >/dev/null 2>&1) && die "dirty target should refuse" || true
-(cd "$A2" && m2 $CS resume --replace >/dev/null) || die "resume --replace"
-git -C "$A2" for-each-ref refs/cs/backup | grep -q backup || die "backup ref kept"
-[ "$(cat "$A2/notes.txt")" = "new file" ] || die "parcel applied over local edit"
-pass handoff-resume
+# (cs handoff / cs resume — send, lease, over, replace, deny list, worktree creation — are tests/checkout.test.ts's table now)
 
 # --- cs sync: leave → arrive with one verb. Two fresh machines (desk, laptop), a fresh share, one project; nothing but cs sync is used.
 S="$(mktemp -d)"
@@ -431,6 +378,7 @@ grep -q "carry on with the notes" "$HOME7/sync1.log" || die "note shown on arriv
 grep -q "1 handoff(s) applied" "$HOME7/sync1.log" || die "laptop summary"
 ! git -C "$S/one.git" show-ref | grep -q "handoff/test-user/main" || die "handoff deleted from the remote after applying"
 (cd "$HOME7/dev/one" && laptop $CS note --print | grep -q "carry on with the notes") || die "note kept for the session-start hook"
+(cd "$HOME7/dev/one" && laptop $CS note --print >/dev/null 2>&1) && die "note printed only once" || true
 [ "$(git -C "$S/share.git" rev-parse HEAD)" = "$(git -C "$HOME7/.config/claude-share/share" rev-parse HEAD)" ] || die "laptop pushed the share"
 # back on desk, work finished there (tree clean): nothing to do → no plan screen, "nothing to move"; the share is updated on both
 (cd "$HOME6/dev/one" && git checkout -q -- . && git clean -qfd)

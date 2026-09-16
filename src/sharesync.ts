@@ -10,7 +10,8 @@ import { acquire } from "./lock.js";
 import type { Machine } from "./machine.js";
 import { loadManifest, selectedProjects, workspace, type Manifest } from "./manifest.js";
 import { runApply } from "./apply.js";
-import { checkouts, runLink, syncProject } from "./link.js";
+import { runLink, syncProject } from "./link.js";
+import { dirs } from "./checkout.js";
 import * as ui from "./ui.js";
 
 /** When the share last synced here (ISO time, or "offline" when the last attempt could not fetch); what bare cs and cs doctor show. */
@@ -114,7 +115,7 @@ export async function runShareSync(repo: string, m: Machine, man: Manifest, o: S
   const ws = workspace(man, m); let rc = 0;
   if (o.debounce && existsSync(lastSyncFile()) && Date.now() - statSync(lastSyncFile()).mtimeMs < o.debounce * 1000) return 0;
   const before = git.out(["rev-parse", "HEAD"], repo);
-  if (!o.pullOnly) for (const p of selectedProjects(man, m)) if (checkouts(p, ws).length) syncProject(repo, p, ws);
+  if (!o.pullOnly) for (const p of selectedProjects(man, m)) if (dirs(p, ws).length) syncProject(repo, p, ws);
   if (!(await shareGitSync(repo, "share", m.name, { ...o, resolve: o.resolve ?? "newest", ask: false })).ok) rc = 2;
   const after = git.out(["rev-parse", "HEAD"], repo);
   if (after !== before || o.pullOnly) {
