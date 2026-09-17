@@ -6329,7 +6329,7 @@ import { join as join3, resolve as resolve2, isAbsolute as isAbsolute2 } from "n
 function finish(args, cwd, o, r2) {
   const res = { code: r2.code, out: r2.out.trim(), err: r2.err.trim() };
   if (o.check !== false && res.code !== 0) throw new Error(`cs: git ${args.slice(0, 2).join(" ")} failed in ${cwd ?? "."}
-  ${res.err.split("\n").filter(Boolean).pop() ?? ""}`);
+  ${lastLine(res.err)}`);
   return res;
 }
 function git(args, cwd, o = {}) {
@@ -6388,7 +6388,7 @@ function trailers(p, sha) {
   }
   return o;
 }
-var envOf, out, isRepo, isBare, toplevel, remoteUrl, currentBranch, dirtyCount, isDirty, worktrees, infoExclude, configGet, identityArgs, rebaseInProgress, slug;
+var envOf, lastLine, out, isRepo, isBare, toplevel, remoteUrl, currentBranch, dirtyCount, isDirty, worktrees, infoExclude, configGet, identityArgs, rebaseInProgress, slug;
 var init_git = __esm({
   "src/git.ts"() {
     "use strict";
@@ -6398,6 +6398,7 @@ var init_git = __esm({
       if (o.sshKey) env2.GIT_SSH_COMMAND = `ssh -i ${o.sshKey} -o IdentitiesOnly=yes`;
       return env2;
     };
+    lastLine = (err) => err.split("\n").filter(Boolean).pop() ?? "";
     out = (args, cwd, dflt = "") => {
       const r2 = git(args, cwd, { check: false });
       return r2.code === 0 ? r2.out : dflt;
@@ -8274,7 +8275,7 @@ function settleRebase(repo, local, upstream2, byHand, o, decided) {
       }
       const empty = git(["diff", "--cached", "--quiet"], repo, { check: false }).code === 0;
       const r2 = git([...ident2, "rebase", empty ? "--skip" : "--continue"], repo, { check: false, env: env2 });
-      if (r2.code !== 0 && !rebaseInProgress(repo)) throw new Error(`cs: share rebase failed \u2014 ${r2.err.split("\n").pop()}`);
+      if (r2.code !== 0 && !rebaseInProgress(repo)) throw new Error(`cs: share rebase failed \u2014 ${lastLine(r2.err)}`);
     }
   } catch (e) {
     if (rebaseInProgress(repo)) abort();
@@ -8289,7 +8290,7 @@ async function rebase(repo, o, decided) {
     const local = out(["rev-parse", "HEAD"], repo), upstream2 = out(["rev-parse", "@{upstream}"], repo);
     const r2 = git([...identityArgs(repo), "rebase", "-q", "@{upstream}"], repo, { check: false, env: { GIT_EDITOR: "true" } });
     if (r2.code === 0) return void 0;
-    if (!rebaseInProgress(repo)) return failed("could not rebase", r2.err.split("\n").filter(Boolean).pop() ?? "");
+    if (!rebaseInProgress(repo)) return failed("could not rebase", lastLine(r2.err));
     let open2;
     try {
       open2 = settleRebase(repo, local, upstream2, byHand, o, decided);
@@ -8346,7 +8347,7 @@ async function cycle(share, o) {
     if (toPush) {
       const pr = await spin(`${LABEL}: pushing\u2026`, () => gitA(["push", "-q", "origin", branch], repo, { check: false, timeout }));
       if (pr.code !== 0) {
-        if (attempt) return failed("push rejected twice", pr.err.split("\n").filter(Boolean).pop() ?? "");
+        if (attempt) return failed("push rejected twice", lastLine(pr.err));
         warn(`${LABEL}: push rejected, retrying once`);
         continue;
       }

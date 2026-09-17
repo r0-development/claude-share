@@ -7,10 +7,12 @@ import { exec } from "./proc.js";
 export interface Res { code: number; out: string; err: string }
 export interface GitOpts { check?: boolean; sshKey?: string; timeout?: number; input?: string; env?: NodeJS.ProcessEnv }
 const envOf = (o: GitOpts) => { const env = { ...process.env, ...(o.env ?? {}) }; if (o.sshKey) env.GIT_SSH_COMMAND = `ssh -i ${o.sshKey} -o IdentitiesOnly=yes`; return env; };
+/** The last non-empty line of git's stderr — the one that says why. */
+export const lastLine = (err: string) => err.split("\n").filter(Boolean).pop() ?? "";
 /** The result trimmed, or (with `check`, the default) an error naming the command and git's last line. */
 function finish(args: string[], cwd: string | undefined, o: GitOpts, r: Res): Res {
   const res = { code: r.code, out: r.out.trim(), err: r.err.trim() };
-  if (o.check !== false && res.code !== 0) throw new Error(`cs: git ${args.slice(0, 2).join(" ")} failed in ${cwd ?? "."}\n  ${res.err.split("\n").filter(Boolean).pop() ?? ""}`);
+  if (o.check !== false && res.code !== 0) throw new Error(`cs: git ${args.slice(0, 2).join(" ")} failed in ${cwd ?? "."}\n  ${lastLine(res.err)}`);
   return res;
 }
 /** Instant local queries (sync spawn — blocks the event loop, so never under a spinner). */

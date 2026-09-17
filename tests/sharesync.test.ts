@@ -81,9 +81,9 @@ test("syncShare: local changes are committed as this machine and pushed; the oth
 
 // ---------------------------------------------------------------- a file changed on both machines: the conflict table
 /** Desk's version of the settings file is on the remote at `deskAt`; laptop's own commit at `laptopAt` has not left yet. */
-function diverged(p: Pair, deskAt = "2026-09-10T10:00:00Z", laptopAt = "2026-09-10T10:00:00Z", deskContent: string | null = '{"model":"sonnet"}\n') {
+function diverged(p: Pair, deskAt = "2026-09-10T10:00:00Z", laptopAt = "2026-09-10T10:00:00Z", deskContent: string | null = '{"model":"sonnet"}\n', laptopContent: string | null = '{"model":"haiku"}\n') {
   commitAt(p.desk, SETTINGS, deskContent, deskAt); sh(["push", "-q", "origin", "main"], p.desk.path);
-  commitAt(p.laptop, SETTINGS, '{"model":"haiku"}\n', laptopAt);
+  commitAt(p.laptop, SETTINGS, laptopContent, laptopAt);
 }
 test("asked: `ask` decides per file with the rebase aborted; theirs takes the other machine's version, ours keeps this one's, both end pushed", async () => {
   const theirs = pair(); diverged(theirs); const t = answering("theirs", theirs.laptop);
@@ -123,6 +123,15 @@ test("deleted on one side: a deletion is a change like any other — newest wins
   assert.deepEqual([read(q.laptop, SETTINGS), sh(["ls-tree", "--name-only", "HEAD", SETTINGS], q.bare)], ['{"model":"haiku"}\n', SETTINGS]);
   clean(p.laptop); clean(q.laptop);
 });
+test("deleted here: this machine's deletion is the newest change — it reaches the remote; asked and answered theirs, the other machine's version comes back", async () => {
+  const p = pair(); diverged(p, "2026-09-10T11:00:00Z", "2026-09-10T12:00:00Z", '{"model":"sonnet"}\n', null);   // the laptop deleted it, later than the desk edited it
+  assert.deepEqual([(await syncShare(p.laptop, {})).pushed, read(p.laptop, SETTINGS), sh(["ls-tree", "--name-only", "HEAD", SETTINGS], p.bare)], [1, undefined, ""]);
+  const q = pair(); diverged(q, "2026-09-10T11:00:00Z", "2026-09-10T12:00:00Z", '{"model":"sonnet"}\n', null); const a = answering("theirs");
+  assert.equal((await syncShare(q.laptop, { ask: a.ask })).ok, true);
+  assert.deepEqual(a.asked.map((c) => [c.ours.deleted, c.theirs.deleted]), [[true, false]]);
+  assert.deepEqual([read(q.laptop, SETTINGS), head(q.bare) === head(q.laptop.path)], ['{"model":"sonnet"}\n', true]);
+  clean(p.laptop); clean(q.laptop);
+});
 test("resolve: `--resolve ours|theirs` settles every file that way without asking; `newest` says so explicitly even with an `ask`", async () => {
   const p = pair(); diverged(p, "2026-09-10T12:00:00Z", "2026-09-10T11:00:00Z"); const a = answering("theirs");
   assert.equal((await syncShare(p.laptop, { resolve: "ours", ask: a.ask })).ok, true);
@@ -153,8 +162,8 @@ test("union: memory and plan files changed on both machines merge line-wise — 
   assert.deepEqual([a.asked.length, read(p.laptop, mem)], [0, "# a\n- desk fact\n- laptop fact\n"]);
   clean(p.laptop);
 });
-/** A prepare-commit-msg hook in a share clone: what `git rebase --continue` runs before it commits a settled step (pre-commit it skips). */
-function hook(s: Share, script: string) { const f = join(s.path, ".git", "hooks", "prepare-commit-msg"); writeFileSync(f, `#!/bin/sh\n${script}\n`, { mode: 0o755 }); }
+/** A git hook in a share clone. prepare-commit-msg is what `git rebase --continue` runs before it commits a settled step (pre-commit it skips). */
+function hook(s: Share, script: string, name = "prepare-commit-msg") { const f = join(s.path, ".git", "hooks", name); writeFileSync(f, `#!/bin/sh\n${script}\n`, { mode: 0o755 }); }
 test("rebase stops without a conflict: git refused the settled step for a reason that is not ours — the rebase is aborted and the share is as it was", async () => {
   const p = pair(); diverged(p, "2026-09-10T11:00:00Z", "2026-09-10T12:00:00Z"); const before = head(p.laptop.path);   // this machine's newer: the step is a real commit
   hook(p.laptop, "exit 1");
@@ -169,6 +178,17 @@ test("same step twice: a stop that comes back after being settled is reported as
   const r = await syncShare(p.laptop, {});
   assert.deepEqual([r.ok, head(p.laptop.path), read(p.laptop, SETTINGS)], [false, before, '{"model":"haiku"}\n']);
   assert.match(r.error!, new RegExp(`keeps stopping on ${SETTINGS.replace(".", "\\.")} — cd \\S+ && git rebase origin/main$`));
+  clean(p.laptop);
+});
+
+test("push rejected: the other machine pushed between the fetch and the push — fetched and rebased again, a file already answered is not asked twice, then pushed", async () => {
+  const p = pair(); diverged(p, "2026-09-10T11:00:00Z", "2026-09-10T12:00:00Z"); const a = answering("ours");
+  // a pre-push hook that, the first time only, lets the desk push another change to the same file just before the laptop's push reaches the remote
+  const mark = join(p.laptop.path, ".git", "pushed-once");
+  hook(p.laptop, `[ -e ${mark} ] && exit 0; touch ${mark}; unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE; cd ${p.desk.path} && printf '{"model":"opus"}\\n' > ${SETTINGS} && git add -A && GIT_COMMITTER_DATE=2026-09-10T13:00:00Z GIT_AUTHOR_DATE=2026-09-10T13:00:00Z git commit -q -m opus && git push -q origin main`, "pre-push");
+  const r = await syncShare(p.laptop, { ask: a.ask });
+  assert.deepEqual([r.ok, r.pushed, a.asked.map((c) => c.file)], [true, 1, [SETTINGS]]);   // asked once, though the file conflicted in both rebases
+  assert.deepEqual([read(p.laptop, SETTINGS), head(p.bare) === head(p.laptop.path), sh(["log", "--format=%s", "-3", "main"], p.bare).split("\n")[1]], ['{"model":"haiku"}\n', true, "opus"]);   // over the desk's second commit
   clean(p.laptop);
 });
 

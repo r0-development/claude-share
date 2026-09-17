@@ -78,7 +78,7 @@ function settleRebase(repo: string, local: string, upstream: string, byHand: str
       for (const c of stops) { const s = side(c)!; takeSide(repo, c.file, s); settled.push(`${c.file} (${s === "ours" ? "this machine" : "the other machine"})`); }
       const empty = git.git(["diff", "--cached", "--quiet"], repo, { check: false }).code === 0;
       const r = git.git([...ident, "rebase", empty ? "--skip" : "--continue"], repo, { check: false, env });
-      if (r.code !== 0 && !git.rebaseInProgress(repo)) throw new Error(`cs: share rebase failed — ${r.err.split("\n").pop()}`);
+      if (r.code !== 0 && !git.rebaseInProgress(repo)) throw new Error(`cs: share rebase failed — ${git.lastLine(r.err)}`);
     }
   } catch (e) { if (git.rebaseInProgress(repo)) abort(); throw e; }
   ui.step(`${LABEL}: settled ${settled.join(", ")}`);
@@ -93,7 +93,7 @@ async function rebase(repo: string, o: SyncOpts, decided: Record<string, Side>):
     const local = git.out(["rev-parse", "HEAD"], repo), upstream = git.out(["rev-parse", "@{upstream}"], repo);
     const r = git.git([...git.identityArgs(repo), "rebase", "-q", "@{upstream}"], repo, { check: false, env: { GIT_EDITOR: "true" } });
     if (r.code === 0) return undefined;
-    if (!git.rebaseInProgress(repo)) return failed("could not rebase", r.err.split("\n").filter(Boolean).pop() ?? "");
+    if (!git.rebaseInProgress(repo)) return failed("could not rebase", git.lastLine(r.err));
     let open: Conflict[] | undefined;
     try { open = settleRebase(repo, local, upstream, byHand, o, decided); } catch (e: any) { return failed("could not settle the rebase", e.message.replace(/^cs: /, "")); }
     if (!open) return undefined;
@@ -128,7 +128,7 @@ async function cycle(share: Share, o: SyncOpts): Promise<ShareResult> {
     const toPush = git.aheadBehind(repo)?.[0] ?? 0;
     if (toPush) {
       const pr = await ui.spin(`${LABEL}: pushing…`, () => git.gitA(["push", "-q", "origin", branch], repo, { check: false, timeout }));
-      if (pr.code !== 0) { if (attempt) return failed("push rejected twice", pr.err.split("\n").filter(Boolean).pop() ?? ""); ui.warn(`${LABEL}: push rejected, retrying once`); continue; }   // another machine pushed since the fetch
+      if (pr.code !== 0) { if (attempt) return failed("push rejected twice", git.lastLine(pr.err)); ui.warn(`${LABEL}: push rejected, retrying once`); continue; }   // another machine pushed since the fetch
       ui.ok(`${LABEL}: pushed ${toPush} commit(s)`);
     }
     markSync(new Date().toISOString());
