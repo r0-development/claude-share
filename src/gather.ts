@@ -5,7 +5,7 @@ import { readdirSync } from "node:fs";
 import * as git from "./git.js";
 import { selectedProjects, workspace, type Share } from "./share.js";
 import { enabled, fetchWaiting, locate, present } from "./checkout.js";
-import { getBackend } from "./secrets/index.js";
+import { secretsStore } from "./secrets/index.js";
 import { observeEnv } from "./envfiles.js";
 import { isEnvName } from "./env.js";
 import type { Facts } from "./plan.js";
@@ -18,16 +18,16 @@ export interface Gathered { facts: Facts[]; envSkipped: string[] }
  *  this machine can read the secrets; otherwise `envSkipped` says why (once, and only when a project has such a file). */
 export async function gather(share: Share, o: { timeout: number; fetch?: boolean }): Promise<Gathered> {
   const ws = workspace(share); const m = share.machine; const facts: Facts[] = [];
-  const backend = await getBackend(m); const canRead = backend.name !== "none" && backend.ready(share.path); const envSkipped: string[] = [];
+  const store = await secretsStore(share); const canRead = store.name !== "none" && store.ready(); const envSkipped: string[] = [];
   const names = new Set(Object.keys(share.manifest.projects));
   for (const p of selectedProjects(share)) {
     const c = locate(p, ws); if (!present(c)) continue;
     const f: Facts = { checkout: c, waiting: [] };
     facts.push(f);
     if (p.env !== false) {
-      if (canRead) { try { f.env = await observeEnv(share, backend, p, c.root, names); }
+      if (canRead) { try { f.env = await observeEnv(store, p, c.root, names); }
         catch (e: any) { envSkipped.push(`${p.name}: .env files not carried — ${String(e?.message ?? e).replace(/^cs: /, "").split("\n")[0]}`); } }
-      else if (!envSkipped.length && hasIgnoredEnv(c.root)) envSkipped.push(backend.name === "none" ? ".env files not carried — secrets backend is 'none' (machine.toml [secrets].backend)" : `.env files not carried — this machine cannot read the secrets yet: cs secrets init here, or cs trust ${m.name} on a machine that can`);
+      else if (!envSkipped.length && hasIgnoredEnv(c.root)) envSkipped.push(store.name === "none" ? ".env files not carried — secrets backend is 'none' (machine.toml [secrets].backend)" : `.env files not carried — this machine cannot read the secrets yet: cs secrets init here, or cs trust ${m.name} on a machine that can`);
     }
     if (!enabled(p)) continue;
     const r = await ui.spin(`${p.name}: fetching…`, () => fetchWaiting(c, { timeout: o.timeout, fetch: o.fetch }));

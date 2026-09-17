@@ -7,7 +7,7 @@ import { contract } from "./paths.js";
 import { NAME_RE, projectTableRe, type Project } from "./manifest.js";
 import { commit, manifestText, removeProject, workspace, type Share } from "./share.js";
 import { dirs, fetchWaiting, locate, present } from "./checkout.js";
-import { dropPlacedRecord, stripPointer } from "./link.js";
+import { forget, projectState, statesDir } from "./projectstate.js";
 import { fileOf } from "./env.js";
 import { parseRepoUrl } from "./sharekey.js";
 import * as ui from "./ui.js";
@@ -23,7 +23,7 @@ export function secretsFiles(share: Share, name: string): string[] {
  *  An entry that reads as another orphan's `.env.<suffix>` is folded into that orphan: one `cs remove <name>` takes both. */
 export function orphans(share: Share): string[] {
   const repo = share.path, man = share.manifest; const names = new Set<string>(), state = new Set<string>(); const registered = Object.keys(man.projects);
-  const st = join(repo, "projects");
+  const st = statesDir(share);
   if (existsSync(st)) for (const e of readdirSync(st, { withFileTypes: true })) if (e.isDirectory() && !man.projects[e.name]) { names.add(e.name); state.add(e.name); }
   for (const e of secretEntries(repo)) if (!registered.some((p) => fileOf(p, e))) names.add(e);
   return [...names].filter((n) => state.has(n) || ![...names].some((o) => o !== n && fileOf(o, n))).sort();
@@ -40,7 +40,7 @@ function resolve(share: Share, names: string[]): Target[] {
   const ws = workspace(share);
   return names.map((name) => {
     if (!NAME_RE.test(name)) throw new Error(`cs: '${name}' is not a project name`);
-    const project = man.projects[name]; const state = join(repo, "projects", name);
+    const project = man.projects[name]; const state = projectState(share, name);
     const t: Target = { name, project, state: existsSync(state) ? state : undefined, secrets: secretsFiles(share, name), here: project ? dirs(project, ws) : [] };
     if (!t.project && !t.state && !t.secrets.length) throw new Error(`cs: unknown project '${name}'\nknown: ${known.join(", ") || "(none)"}`);
     return t;
@@ -82,8 +82,7 @@ export async function remove(share: Share, names: string[], o: { yes?: boolean; 
     if (removeProject(share, t.name)) paths.push("projects.toml");
     if (t.state) { rmSync(t.state, { recursive: true, force: true }); paths.push(relative(repo, t.state)); }
     for (const f of t.secrets) { rmSync(f, { force: true }); paths.push(relative(repo, f)); }
-    for (const c of t.here) if (stripPointer(c)) ui.step(`${t.name}: auto-memory pointer removed from ${contract(c)}`);
-    dropPlacedRecord(t.name);
+    ui.steps(forget(t.name, t.here));
   }
   // exactly the removal — nothing else the share may have pending — so one git revert brings it all back
   const sha = o.noCommit ? "" : commit(share, `remove ${label}`, [...new Set(paths)]) ?? "";

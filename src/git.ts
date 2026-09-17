@@ -1,27 +1,28 @@
-/** Thin wrapper around git (sync spawn). */
+/** Thin wrapper around git: `git` (sync) for instant local queries, `gitA` (async) for anything that may wait on the network. */
 import { spawnSync } from "node:child_process";
 import { existsSync, readFileSync, statSync } from "node:fs";
 import { join, resolve, isAbsolute } from "node:path";
+import { exec } from "./proc.js";
 
 export interface Res { code: number; out: string; err: string }
-export function git(args: string[], cwd?: string, opts: { check?: boolean; sshKey?: string; timeout?: number; input?: string; env?: NodeJS.ProcessEnv } = {}): Res {
-  const env = { ...process.env, ...(opts.env ?? {}) };
-  if (opts.sshKey) env.GIT_SSH_COMMAND = `ssh -i ${opts.sshKey} -o IdentitiesOnly=yes`;
-  const p = spawnSync("git", args, { cwd, env, encoding: "utf8", timeout: opts.timeout ? opts.timeout * 1000 : undefined, input: opts.input, stdio: ["pipe", "pipe", "pipe"] });
-  const r = { code: p.status ?? 1, out: (p.stdout ?? "").trim(), err: (p.stderr ?? "").trim() };
-  if (opts.check !== false && r.code !== 0) {
-    const last = r.err.split("\n").filter(Boolean).pop() ?? "";
-    throw new Error(`cs: git ${args.slice(0, 2).join(" ")} failed in ${cwd ?? "."}\n  ${last}`);
-  }
-  return r;
+export interface GitOpts { check?: boolean; sshKey?: string; timeout?: number; input?: string; env?: NodeJS.ProcessEnv }
+const envOf = (o: GitOpts) => { const env = { ...process.env, ...(o.env ?? {}) }; if (o.sshKey) env.GIT_SSH_COMMAND = `ssh -i ${o.sshKey} -o IdentitiesOnly=yes`; return env; };
+/** The last non-empty line of git's stderr — the one that says why. */
+export const lastLine = (err: string) => err.split("\n").filter(Boolean).pop() ?? "";
+/** The result trimmed, or (with `check`, the default) an error naming the command and git's last line. */
+function finish(args: string[], cwd: string | undefined, o: GitOpts, r: Res): Res {
+  const res = { code: r.code, out: r.out.trim(), err: r.err.trim() };
+  if (o.check !== false && res.code !== 0) throw new Error(`cs: git ${args.slice(0, 2).join(" ")} failed in ${cwd ?? "."}\n  ${lastLine(res.err)}`);
+  return res;
 }
-/** Async git for long operations (fetch/pull/push/clone/ls-remote) — keeps spinners alive. */
-export async function gitA(args: string[], cwd?: string, opts: { check?: boolean; sshKey?: string; timeout?: number; env?: NodeJS.ProcessEnv } = {}): Promise<Res> {
-  const { exec } = await import("./proc.js");
-  const env = { ...process.env, ...(opts.env ?? {}) }; if (opts.sshKey) env.GIT_SSH_COMMAND = `ssh -i ${opts.sshKey} -o IdentitiesOnly=yes`;
-  const r = await exec("git", args, { cwd, env, timeout: opts.timeout });
-  if (opts.check !== false && r.code !== 0) { const last = r.err.split("\n").filter(Boolean).pop() ?? ""; throw new Error(`cs: git ${args.slice(0, 2).join(" ")} failed in ${cwd ?? "."}\n  ${last}`); }
-  return r;
+/** Instant local queries (sync spawn — blocks the event loop, so never under a spinner). */
+export function git(args: string[], cwd?: string, o: GitOpts = {}): Res {
+  const p = spawnSync("git", args, { cwd, env: envOf(o), encoding: "utf8", timeout: o.timeout ? o.timeout * 1000 : undefined, input: o.input, stdio: ["pipe", "pipe", "pipe"] });
+  return finish(args, cwd, o, { code: p.status ?? 1, out: p.stdout ?? "", err: p.stderr ?? "" });
+}
+/** Anything that may take a while (fetch/pull/push/clone/ls-remote) — keeps spinners alive. */
+export async function gitA(args: string[], cwd?: string, o: GitOpts = {}): Promise<Res> {
+  return finish(args, cwd, o, await exec("git", args, { cwd, env: envOf(o), timeout: o.timeout, input: o.input }));
 }
 export const out = (args: string[], cwd?: string, dflt = "") => { const r = git(args, cwd, { check: false }); return r.code === 0 ? r.out : dflt; };
 export const isRepo = (p: string) => existsSync(join(p, ".git"));
@@ -79,3 +80,5 @@ export function trailers(p: string, sha: string): Record<string, string> {
 }
 export const slug = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "") || "x";
 export const exists = (p: string) => { try { statSync(p); return true; } catch { return false; } };
+/** Files changed in the working tree: modified against HEAD plus untracked (not ignored), each once, sorted. */
+export const changedFiles = (dir: string) => [...new Set([...out(["diff", "--name-only", "HEAD"], dir).split("\n"), ...out(["ls-files", "-o", "--exclude-standard"], dir).split("\n")].filter(Boolean))].sort();

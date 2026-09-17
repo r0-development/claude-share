@@ -236,7 +236,7 @@ Hidden commands: the halves `cs sync` is made of and a few helpers. They stay ca
 | `cs apply [--check]` · `cs link [--check]` | render `~/.claude` and the git includes from the share; place project state into checkouts (`--check` reports drift, changes nothing) |
 | `cs import memory\|project\|mcp <name>` | take auto-memory, `CLAUDE.md`/`.claude/`/`.mcp.json` or MCP servers (with their secrets, as `${VAR}`) that already exist on this machine into the project state |
 | `cs hooks [install\|remove\|status] [--no-timer]` | the Claude Code hooks and the timer |
-| `cs secrets init\|status\|unset\|pull\|push\|diff\|exec\|recovery` | the secrets backend: this machine's key, whole-file `.env` transfer without a merge, run a command with the values in its environment, a recovery key for your password manager |
+| `cs secrets init\|status\|unset\|exec\|recovery` | the secrets backend: this machine's key, run a command with the values in its environment, a recovery key for your password manager |
 | `cs untrust <machine>` | remove a machine's access to the secrets and list what to rotate |
 | `cs ssh [setup\|check\|share-key]` · `cs token set\|check\|rm <owner>` · `cs token ls` | identity keys and the share key; GitHub API tokens |
 | `cs deps [--install]` · `cs share new\|path` · `cs project id` | prerequisites; a share skeleton, the share's path; the cwd project's name |

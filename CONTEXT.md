@@ -71,3 +71,9 @@ _Avoid_: master key
 **Secrets**:
 Encrypted values kept in the share and put into Claude's environment and project `.env` files.
 _Avoid_: env, tokens (those are GitHub API tokens, local only)
+
+**Secrets store**:
+The share's encrypted entries — `global` and one per project `.env*` file — behind one interface (`ready`, `list`,
+`load`, `write`); an entry with no keys does not exist. The *backend* (`sops` | `none` in machine.toml) is which adapter
+implements it; tests use an in-memory one.
+_Avoid_: vault, keychain

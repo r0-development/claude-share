@@ -1,12 +1,14 @@
 /** Handoff notes when no -m is given: headless Claude reads a digest of the project's most recent session transcript
  *  and writes "where this stopped, what's next", under a spinner with a time cap (CS_NOTE_TIMEOUT seconds, default 60,
  *  per handoff). No transcript, no `claude` on PATH, CS_OFFLINE, a failure or the cap → a git-derived note: branch,
- *  changed files, last commit subject, session end time, and why there is no summary. A handoff always carries a note. */
-import { existsSync, mkdirSync, readdirSync, readFileSync, statSync } from "node:fs";
-import { join } from "node:path";
+ *  changed files, last commit subject, session end time, and why there is no summary. A handoff always carries a note.
+ *
+ *  `pickNote` decides; its sources — the transcript, the summariser, the git facts — come in as functions (`liveSources`
+ *  in production: Claude Code's record, headless `claude`, git), so the decision table is a unit table. */
+import { mkdirSync, readFileSync } from "node:fs";
 import * as git from "./git.js";
-import { claudeDir, stateDir } from "./paths.js";
-import { claudeProjectKey } from "./import.js";
+import { stateDir } from "./paths.js";
+import { latestTranscript } from "./claudecode.js";
 import type { Checkout } from "./checkout.js";
 import { which } from "./deps.js";
 import { exec } from "./proc.js";
@@ -61,43 +63,54 @@ export function gitNote(f: NoteFacts): string {
   return [head, files, `no summary: ${f.why}`].filter(Boolean).join("\n");
 }
 
-/** The newest session transcript Claude Code kept for any of `paths` (its projects directory, keyed by path). */
-function latestTranscript(paths: string[]): { file: string; ended: string } | undefined {
-  let best: { file: string; mtime: number } | undefined;
-  for (const p of new Set(paths)) {
-    const dir = join(claudeDir(), "projects", claudeProjectKey(p)); if (!existsSync(dir)) continue;
-    for (const f of readdirSync(dir)) { if (!f.endsWith(".jsonl")) continue; const mtime = statSync(join(dir, f)).mtimeMs; if (!best || mtime > best.mtime) best = { file: join(dir, f), mtime }; }
-  }
-  return best && { file: best.file, ended: new Date(best.mtime).toISOString() };
+// ---------------------------------------------------------------- the sources, and the live ones
+/** A session to summarise: when it ended, and its transcript (jsonl) — read only when asked for. */
+export interface Session { ended: string; read: () => string }
+/** Claude's note over a digest, or why there is none. */
+export type Summary = { note: string } | { why: string };
+export interface NoteSources {
+  /** The session to summarise: the unit's own newest, else the checkout's. */
+  transcript: (c: Checkout, unit: { path: string }) => Session | undefined;
+  summarise: (digest: string) => Promise<Summary>;
+  /** What the git-derived note says besides the branch: the changed files and the last commit's subject. */
+  facts: (unit: { path: string }) => { changed: string[]; subject: string };
 }
-
-/** Claude's summary of the transcript, or the git-derived note with the reason. */
-async function generate(unit: { path: string; branch: string }, t: { file: string; ended: string } | undefined): Promise<Note> {
-  const changed = [...new Set([...git.out(["diff", "--name-only", "HEAD"], unit.path).split("\n"), ...git.out(["ls-files", "-o", "--exclude-standard"], unit.path).split("\n")].filter(Boolean))].sort();
-  const facts: NoteFacts = { branch: unit.branch, changed, subject: git.out(["log", "-1", "--format=%s"], unit.path), ended: t?.ended, why: "" };
-  const fallback = (why: string): Note => ({ note: gitNote({ ...facts, why }), source: "git" });
-  if (!t) return fallback("no session transcript for this project");
-  if (process.env.CS_OFFLINE) return fallback("offline");
-  if (!which("claude")) return fallback("claude not on PATH");
-  const text = digest(readFileSync(t.file, "utf8")); if (!text) return fallback("the session transcript is empty");
+/** Headless `claude` over the digest, under the cap; offline or without `claude` it says so before starting anything. */
+async function claudeSummary(text: string): Promise<Summary> {
+  if (process.env.CS_OFFLINE) return { why: "offline" };
+  if (!which("claude")) return { why: "claude not on PATH" };
   const cap = noteTimeout();
   // --no-session-persistence and a cwd outside the project: the summary must not become the project's newest transcript
   mkdirSync(stateDir(), { recursive: true });
   const r = await exec("claude", ["-p", "--no-session-persistence", "--output-format", "text", PROMPT], { input: text, timeout: cap, group: true, cwd: stateDir() });
-  if (r.code === 124) return fallback(`claude took longer than ${cap} s`);
+  if (r.code === 124) return { why: `claude took longer than ${cap} s` };
   const note = r.out.trim();
-  if (r.code !== 0 || !note) return fallback(`claude failed${r.err ? " — " + r.err.split("\n").filter(Boolean).pop() : ""}`);
-  return { note, source: "claude" };
+  if (r.code !== 0 || !note) return { why: `claude failed${r.err ? " — " + r.err.split("\n").filter(Boolean).pop() : ""}` };
+  return { note };
 }
+export const liveSources: NoteSources = {
+  transcript: (c, unit) => { const t = latestTranscript(c, unit); return t && { ended: t.ended, read: () => readFileSync(t.file, "utf8") }; },
+  summarise: claudeSummary,
+  facts: (unit) => ({ changed: git.changedFiles(unit.path), subject: git.out(["log", "-1", "--format=%s"], unit.path) }),
+};
 
+// ---------------------------------------------------------------- the decision
 /** The note for a handoff about to be sent. `explicit` is -m and always wins. `earlier` is my own handoff being replaced:
- *  a note typed into it stays unless a session newer than it produced a Claude summary; a generated note is regenerated.
- *  The transcript is the unit's own when it has one (worktrees), else the project's newest. */
-export async function pickNote(unit: { path: string; branch: string }, c: Checkout, explicit: string | undefined, earlier?: Note & { at: string }): Promise<Note> {
+ *  a note typed into it stays unless a session newer than it produced a Claude summary; a generated note is regenerated. */
+export async function pickNote(unit: { path: string; branch: string }, c: Checkout, explicit: string | undefined, earlier: (Note & { at: string }) | undefined, sources: NoteSources = liveSources): Promise<Note> {
   if (explicit) return { note: explicit, source: "explicit" };
   const typed = earlier?.source === "explicit" && earlier.note ? earlier : undefined;
-  const t = latestTranscript([unit.path]) ?? latestTranscript([...new Set([c.container, c.root, ...c.units.map((u) => u.path)])]);
+  const t = sources.transcript(c, unit);
   if (typed && !(t && t.ended > typed.at)) return { note: typed.note, source: "explicit" };   // nothing newer to summarise
-  const g = await generate(unit, t);
+  const g = await generate(unit, t, sources);
   return typed && g.source === "git" ? { note: typed.note, source: "explicit" } : g;
+}
+/** Claude's summary of the transcript, or the git-derived note with the reason. */
+async function generate(unit: { path: string; branch: string }, t: Session | undefined, sources: NoteSources): Promise<Note> {
+  const facts: NoteFacts = { branch: unit.branch, ...sources.facts(unit), ended: t?.ended, why: "" };
+  const fallback = (why: string): Note => ({ note: gitNote({ ...facts, why }), source: "git" });
+  if (!t) return fallback("no session transcript for this project");
+  const text = digest(t.read()); if (!text) return fallback("the session transcript is empty");
+  const r = await sources.summarise(text);
+  return "note" in r ? { note: r.note, source: "claude" } : fallback(r.why);
 }

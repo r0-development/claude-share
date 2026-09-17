@@ -6,7 +6,6 @@ import { shellRc } from "./platform.js";
 import { globs, keyPath, type Manifest } from "./manifest.js";
 import type { Share } from "./share.js";
 import { diffKeys, dumps, loads, mergeLayers } from "./jsonmerge.js";
-import * as ui from "./ui.js";
 
 const LINK_ITEMS = ["CLAUDE.md", "rules", "agents", "themes", "keybindings.json", "statusline.sh"];
 const GIT_MARK = "# >>> claude-share >>>", GIT_END = "# <<< claude-share <<<";
@@ -96,10 +95,10 @@ export function applyShellRc(check: boolean, changes: string[]) {
   const next = text.includes(GIT_MARK) ? text.slice(0, text.indexOf(GIT_MARK)) + block + text.slice(text.indexOf(GIT_END) + GIT_END.length + 1) : text + (text && !text.endsWith("\n") ? "\n" : "") + block;
   if (next !== text) { changes.push(`${contract(rc)}: source shell/cs.sh (claude() wrapper, PATH)`); if (!check) writeFileSync(rc, next); }
 }
+/** Everything ~/.claude, the git includes and the shell rc need to match the share (silent: the change lines come back,
+ *  the caller prints them); with `check` nothing is written. */
 export function runApply(share: Share, check = false): string[] {
   const changes: string[] = [];
   applySettings(share, check, changes); applyLinks(share.path, check, changes); applyGit(share.manifest, check, changes); applyShellRc(check, changes);
-  for (const c of changes) check ? ui.info(c) : ui.step(c);
-  if (!changes.length) ui.ok("~/.claude up to date");
   return changes;
 }

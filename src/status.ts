@@ -9,7 +9,7 @@ import { selected } from "./manifest.js";
 import { workspace, type Share } from "./share.js";
 import { locate, present, sniff } from "./checkout.js";
 import { gather } from "./gather.js";
-import { hooksStatus } from "./hooks.js";
+import { lastSync } from "./sharesync.js";
 import { behindCount, behindHint, startUpdateCheck } from "./update.js";
 import { ago, status, type Facts, type StatusBit } from "./plan.js";
 import * as ui from "./ui.js";
@@ -38,7 +38,7 @@ async function shareLine(repo: string, fetch: boolean, timeout: number): Promise
   const offline = fetch && (await ui.spin("share: fetching…", () => git.gitA(["fetch", "-q", "--prune", "origin"], repo, { check: false, timeout }))).code !== 0;
   const dirty = git.dirtyCount(repo); const [ahead, behind] = git.aheadBehind(repo) ?? [0, 0];
   const bits = [dirty ? ui.yellow(`${dirty} dirty`) : "", ahead ? ui.yellow(`↑${ahead} unpushed`) : "", behind ? ui.yellow(`↓${behind} from other machines`) : "", offline ? ui.dim("offline") : ""].filter(Boolean);
-  const last = hooksStatus(repo).lastSync; const when = !last ? "never synced" : isNaN(Date.parse(last)) ? `last sync failed (${last})` : `synced ${ago(last)}`;
+  const last = lastSync(); const when = !last ? "never synced" : isNaN(Date.parse(last)) ? `last sync failed (${last})` : `synced ${ago(last)}`;
   const pending = dirty + ahead + behind > 0;
   return { row: row(branchOf(repo), (bits.length ? bits.join("  ") : ui.green("clean")) + "  " + ui.dim(when) + (pending ? SYNC : "")), pending, broken: false };
 }

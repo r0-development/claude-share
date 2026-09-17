@@ -41,7 +41,7 @@ const hoff = (p: Project): Record<string, any> => (p.handoff ?? {}) as Record<st
 export const enabled = (p: Project) => (p.handoff as any) !== false && hoff(p).enabled !== false;
 /** Dirty files of a unit that look secret (the deny list plus the project's `handoff.never`), minus `allow` globs. */
 export function denyHits(unit: string, p: Project, allow: string[]): string[] {
-  const changed = [...git.out(["ls-files", "-o", "--exclude-standard"], unit).split("\n"), ...git.out(["diff", "--name-only", "HEAD"], unit).split("\n")].filter(Boolean);
+  const changed = git.changedFiles(unit);
   const pats = [...DENY, ...((hoff(p).never as string[]) ?? [])];
   return changed.filter((f) => pats.some((g) => globMatch(g, f) || globMatch(g, basename(f))) && !allow.some((g) => globMatch(g, f)));
 }
@@ -50,6 +50,8 @@ export function denyHits(unit: string, p: Project, allow: string[]): string[] {
  *  not a repo yet is still a place to write into; a missing one is nothing. */
 export const dirsAt = (root: string): string[] => (!existsSync(root) ? [] : !git.isRepo(root) ? [root] : git.worktrees(root).length ? git.worktrees(root) : [root]);
 export const dirs = (p: Project, ws: string): string[] => dirsAt(checkoutRoot(p, ws));
+/** The checkout's places without observing it (no git status), whether it is there or not: what Claude Code's record of it is keyed by. */
+export const places = (p: Project, ws: string): Pick<Checkout, "container" | "root"> & { units: { path: string }[] } => ({ container: container(p, ws), root: checkoutRoot(p, ws), units: dirs(p, ws).map((path) => ({ path })) });
 
 export const present = (c: Checkout | Absence): c is Checkout => "units" in c;
 /** The project's checkout here with its units observed — or why there is none. `allow` globs exempt files from the

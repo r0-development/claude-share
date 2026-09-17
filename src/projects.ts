@@ -5,9 +5,9 @@ import { spawnSync } from "node:child_process";
 import * as git from "./git.js";
 import * as github from "./github.js";
 import { contract, expand } from "./paths.js";
-import { identityByFlag, identityForUrl, keyPath, NAME_RE, validate, type Identity, type Manifest, type Project } from "./manifest.js";
+import { identityByFlag, identityForUrl, keyPath, NAME_RE, selected, validate, type Identity, type Manifest, type Project } from "./manifest.js";
 import { addProject, commit, selectedProjects, updateProject, workspace, type Share } from "./share.js";
-import { runLink } from "./link.js";
+import { place } from "./projectstate.js";
 import { checkoutRoot, container, locate, present, sniff } from "./checkout.js";
 import * as ui from "./ui.js";
 
@@ -72,7 +72,7 @@ export async function add(share: Share, path: string | undefined, o: { profiles:
   const errs = validate({ ...man, projects: { [name]: p } }); if (errs.length) throw new Error("cs: " + errs.join("; "));
   addProject(share, p); ui.ok(`registered ${name}  ${ui.dim(`${url} · profiles ${p.profiles.join(",")}`)}`);
   if (!o.noCommit) commit(share, `projects: add ${name}`, ["projects.toml"]);
-  ui.setQuiet(true); try { runLink(share, [name]); } finally { ui.setQuiet(false); }
+  if (selected(p, share.machine)) place(share, p);   // a project registered here for other profiles is not this machine's to keep placed
   return p;
 }
 
@@ -87,7 +87,7 @@ export async function fixRemote(share: Share, p: Project, identityFlag?: string)
 }
 
 export async function clone(share: Share, names: string[], dryRun = false): Promise<number> {
-  const ws = workspace(share); const man = share.manifest; let rc = 0; const cloned: string[] = [];
+  const ws = workspace(share); const man = share.manifest; let rc = 0; const cloned: Project[] = [];
   for (const p of selectedProjects(share)) {
     if (names.length && !names.includes(p.name)) continue;
     const c = locate(p, ws); const root = c.root, cont = container(p, ws);
@@ -107,9 +107,9 @@ export async function clone(share: Share, names: string[], dryRun = false): Prom
     const ident = p.identity ? man.identities[p.identity] : undefined; const email = git.configGet(root, "user.email");
     if (ident && email !== ident.email) { ui.warn(`${p.name}: user.email resolved to '${email || "UNSET"}' — setting per-repo identity as fallback`); git.git(["config", "user.name", ident.name], root); git.git(["config", "user.email", ident.email], root); }
     if (p.postClone) spawnSync("bash", ["-lc", p.postClone], { cwd: cont, stdio: "inherit" });
-    cloned.push(p.name);
+    cloned.push(p);
   }
-  if (cloned.length) { const wasQuiet = ui.isQuiet(); ui.setQuiet(true); try { runLink(share, cloned); } finally { ui.setQuiet(wasQuiet); } ui.step(`project state placed into ${cloned.length} project(s)`); }
+  if (cloned.length) { for (const p of cloned) place(share, p); ui.step(`project state placed into ${cloned.length} project(s)`); }
   return rc;
 }
 
@@ -138,7 +138,7 @@ export async function create(share: Share, name: string, ident: Identity, o: { p
   const p: Project = { name, url, identity: ident.id, profiles: o.profiles, machines: [], branch: git.currentBranch(root) || branch, layout: "plain", description: o.description, handoff: {} };
   addProject(share, p); commit(share, `projects: add ${name}`, ["projects.toml"]);
   ui.step(`registered in projects.toml  ${ui.dim(`profiles ${o.profiles.join(",")}`)}`);
-  ui.setQuiet(true); try { runLink(share, [name]); } finally { ui.setQuiet(false); }
+  if (selected(p, share.machine)) place(share, p);
   ui.step("project state placed (memory → share)");
   ui.outro(ui.bold(`cd ${contract(root)} && claude`));
   return 0;

@@ -24,9 +24,11 @@ export const dim = pc.dim, bold = pc.bold, green = pc.green, yellow = pc.yellow,
 export function info(msg = "") { if (quiet) return; if (collecting) { if (msg) collecting.push(msg); return; } p.log.message(msg); }
 export function ok(msg: string) { if (quiet) return; if (collecting) { collecting.push(msg); return; } p.log.success(msg); }
 export function step(msg: string) { if (quiet) return; if (collecting) { collecting.push(msg); return; } p.log.step(msg); }
+/** The change lines a silent module returned, one step each. */
+export function steps(lines: string[]) { for (const l of lines) step(l); }
 export function skip(msg: string) { if (quiet || collecting) return; p.log.message(pc.dim("○ " + msg)); }
 
-let activeSpinner: { message: (s: string) => void } | null = null;
+let activeSpinner: { message: (s: string) => void; clear: () => void; start: (s: string) => void } | null = null; let activeTitle = "";
 const width = () => Math.max(40, (process.stdout.columns || 100) - 6);
 const clip = (s: string, w = width()) => (strip(s).length > w ? s.slice(0, w - 1) + "…" : s);
 
@@ -35,7 +37,7 @@ export async function group<T>(title: string, fn: () => Promise<T> | T, opts: { 
   const prev = collecting; const mine: string[] = []; collecting = mine;
   const useSpin = !quiet && process.stdout.isTTY && !activeSpinner;
   const sp = useSpin ? p.spinner() : null;
-  if (sp) { sp.start(title); activeSpinner = sp; }
+  if (sp) { sp.start(title); activeSpinner = sp; activeTitle = title; }
   let result: T;
   try { result = await fn(); }
   catch (e) { if (sp) { sp.error(title); activeSpinner = null; } collecting = prev; throw e; }
@@ -77,6 +79,13 @@ export function table(rows: string[][], header?: string[]) {
 
 // ---------------------------------------------------------------- prompts
 function cancelled(v: unknown): never { p.cancel("cancelled"); process.exit(130); }
+/** A question asked while a phase spins (cs sync asking about a share file inside "share synced"): the spinner is cleared
+ *  for the prompt and started again after it, so the answer is typed on a still line and the phase still ends as one. */
+async function prompt<T>(fn: () => Promise<T>): Promise<T> {
+  const sp = activeSpinner; if (!sp) return fn();
+  sp.clear();
+  try { return await fn(); } finally { sp.start(activeTitle); }
+}
 
 async function plainLine(q: string): Promise<string> {
   if (scripted) throw new Error(`cs: scripted answers exhausted at prompt '${q.trim()}'`);
@@ -85,89 +94,101 @@ async function plainLine(q: string): Promise<string> {
 }
 
 export async function text(message: string, opts: { default?: string; placeholder?: string; validate?: (v: string) => string | undefined } = {}): Promise<string> {
-  const a = nextAnswer();
-  if (a !== undefined) {
-    const v = a === "<default>" ? (opts.default ?? "") : a;
-    const err = opts.validate?.(v);
-    if (err) throw new Error(`scripted answer '${v}' rejected for '${message}': ${err}`);
-    return v;
-  }
-  if (!isTTY()) {
-    for (;;) {
-      const v = (await plainLine(`? ${message}${opts.default ? ` [${opts.default}]` : ""}: `)) || (opts.default ?? "");
+  return prompt(async () => {
+    const a = nextAnswer();
+    if (a !== undefined) {
+      const v = a === "<default>" ? (opts.default ?? "") : a;
       const err = opts.validate?.(v);
-      if (!err) return v;
-      console.log("  ! " + err);
+      if (err) throw new Error(`scripted answer '${v}' rejected for '${message}': ${err}`);
+      return v;
     }
-  }
-  const v = await p.text({ message, placeholder: opts.placeholder, defaultValue: opts.default, initialValue: undefined,
-    validate: (x) => { const val = (x ?? "").trim() || (opts.default ?? ""); return opts.validate?.(val); } });
-  if (p.isCancel(v)) cancelled(v);
-  return (String(v ?? "").trim()) || (opts.default ?? "");
+    if (!isTTY()) {
+      for (;;) {
+        const v = (await plainLine(`? ${message}${opts.default ? ` [${opts.default}]` : ""}: `)) || (opts.default ?? "");
+        const err = opts.validate?.(v);
+        if (!err) return v;
+        console.log("  ! " + err);
+      }
+    }
+    const v = await p.text({ message, placeholder: opts.placeholder, defaultValue: opts.default, initialValue: undefined,
+      validate: (x) => { const val = (x ?? "").trim() || (opts.default ?? ""); return opts.validate?.(val); } });
+    if (p.isCancel(v)) cancelled(v);
+    return (String(v ?? "").trim()) || (opts.default ?? "");
+  });
 }
 
 export async function password(message: string): Promise<string> {
-  const a = nextAnswer();
-  if (a !== undefined) return a;
-  if (!isTTY()) return plainLine(`? ${message}: `);
-  const v = await p.password({ message });
-  if (p.isCancel(v)) cancelled(v);
-  return String(v ?? "");
+  return prompt(async () => {
+    const a = nextAnswer();
+    if (a !== undefined) return a;
+    if (!isTTY()) return plainLine(`? ${message}: `);
+    const v = await p.password({ message });
+    if (p.isCancel(v)) cancelled(v);
+    return String(v ?? "");
+  });
 }
 
 export async function confirm(message: string, initial = false): Promise<boolean> {
-  const a = nextAnswer();
-  if (a !== undefined) return a === "<default>" ? initial : a === "y" || a === "yes";
-  if (!isTTY()) { const v = (await plainLine(`? ${message} [${initial ? "Y/n" : "y/N"}]: `)).toLowerCase(); return v ? v.startsWith("y") : initial; }
-  const v = await p.confirm({ message, initialValue: initial });
-  if (p.isCancel(v)) cancelled(v);
-  return Boolean(v);
+  return prompt(async () => {
+    const a = nextAnswer();
+    if (a !== undefined) return a === "<default>" ? initial : a === "y" || a === "yes";
+    if (!isTTY()) { const v = (await plainLine(`? ${message} [${initial ? "Y/n" : "y/N"}]: `)).toLowerCase(); return v ? v.startsWith("y") : initial; }
+    const v = await p.confirm({ message, initialValue: initial });
+    if (p.isCancel(v)) cancelled(v);
+    return Boolean(v);
+  });
 }
 
 export async function select<T extends string>(message: string, options: { value: T; label: string; hint?: string }[], initial?: T): Promise<T> {
-  const a = nextAnswer();
-  if (a !== undefined) {
-    if (a === "<default>") return initial ?? options[0].value;
-    const hit = options.find((o) => o.value === a || o.label.toLowerCase().startsWith(a.toLowerCase()));
-    if (!hit) throw new Error(`scripted answer '${a}' matches no option for '${message}'`);
-    return hit.value;
-  }
-  if (!isTTY()) {
-    console.log(`? ${message}`);
-    options.forEach((o, i) => console.log(`  ${i + 1}) ${o.label}`));
-    const v = await plainLine(`  choose [${(options.findIndex((o) => o.value === initial) + 1) || 1}]: `);
-    const i = parseInt(v, 10);
-    return i >= 1 && i <= options.length ? options[i - 1].value : (initial ?? options[0].value);
-  }
-  const v = await p.select({ message, options: options as any, initialValue: initial });
-  if (p.isCancel(v)) cancelled(v);
-  return v as T;
+  return prompt(async () => {
+    const a = nextAnswer();
+    if (a !== undefined) {
+      if (a === "<default>") return initial ?? options[0].value;
+      const hit = options.find((o) => o.value === a || o.label.toLowerCase().startsWith(a.toLowerCase()));
+      if (!hit) throw new Error(`scripted answer '${a}' matches no option for '${message}'`);
+      return hit.value;
+    }
+    if (!isTTY()) {
+      console.log(`? ${message}`);
+      options.forEach((o, i) => console.log(`  ${i + 1}) ${o.label}`));
+      const v = await plainLine(`  choose [${(options.findIndex((o) => o.value === initial) + 1) || 1}]: `);
+      const i = parseInt(v, 10);
+      return i >= 1 && i <= options.length ? options[i - 1].value : (initial ?? options[0].value);
+    }
+    const v = await p.select({ message, options: options as any, initialValue: initial });
+    if (p.isCancel(v)) cancelled(v);
+    return v as T;
+  });
 }
 
 export async function multiselect<T extends string>(message: string, options: { value: T; label: string; hint?: string }[], initial: T[] = []): Promise<T[]> {
-  const a = nextAnswer();
-  if (a !== undefined) return a === "<default>" ? initial : (a.split(",").map((x) => x.trim()).filter(Boolean) as T[]);
-  if (!isTTY()) {
-    const v = await plainLine(`? ${message} (comma list of: ${options.map((o) => o.value).join(", ")}) [${initial.join(",")}]: `);
-    return v ? (v.split(",").map((x) => x.trim()) as T[]) : initial;
-  }
-  const v = await p.multiselect({ message, options: options as any, initialValues: initial, required: false });
-  if (p.isCancel(v)) cancelled(v);
-  return v as T[];
+  return prompt(async () => {
+    const a = nextAnswer();
+    if (a !== undefined) return a === "<default>" ? initial : (a.split(",").map((x) => x.trim()).filter(Boolean) as T[]);
+    if (!isTTY()) {
+      const v = await plainLine(`? ${message} (comma list of: ${options.map((o) => o.value).join(", ")}) [${initial.join(",")}]: `);
+      return v ? (v.split(",").map((x) => x.trim()) as T[]) : initial;
+    }
+    const v = await p.multiselect({ message, options: options as any, initialValues: initial, required: false });
+    if (p.isCancel(v)) cancelled(v);
+    return v as T[];
+  });
 }
 
 export async function groupMultiselect<T extends string>(message: string, groups: Record<string, { value: T; label: string; hint?: string }[]>, initial: T[] = []): Promise<T[]> {
-  const all = Object.values(groups).flat();
-  const a = nextAnswer();
-  if (a !== undefined) return a === "<default>" ? initial : a === "all" ? all.map((o) => o.value) : (a.split(",").map((x) => x.trim()).filter(Boolean) as T[]);
-  if (!isTTY()) {
-    console.log(`? ${message}`); for (const [g, opts] of Object.entries(groups)) console.log(`  ${g}: ${opts.map((o) => o.value).join(", ")}`);
-    const v = await plainLine(`  comma list (Enter = ${initial.length === all.length ? "all" : initial.join(",")}): `);
-    return v ? (v.split(",").map((x) => x.trim()) as T[]) : initial;
-  }
-  const v = await p.groupMultiselect({ message, options: groups as any, initialValues: initial, required: false, selectableGroups: true });
-  if (p.isCancel(v)) cancelled(v);
-  return v as T[];
+  return prompt(async () => {
+    const all = Object.values(groups).flat();
+    const a = nextAnswer();
+    if (a !== undefined) return a === "<default>" ? initial : a === "all" ? all.map((o) => o.value) : (a.split(",").map((x) => x.trim()).filter(Boolean) as T[]);
+    if (!isTTY()) {
+      console.log(`? ${message}`); for (const [g, opts] of Object.entries(groups)) console.log(`  ${g}: ${opts.map((o) => o.value).join(", ")}`);
+      const v = await plainLine(`  comma list (Enter = ${initial.length === all.length ? "all" : initial.join(",")}): `);
+      return v ? (v.split(",").map((x) => x.trim()) as T[]) : initial;
+    }
+    const v = await p.groupMultiselect({ message, options: groups as any, initialValues: initial, required: false, selectableGroups: true });
+    if (p.isCancel(v)) cancelled(v);
+    return v as T[];
+  });
 }
 
 /** "Done — check again" / "Skip": returns true to continue checking, false to skip. */
@@ -179,7 +200,7 @@ export async function spin<T>(label: string, fn: (update: (l: string) => void) =
   if (activeSpinner) { const outer = activeSpinner; outer.message(label); return fn((l) => outer.message(l)); }
   if (quiet || !process.stdout.isTTY) return fn(() => {});
   const s = p.spinner();
-  s.start(label); activeSpinner = s;
+  s.start(label); activeSpinner = s; activeTitle = label;
   try { const r = await fn((l) => s.message(l)); s.stop(label); return r; }
   catch (e) { s.error(label + " failed"); throw e; }
   finally { activeSpinner = null; }
