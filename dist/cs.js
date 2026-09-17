@@ -9296,7 +9296,7 @@ async function runSync(share, o = {}) {
       const r2 = await apply(a2.checkout, a2.handoff, m, { replace: replace2 });
       if (!r2.ok) return;
       applied++;
-      place(share, a2.checkout.project);
+      placeAll(share, { names: [a2.checkout.project.name] });
       if (r2.note) notes.push([`${a2.checkout.project.name} \u2014 note from ${a2.handoff.machine}`, ...r2.note.trim().split("\n")]);
     };
     for (const a2 of applies) await one(a2, false);
@@ -10952,7 +10952,7 @@ async function resume(share, projects, o) {
       if (!o.dryRun) rc = 1;
       return;
     }
-    place(share, c2.project);
+    placeAll(share, { names: [c2.project.name] });
     if (r2.note) note2(r2.note.trim().split("\n"), `note from ${h2.machine}`);
   };
   for (const p of projects) {

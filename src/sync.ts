@@ -5,7 +5,7 @@
 import { acquire } from "./lock.js";
 import { selectedProjects, workspace, type Share } from "./share.js";
 import { runApply } from "./apply.js";
-import { place, placeAll } from "./projectstate.js";
+import { placeAll } from "./projectstate.js";
 import { hooksStatus, installHooks, installTimer } from "./hooks.js";
 import { describe, newest, syncShare, type Conflict, type Side } from "./sharesync.js";
 import { clone } from "./projects.js";
@@ -146,7 +146,7 @@ export async function runSync(share: Share, o: SyncOpts = {}): Promise<SyncResul
   if (applies.length || replace.length) await ui.group("handoffs applied", async () => {
     const one = async (a: { checkout: Facts["checkout"]; handoff: HandoffQuestion["handoff"] }, replace: boolean) => {
       const r = await apply(a.checkout, a.handoff, m, { replace }); if (!r.ok) return; applied++;
-      place(share, a.checkout.project);   // project state into the unit (a new worktree has none yet)
+      placeAll(share, { names: [a.checkout.project.name] });   // project state into the unit (a new worktree has none yet); only if the project is selected here
       if (r.note) notes.push([`${a.checkout.project.name} — note from ${a.handoff.machine}`, ...r.note.trim().split("\n")]);
     };
     for (const a of applies) await one(a, false);

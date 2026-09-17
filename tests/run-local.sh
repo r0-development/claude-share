@@ -187,19 +187,13 @@ grep -A3 '^\[projects.delta\]' "$CS_CONFIG_DIR/share/projects.toml" | grep -q 'i
 $CS doctor >/dev/null || die "doctor clean"
 pass status-doctor
 
-# --- hooks are written with cs share-sync; an old-style `cs sync …` hook command is replaced on re-install, the retired SessionEnd hook dropped
-python3 - "$CS_CONFIG_DIR/share/claude/settings.base.json" <<'PY'
-import json,sys; f=sys.argv[1]; d=json.load(open(f))
-d["hooks"]={"Stop":[{"hooks":[{"type":"command","command":"command -v cs >/dev/null 2>&1 && cs sync --push-only --quiet || true"}]}],
-            "SessionEnd":[{"hooks":[{"type":"command","command":"command -v cs >/dev/null 2>&1 && cs handoff --mark --quiet || true"}]}]}
-json.dump(d,open(f,"w"))
-PY
-(cd "$CS_CONFIG_DIR/share" && git add -A && git commit -qm "old hooks")
+# --- hooks: the rewrite rules are a unit table (tests/hooks.test.ts); here only that the CLI installs through the share and is idempotent
 $CS hooks install --no-timer >/dev/null || die "hooks install"
-grep -q 'cs share-sync --push-only' "$CS_CONFIG_DIR/share/claude/settings.base.json" && ! grep -q 'cs sync --push-only' "$CS_CONFIG_DIR/share/claude/settings.base.json" || die "old hook command replaced"
-grep -q 'cs share-sync --pull-only.*cs note --print' "$CS_CONFIG_DIR/share/claude/settings.base.json" || die "session-start hook prints the handoff note"
-! grep -q 'SessionEnd' "$CS_CONFIG_DIR/share/claude/settings.base.json" || die "retired session-end hook dropped"
-$CS handoff --mark --quiet || die "the retired hook command is still harmless until the hooks are re-installed"
+grep -q 'cs share-sync --push-only' "$CS_CONFIG_DIR/share/claude/settings.base.json" || die "hooks in the share"
+(cd "$CS_CONFIG_DIR/share" && git log -1 --format=%s | grep -q "install cs share-sync hooks") || die "hooks committed"
+N=$(git -C "$CS_CONFIG_DIR/share" rev-list --count HEAD); $CS hooks install --no-timer >/dev/null || die "hooks re-install"
+[ "$(git -C "$CS_CONFIG_DIR/share" rev-list --count HEAD)" = "$N" ] || die "re-install is a no-op"
+$CS handoff --mark --quiet || die "the retired hook command is still harmless"
 pass hooks
 
 # --- command surface: --help shows exactly the visible tier; hidden commands still run
