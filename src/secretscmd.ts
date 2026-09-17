@@ -5,30 +5,34 @@ import { spawnSync } from "node:child_process";
 import { contract, home } from "./paths.js";
 import { which } from "./deps.js";
 import { commit, projectForPath, type Share } from "./share.js";
-import { noneInfo, secretsStore, values } from "./secrets/index.js";
+import { secretsStore, valuesOf } from "./secrets/index.js";
 import * as S from "./secrets/sops.js";
 import * as ui from "./ui.js";
 
 const mask = (v: string) => (v.length > 8 ? v.slice(0, 3) + "…" + v.slice(-2) : "…");
 const commitSecrets = (share: Share, msg: string) => commit(share, msg, ["secrets"]);
-const sops = (share: Share) => share.machine.secretsBackend === "sops";
+/** init / edit / status are the backend's own: sops has a key to set up, an editor to run, recipients to show; none has nothing. */
+const usesSops = (share: Share) => share.machine.secretsBackend === "sops";
+const noneInfo = () => ui.info("secrets backend is 'none' — set [secrets].backend = \"sops\" in machine.toml to enable");
 
-export async function init(share: Share) { if (sops(share)) await S.init(share); else noneInfo(); return 0; }
-export async function status(share: Share) { ui.info(ui.bold(`secrets backend: ${share.machine.secretsBackend}`)); if (sops(share)) S.status(share); else noneInfo(); return 0; }
+export async function init(share: Share) { if (usesSops(share)) await S.init(share); else noneInfo(); return 0; }
+export async function status(share: Share) { ui.info(ui.bold(`secrets backend: ${share.machine.secretsBackend}`)); if (usesSops(share)) S.status(share); else noneInfo(); return 0; }
 export async function edit(share: Share, name: string) {
-  if (!sops(share)) throw new Error("cs: secrets backend 'none' cannot store secrets");
+  if (!usesSops(share)) throw new Error("cs: secrets backend 'none' cannot store secrets");
   await S.edit(share, name); commitSecrets(share, `secrets: edit ${name}`); return 0;
 }
 export async function setValues(share: Share, name: string, pairs: string[]) {
   const store = await secretsStore(share);
-  await ui.spin(`encrypting ${name}…`, async () => { const v = await values(store, name);
+  await ui.spin(`encrypting ${name}…`, async () => { const v = await valuesOf(store, name);
     for (const p of pairs) { const i = p.indexOf("="); if (i < 1) throw new Error(`cs: expected KEY=VALUE, got '${p}'`); v[p.slice(0, i).trim()] = p.slice(i + 1); }
-    await store.write(name, v); commitSecrets(share, `secrets: set ${pairs.length} value(s) in ${name}`); });
+    await store.write(name, v); });
+  commitSecrets(share, `secrets: set ${pairs.length} value(s) in ${name}`);
   ui.ok(`${name}: ${pairs.map((p) => p.split("=")[0]).join(", ")} stored (encrypted)`); return 0;
 }
-export async function unsetValues(share: Share, name: string, keys: string[]) { const store = await secretsStore(share); const v = await values(store, name); for (const k of keys) delete v[k]; await store.write(name, v); commitSecrets(share, `secrets: unset ${keys.length} value(s) in ${name}`); return 0; }
+/** Unsetting the last key removes the entry (an entry with no keys does not exist). */
+export async function unsetValues(share: Share, name: string, keys: string[]) { const store = await secretsStore(share); const v = await valuesOf(store, name); for (const k of keys) delete v[k]; await store.write(name, v); commitSecrets(share, `secrets: unset ${keys.length} value(s) in ${name}`); return 0; }
 export async function get(share: Share, name: string, key: string | undefined, show: boolean) {
-  const v = await values(await secretsStore(share), name);
+  const v = await valuesOf(await secretsStore(share), name);
   if (key) { if (!(key in v)) return 1; console.log(show ? v[key] : mask(v[key])); return 0; }
   for (const [k, val] of Object.entries(v)) console.log(`${k}=${show ? val : mask(val)}`); return 0;
 }
@@ -36,7 +40,7 @@ export async function environment(share: Share, project?: string, warnMissing = 
   const env = { ...process.env }; if (env.CS_SECRETS_LOADED === "1") return env;
   const store = await secretsStore(share);
   if (!store.ready()) { if (warnMissing) ui.warn("secrets not available on this machine (cs secrets init / cs trust) — continuing without them"); return env; }
-  Object.assign(env, await values(store, "global")); if (project) Object.assign(env, await values(store, project)); env.CS_SECRETS_LOADED = "1"; return env;
+  Object.assign(env, await valuesOf(store, "global")); if (project) Object.assign(env, await valuesOf(store, project)); env.CS_SECRETS_LOADED = "1"; return env;
 }
 export async function exec(share: Share, project: string | undefined, cmd: string[]): Promise<number> {
   if (!cmd.length) throw new Error("cs: secrets exec needs a command after --");
@@ -56,7 +60,7 @@ export async function untrust(share: Share, machine: string) {
     commit(share, `secrets: untrust ${machine}`, [".sops.yaml", "secrets", "machines"]); ui.ok(`untrusted ${machine}; re-encrypted ${n} file(s)`); }
   else ui.warn(`${machine} was not a recipient`);
   const store = await secretsStore(share); const keys = new Set<string>();
-  for (const name of await store.list()) for (const k of Object.keys(await values(store, name))) keys.add(k);
+  for (const name of await store.list()) for (const k of Object.keys(await valuesOf(store, name))) keys.add(k);
   if (keys.size) ui.warn("that machine could read these — rotate them at the source: " + [...keys].sort().join(", ")); return 0;
 }
 export async function recovery(share: Share) {

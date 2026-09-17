@@ -8,7 +8,7 @@ import { contract, home, toolRoot } from "../paths.js";
 import { which } from "../deps.js";
 import { commit, stampOf, type Share } from "../share.js";
 import type { SecretsStore } from "./index.js";
-import { dumpDotenv, parseDotenv, type Values } from "../env.js";
+import { dumpDotenv, parseDotenv } from "../env.js";
 import * as ui from "../ui.js";
 
 const RULE = "^secrets/.*\\.env$";
@@ -85,7 +85,7 @@ export async function init(share: Share) {
 /** cs secrets edit: the entry in $EDITOR through sops (a missing entry starts with an example line). Interactive — the terminal is sops's. */
 export async function edit(share: Share, name: string) {
   const repo = share.path, f = envFile(repo, name);
-  if (!existsSync(f)) await sopsStore(share).write(name, { EXAMPLE_KEY: "value" } satisfies Values);
+  if (!existsSync(f)) await sopsStore(share).write(name, { EXAMPLE_KEY: "value" });
   spawnSync(exe("sops"), [...DOTENV, relative(repo, f)], { cwd: repo, env: env(), stdio: "inherit" });
 }
 /** cs secrets status: the key, whether this machine is a recipient, who else is, which entries exist. */

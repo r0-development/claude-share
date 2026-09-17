@@ -157,8 +157,8 @@ var require_argument = __commonJS({
        * @param {string[]} values
        * @return {Argument}
        */
-      choices(values2) {
-        this.argChoices = values2.slice();
+      choices(values) {
+        this.argChoices = values.slice();
         this.parseArg = (arg, previous) => {
           if (!this.argChoices.includes(arg)) {
             throw new InvalidArgumentError2(
@@ -925,8 +925,8 @@ var require_option = __commonJS({
        * @param {string[]} values
        * @return {Option}
        */
-      choices(values2) {
-        this.argChoices = values2.slice();
+      choices(values) {
+        this.argChoices = values.slice();
         this.parseArg = (arg, previous) => {
           if (!this.argChoices.includes(arg)) {
             throw new InvalidArgumentError2(
@@ -6508,9 +6508,9 @@ function loadManifest(repo) {
   if (errs.length) throw new Error("cs: projects.toml invalid:\n  " + errs.join("\n  "));
   return m;
 }
-function block2(header, values2) {
+function block2(header, values) {
   const clean2 = {};
-  for (const [k, v] of Object.entries(values2)) if (v !== void 0 && v !== "" && !(Array.isArray(v) && !v.length)) clean2[k] = v;
+  for (const [k, v] of Object.entries(values)) if (v !== void 0 && v !== "" && !(Array.isArray(v) && !v.length)) clean2[k] = v;
   return `[${header}]
 ` + stringify(clean2).trimEnd() + "\n";
 }
@@ -7395,7 +7395,7 @@ function parseDotenv(text3) {
   }
   return out2;
 }
-function patchDotenv(text3, values2) {
+function patchDotenv(text3, values) {
   const seen = /* @__PURE__ */ new Set();
   const out2 = [];
   const lines = text3.split("\n");
@@ -7408,11 +7408,11 @@ function patchDotenv(text3, values2) {
     }
     const k = m[2];
     seen.add(k);
-    if (!(k in values2)) continue;
+    if (!(k in values)) continue;
     const cur = parseValue2(m[3]);
-    out2.push(cur === values2[k] ? line : `${m[1]}${k}=${quote(values2[k])}`);
+    out2.push(cur === values[k] ? line : `${m[1]}${k}=${quote(values[k])}`);
   }
-  for (const [k, v] of Object.entries(values2)) if (!seen.has(k)) out2.push(`${k}=${quote(v)}`);
+  for (const [k, v] of Object.entries(values)) if (!seen.has(k)) out2.push(`${k}=${quote(v)}`);
   return out2.length ? out2.join("\n") + "\n" : "";
 }
 function parseValue2(raw) {
@@ -7458,7 +7458,7 @@ var init_env = __esm({
     blank = (v) => Object.fromEntries((Array.isArray(v) ? v : Object.keys(v)).map((k) => [k, ""]));
     LINE = /^(\s*(?:export\s+)?)([A-Za-z_][A-Za-z0-9_]*)\s*=(.*)$/;
     quote = (v) => v === "" ? "" : /[ #"'\\$`]/.test(v) ? JSON.stringify(v) : v;
-    dumpDotenv = (values2) => patchDotenv("", values2);
+    dumpDotenv = (values) => patchDotenv("", values);
   }
 });
 
@@ -9007,18 +9007,18 @@ function sopsStore(share) {
     async load(name2) {
       const f = envFile(repo, name2);
       if (!existsSync14(f)) return void 0;
-      const values2 = parseDotenv((await sops(["-d", ...DOTENV, relative7(repo, f)], repo)).out);
-      return { values: values2, ...stampOf(share, f) };
+      const values = parseDotenv((await sops(["-d", ...DOTENV, relative7(repo, f)], repo)).out);
+      return { values, ...stampOf(share, f) };
     },
-    async write(name2, values2) {
+    async write(name2, values) {
       const f = envFile(repo, name2);
-      if (!Object.keys(values2).length) {
+      if (!Object.keys(values).length) {
         rmSync6(f, { force: true });
         return;
       }
       mkdirSync14(dirname6(f), { recursive: true });
       const tmp = join18(dirname6(f), `.${name2.replace(/\//g, "_")}.plain.${process.pid}.env`);
-      writeFileSync13(tmp, dumpDotenv(values2), { mode: 384 });
+      writeFileSync13(tmp, dumpDotenv(values), { mode: 384 });
       try {
         const p = await sops(["-e", ...DOTENV, "--filename-override", relative7(repo, f), relative7(repo, tmp)], repo);
         writeFileSync13(f, p.out);
@@ -9114,12 +9114,11 @@ async function secretsStore(share) {
   if (backend === "none") return noneStore;
   throw new Error(`cs: unknown secrets backend '${backend}' (sops | none)`);
 }
-var values, noneStore, noneInfo;
+var valuesOf, noneStore;
 var init_secrets = __esm({
   "src/secrets/index.ts"() {
     "use strict";
-    init_ui();
-    values = async (store, name2) => (await store.load(name2))?.values ?? {};
+    valuesOf = async (store, name2) => (await store.load(name2))?.values ?? {};
     noneStore = {
       name: "none",
       ready: () => true,
@@ -9129,7 +9128,6 @@ var init_secrets = __esm({
         throw new Error("cs: secrets backend 'none' cannot store secrets");
       }
     };
-    noneInfo = () => info(`secrets backend is 'none' \u2014 set [secrets].backend = "sops" in machine.toml to enable`);
   }
 });
 
@@ -9173,15 +9171,15 @@ async function observeEnv(store, p, root, others) {
   }
   return out2;
 }
-function writeSnapshot(st, values2) {
+function writeSnapshot(st, values) {
   const f = snapshotFile(st.project, st.file);
-  if (st.kind === "local") values2 = blank(values2);
-  if (!Object.keys(values2).length) {
+  if (st.kind === "local") values = blank(values);
+  if (!Object.keys(values).length) {
     rmSync7(f, { force: true });
     return;
   }
   mkdirSync15(dirname7(f), { recursive: true, mode: 448 });
-  writeFileSync14(f, dumpDotenv(values2), { mode: 384 });
+  writeFileSync14(f, dumpDotenv(values), { mode: 384 });
 }
 async function applyEnv(store, st, decide2 = {}) {
   const m = mergeOf(st, decide2);
@@ -9717,18 +9715,18 @@ import { existsSync as existsSync18, mkdirSync as mkdirSync17, readFileSync as r
 import { join as join21 } from "node:path";
 import { spawnSync as spawnSync7 } from "node:child_process";
 async function init2(share) {
-  if (sops2(share)) await init(share);
+  if (usesSops(share)) await init(share);
   else noneInfo();
   return 0;
 }
 async function status3(share) {
   info(bold(`secrets backend: ${share.machine.secretsBackend}`));
-  if (sops2(share)) status2(share);
+  if (usesSops(share)) status2(share);
   else noneInfo();
   return 0;
 }
 async function edit3(share, name2) {
-  if (!sops2(share)) throw new Error("cs: secrets backend 'none' cannot store secrets");
+  if (!usesSops(share)) throw new Error("cs: secrets backend 'none' cannot store secrets");
   await edit2(share, name2);
   commitSecrets(share, `secrets: edit ${name2}`);
   return 0;
@@ -9736,28 +9734,28 @@ async function edit3(share, name2) {
 async function setValues(share, name2, pairs) {
   const store = await secretsStore(share);
   await spin(`encrypting ${name2}\u2026`, async () => {
-    const v = await values(store, name2);
+    const v = await valuesOf(store, name2);
     for (const p of pairs) {
       const i2 = p.indexOf("=");
       if (i2 < 1) throw new Error(`cs: expected KEY=VALUE, got '${p}'`);
       v[p.slice(0, i2).trim()] = p.slice(i2 + 1);
     }
     await store.write(name2, v);
-    commitSecrets(share, `secrets: set ${pairs.length} value(s) in ${name2}`);
   });
+  commitSecrets(share, `secrets: set ${pairs.length} value(s) in ${name2}`);
   ok(`${name2}: ${pairs.map((p) => p.split("=")[0]).join(", ")} stored (encrypted)`);
   return 0;
 }
 async function unsetValues(share, name2, keys) {
   const store = await secretsStore(share);
-  const v = await values(store, name2);
+  const v = await valuesOf(store, name2);
   for (const k of keys) delete v[k];
   await store.write(name2, v);
   commitSecrets(share, `secrets: unset ${keys.length} value(s) in ${name2}`);
   return 0;
 }
 async function get(share, name2, key, show) {
-  const v = await values(await secretsStore(share), name2);
+  const v = await valuesOf(await secretsStore(share), name2);
   if (key) {
     if (!(key in v)) return 1;
     console.log(show ? v[key] : mask2(v[key]));
@@ -9774,8 +9772,8 @@ async function environment(share, project, warnMissing = true) {
     if (warnMissing) warn("secrets not available on this machine (cs secrets init / cs trust) \u2014 continuing without them");
     return env2;
   }
-  Object.assign(env2, await values(store, "global"));
-  if (project) Object.assign(env2, await values(store, project));
+  Object.assign(env2, await valuesOf(store, "global"));
+  if (project) Object.assign(env2, await valuesOf(store, project));
   env2.CS_SECRETS_LOADED = "1";
   return env2;
 }
@@ -9816,7 +9814,7 @@ async function untrust(share, machine) {
   } else warn(`${machine} was not a recipient`);
   const store = await secretsStore(share);
   const keys = /* @__PURE__ */ new Set();
-  for (const name2 of await store.list()) for (const k of Object.keys(await values(store, name2))) keys.add(k);
+  for (const name2 of await store.list()) for (const k of Object.keys(await valuesOf(store, name2))) keys.add(k);
   if (keys.size) warn("that machine could read these \u2014 rotate them at the source: " + [...keys].sort().join(", "));
   return 0;
 }
@@ -9906,7 +9904,7 @@ async function ensureRecipient(share, interactive) {
     warn("still not a recipient \u2014 did the other machine run cs sync after trusting it?");
   }
 }
-var mask2, commitSecrets, sops2;
+var mask2, commitSecrets, usesSops, noneInfo;
 var init_secretscmd = __esm({
   "src/secretscmd.ts"() {
     "use strict";
@@ -9918,7 +9916,8 @@ var init_secretscmd = __esm({
     init_ui();
     mask2 = (v) => v.length > 8 ? v.slice(0, 3) + "\u2026" + v.slice(-2) : "\u2026";
     commitSecrets = (share, msg) => commit2(share, msg, ["secrets"]);
-    sops2 = (share) => share.machine.secretsBackend === "sops";
+    usesSops = (share) => share.machine.secretsBackend === "sops";
+    noneInfo = () => info(`secrets backend is 'none' \u2014 set [secrets].backend = "sops" in machine.toml to enable`);
   }
 });
 
