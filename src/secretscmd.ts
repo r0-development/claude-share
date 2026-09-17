@@ -124,8 +124,8 @@ export async function ensureRecipient(share: Share, interactive: boolean): Promi
     }
     ui.note([`${where} run:`, "", `  ${ui.bold(`cs sync && cs trust ${m.name} && cs sync`)}`, "", ui.dim("that machine re-encrypts the secrets so this one can read them — no secret leaves either machine")], "Trust this machine");
     if (!(await ui.proceed("done on the other machine?", "Done — check now", "Skip for now"))) return false;
-    const { runShareSync } = await import("./sharesync.js");
-    await ui.spin("syncing…", () => runShareSync(share, { pullOnly: true, timeout: 20 }));
+    const { syncShare } = await import("./sharesync.js");
+    await ui.spin("syncing…", () => syncShare(share, { pullOnly: true, timeout: 20 }));
     if (b.ready(repo)) { ui.ok("this machine can decrypt secrets"); return true; }
     ui.warn("still not a recipient — did the other machine run cs sync after trusting it?");
   }

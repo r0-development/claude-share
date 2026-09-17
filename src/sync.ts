@@ -1,13 +1,13 @@
-/** cs sync — the one daily verb. One run: pull the share and self-heal (never asks) → clone what is missing → gather
- *  facts per project → plan (src/plan.ts, pure) → plan screen (one multi-select, one confirmation) → execute → push
- *  the share → summary. Direction is never asked: waiting handoffs are applied and dirty work is sent in the same run.
+/** cs sync — the one daily verb. One run: the share cycle (asks only about a file changed on both machines) → self-heal
+ *  (never asks) → clone what is missing → gather facts per project → plan (src/plan.ts, pure) → plan screen (one
+ *  multi-select, one confirmation) → execute → push the share → summary. Direction is never asked: waiting handoffs are applied and dirty work is sent in the same run.
  *  Only the plan screen touches a project remote (ADR-0002). */
 import { acquire } from "./lock.js";
-import { reload, selectedProjects, workspace, type Share } from "./share.js";
-import { applyGit, applyLinks, applySettings, applyShellRc } from "./apply.js";
+import { selectedProjects, workspace, type Share } from "./share.js";
+import { runApply } from "./apply.js";
 import { place, placeAll } from "./projectstate.js";
 import { hooksStatus, installHooks, installTimer } from "./hooks.js";
-import { describe, newest, shareGitSync, type Side, type SyncOpts as ShareOpts } from "./sharesync.js";
+import { describe, newest, syncShare, type Conflict, type Side } from "./sharesync.js";
 import { clone } from "./projects.js";
 import { apply, locate, present, push, send } from "./checkout.js";
 import { gather } from "./gather.js";
@@ -47,17 +47,10 @@ async function planScreen(pl: Plan): Promise<Action[]> {
   return pl.actions.filter((a) => picked.has(a.id));
 }
 
-// ---------------------------------------------------------------- share conflicts: asked per file, outside the spinner, then the rebase is settled and finished
-async function syncShare(share: Share, title: string, done: string, copyBack: () => void, opts: ShareOpts) {
-  const once = (t: string, extra: ShareOpts) => ui.group(t, async () => { copyBack(); const r = await shareGitSync(share, "share", { ...opts, ...extra, ask: ui.canAsk() }); if (r.offline) ui.step("offline — local changes wait for the next sync"); return r; }, { done });
-  let r = await once(title, {}); const answers: Record<string, Side> = {};
-  while (r.conflicts?.length) {   // memory/plan *.md never get here (merge=union); the rebase was aborted, nothing changed yet
-    for (const c of r.conflicts) answers[c.file] = await ui.select(`${c.file} changed on both machines — keep which version?`,
-      [{ value: "ours" as Side, label: "this machine's version", hint: describe(c.ours) }, { value: "theirs" as Side, label: "the other machine's version", hint: describe(c.theirs) }], newest(c));
-    r = await once("share settled", { resolve: answers });
-  }
-  return r;
-}
+// ---------------------------------------------------------------- a share file changed on both machines: asked per file (the share cycle asks with the rebase aborted, so a
+//                                                                  prompt left at Ctrl-C leaves nothing behind); memory/plan *.md never get here (merge=union)
+const askSide = (c: Conflict) => ui.select(`${c.file} changed on both machines — keep which version?`,
+  [{ value: "ours" as Side, label: "this machine's version", hint: describe(c.ours) }, { value: "theirs" as Side, label: "the other machine's version", hint: describe(c.theirs) }], newest(c));
 
 // ---------------------------------------------------------------- dirty tree vs waiting handoff: asked per question after the plan screen; nothing is ever destructive
 async function askQuestions(qs: HandoffQuestion[]): Promise<{ q: HandoffQuestion; answer: Answer }[]> {
@@ -100,21 +93,24 @@ export async function runSync(share: Share, o: SyncOpts = {}): Promise<SyncResul
   const release = acquire(); if (!release) throw new Error("cs: another cs sync is running here (or the hooks' share sync, a few seconds) — wait for it to finish");
   process.on("exit", release);
   const timeout = o.timeout ?? 20; let rc = 0;
-  const copyBack = () => { placeAll(share); };   // newest checkout content into the project state before it is committed
+  // the share cycle (src/sharesync.ts) as one phase: copy-back, commit, pull, push, ~/.claude and project state after a pull; asked per file when there is a terminal
+  const shareStep = (title: string, done: string, extra: { commitOnly?: boolean } = {}) => ui.group(title, async () => {
+    const r = await syncShare(share, { timeout, ...extra, ask: ui.canAsk() ? askSide : undefined });
+    if (r.offline) ui.step("offline — local changes wait for the next sync");
+    return r;
+  }, { done });
 
   // 1. the share: newest memory/plans/settings in, other machines' changes out
-  const first = await syncShare(share, "share synced", "already in sync", copyBack, { timeout });
+  const first = await shareStep("share synced", "already in sync");
   if (!first.ok) rc = 2;
-  const man = reload(share).manifest; const ws = workspace(share);   // the pull may have changed the manifest
+  const ws = workspace(share);
 
   // 2. self-heal, never a question: hooks, timer, ~/.claude, git includes, shell rc, project state in every checkout
   await ui.group("repaired", async () => {
     const hs = hooksStatus(repo);
     if (!hs.complete) { installHooks(share); ui.step("Claude Code hooks re-installed"); }
     if (!hs.timerFiles || (hs.timerSupported && !hs.timerActive)) ui.step(`timer: ${await installTimer()}`);
-    const changes: string[] = []; applySettings(share, false, changes); applyLinks(repo, false, changes); applyGit(man, false, changes); applyShellRc(false, changes);
-    changes.push(...placeAll(share));   // project state into every checkout; a project removed from the share on another machine loses the pointer we wrote
-    for (const c of changes) ui.step(c);
+    ui.steps(runApply(share)); ui.steps(placeAll(share));   // drift since the last run (the share cycle already applied what the pull brought)
   }, { done: "nothing to repair" });
 
   // 3. projects selected for this machine that are not here yet
@@ -180,7 +176,7 @@ export async function runSync(share: Share, o: SyncOpts = {}): Promise<SyncResul
   if (failed) rc = rc || 1;
 
   // 8. the share again: what the run changed (project state, handoff notes, memory) goes out
-  const last = await syncShare(share, "share pushed", first.offline ? "committed locally — offline, pushed by the next sync" : "already in sync", copyBack, { timeout, commitOnly: first.offline });
+  const last = await shareStep("share pushed", first.offline ? "committed locally — offline, pushed by the next sync" : "already in sync", { commitOnly: first.offline });
   if (!last.ok) rc = 2;
 
   const bits = [applied ? `${applied} handoff(s) applied` : "", sent ? `${sent} handoff(s) sent` : "", pushed ? `${pushed} branch(es) pushed` : "", envDone ? `${envDone} .env file(s) merged` : "", cloned ? `${cloned} project(s) cloned` : "", kept ? ui.yellow(`${kept} handoff(s) left waiting — see above`) : ""].filter(Boolean);

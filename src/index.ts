@@ -34,9 +34,10 @@ program.hook("preAction", (_root, cmd) => ui.setQuiet(Boolean(program.opts().qui
 
 // ------------------------------------------------------------------ daily
 // share-sync: the share alone (commit / pull --rebase / push) — what the hooks and the timer run. `cs sync` is the daily verb on top of it.
-const shareSyncAction = (title: string) => async (o: any) => { const share = open(); const { runShareSync } = await import("./sharesync.js"); const opts = { pullOnly: o.pullOnly, pushOnly: o.pushOnly, timeout: +o.timeout, resolve: o.resolve, debounce: +o.debounce };
-    if (o.quiet || program.opts().quiet) { process.exitCode = await runShareSync(share, opts); return; }
-    await ui.command(title, async () => { process.exitCode = await runShareSync(share, opts); }, { outro: () => (process.exitCode ? ui.red("not synced — see above") : ui.dim("in sync")) }); };
+const shareSyncAction = (title: string) => async (o: any) => { const share = open(); const { syncShare } = await import("./sharesync.js"); const opts = { pullOnly: o.pullOnly, pushOnly: o.pushOnly, timeout: +o.timeout, resolve: o.resolve, debounce: +o.debounce };
+    const run = async () => { process.exitCode = (await syncShare(share, opts)).ok ? 0 : 2; };
+    if (o.quiet || program.opts().quiet) return run();
+    await ui.command(title, run, { outro: () => (process.exitCode ? ui.red("not synced — see above") : ui.dim("in sync")) }); };
 const shareSyncOpts = (c: Command) => c.option("--pull-only").option("--push-only").option("--timeout <s>", "", "20").option("--resolve <ours|theirs|newest>", "how a file changed on both machines is settled (default newest)").option("--debounce <s>", "skip if a sync ran less than N seconds ago", "0").option("-q, --quiet");
 program.command("sync").description("the daily verb: bring this machine up to date and leave nothing stale here")
   .option("-m, --note <text>", "note carried by the handoffs sent (shown where the work is resumed)")
@@ -98,7 +99,7 @@ program.command("init").description("set this machine up (wizard) — or --repo 
 program.command("status", HIDDEN).description("what bare `cs` shows").option("--no-fetch").option("--all").action(async (o) => { const share = open(); const { runStatus } = await import("./status.js"); ui.intro(`cs status  ${ui.dim(share.machine.name)}`); const r = await runStatus(share, o.fetch, o.all); process.exitCode = r.rc; ui.outro(r.next ? ui.yellow(`run: ${r.next}`) : ui.dim("cs sync · cs doctor")); });
 program.command("apply", HIDDEN).description("render ~/.claude + git identity includes from the share").option("--check", "report drift, change nothing")
   .action(async (o) => { const share = open(); const { runApply } = await import("./apply.js");
-    await ui.command(o.check ? "cs apply --check" : "cs apply", async () => { const n = (await ui.group(o.check ? "drift" : "~/.claude applied", () => runApply(share, o.check), { done: o.check ? "no drift" : "already up to date" })).length; process.exitCode = o.check && n ? 1 : 0; }); });
+    await ui.command(o.check ? "cs apply --check" : "cs apply", async () => { const n = (await ui.group(o.check ? "drift" : "~/.claude applied", () => { const lines = runApply(share, o.check); ui.steps(lines); return lines; }, { done: o.check ? "no drift" : "already up to date" })).length; process.exitCode = o.check && n ? 1 : 0; }); });
 program.command("link [names...]", HIDDEN).description("place project state (Claude files, memory) into project checkouts; newer content flows back").option("--check")
   .action(async (names, o) => { const share = open(); const { placeAll } = await import("./projectstate.js");
     await ui.command(o.check ? "cs link --check" : "cs link", async () => { const n = await ui.group(o.check ? "pending changes" : "project files linked", () => { const lines = placeAll(share, { names, check: o.check }); ui.steps(lines); return lines.length; }, { done: "nothing pending" }); process.exitCode = o.check && n ? 1 : 0; }); });
@@ -133,13 +134,13 @@ program.command("handoff [projects...]", HIDDEN).description("send a handoff: un
   .action(async (names, o) => { if (o.mark) return; const share = open(); const h = await H();
     await ui.command("cs handoff", async () => { const projects = h.projectsFor(share, names, o.all);
       process.exitCode = await ui.group("handed off", () => h.handoff(share, projects, { note: o.note, dryRun: o.dryRun, allow: o.allow, overwrite: o.overwrite }), { done: "nothing to hand off" });
-      if (!o.dryRun) { const { runShareSync } = await import("./sharesync.js"); await ui.group("share pushed", () => runShareSync(share, { pushOnly: true, timeout: 20 }), { done: "already in sync" }); } },
+      if (!o.dryRun) { const { syncShare } = await import("./sharesync.js"); await ui.group("share pushed", () => syncShare(share, { pushOnly: true, timeout: 20 }), { done: "already in sync" }); } },
       { outro: () => (process.exitCode ? ui.red("some units not handed off — see above") : ui.dim("on the other machine: cs sync")) }); });
 program.command("resume [projects...]", HIDDEN).description("apply waiting handoffs as uncommitted changes and delete them from the remote")
   .option("--all").option("--replace", "discard local uncommitted changes in the target (a backup ref is kept)").option("--keep-remote", "leave the handoff on the remote").option("--dry-run")
   .action(async (names, o) => { const share = open(); const h = await H();
     await ui.command("cs resume", async () => { const projects = h.projectsFor(share, names, o.all);
-      const { runShareSync } = await import("./sharesync.js"); await ui.group("share pulled", () => runShareSync(share, { pullOnly: true, timeout: 10 }), { done: "up to date" });
+      const { syncShare } = await import("./sharesync.js"); await ui.group("share pulled", () => syncShare(share, { pullOnly: true, timeout: 10 }), { done: "up to date" });
       process.exitCode = await ui.group("resumed", () => h.resume(share, projects, { replace: o.replace, keepRemote: o.keepRemote, dryRun: o.dryRun }), { done: "no handoffs waiting" }); },
       { outro: () => (process.exitCode ? ui.red("some handoffs not applied — see above") : ui.dim("carry on: claude")) }); });
 const handoffs = program.command("handoffs", HIDDEN).description("handoffs waiting on remotes: ls | gc | drop");
@@ -161,6 +162,7 @@ program.command("ui-demo", HIDDEN).description("show every UI element with fake 
     ui.note([`title  ${ui.bold("cs:demo:share-key")}`, `key    ${ui.bold("ssh-ed25519 AAAA… cs:demo:share-key")}`], "a note box");
     ui.warn("a warning"); ui.fail("an error line (does not abort)");
     if (ui.isTTY()) { const v = await ui.select("a select", [{ value: "a", label: "Option A", hint: "hint" }, { value: "b", label: "Option B" }]); const ok = await ui.confirm(`you picked ${v} — confirm?`, true); ui.step(`confirm → ${ok}`); }
+    if (ui.isTTY()) await ui.group("a phase that asks (the spinner pauses for the prompt)", async () => { await sleep(800); const v = await ui.select("asked mid-phase", [{ value: "x", label: "X" }, { value: "y", label: "Y" }]); await sleep(800); ui.step(`answered ${v}`); });
   }, { outro: () => ui.dim("demo over") });
 });
 

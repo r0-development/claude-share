@@ -78,7 +78,7 @@ pass init
 [ -L "$HOME/.agents/skills" ] && [ "$(readlink -f "$HOME/.agents/skills")" = "$(readlink -f "$CS_CONFIG_DIR/share/claude/skills")" ] || die "~/.agents/skills is the repo skills dir"
 [ -f "$CS_CONFIG_DIR/share/claude/skills/sh-skill/SKILL.md" ] && [ -f "$HOME/.claude/skills/sh-skill/SKILL.md" ] || die "skills.sh skill imported into the share"
 [ -L "$HOME/.agents/.skill-lock.json" ] && grep -q sh-skill "$CS_CONFIG_DIR/share/claude/skill-lock.json" || die "skill lock imported into the share"
-$CS apply --check | grep -q "up to date" || die "apply idempotent after skills import"
+$CS apply --check | grep -q "no drift" || die "apply idempotent after skills import"
 [ -L "$HOME/.claude/plans" ] && [ -f "$CS_CONFIG_DIR/share/plans/old.md" ] || die "plans imported into the share"
 python3 - "$HOME/.claude/settings.json" <<'PY' || die "settings merged"
 import json,sys; d=json.load(open(sys.argv[1]))

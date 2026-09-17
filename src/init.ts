@@ -156,11 +156,11 @@ function push(repo: string) {
 }
 async function finish(share: Share, interactive: boolean, skip: string[]): Promise<number> {
   const repo = share.path, m = share.machine;
-  if (!skip.includes("apply")) await ui.group("~/.claude applied", () => runApply(share), { done: "already up to date" });
+  if (!skip.includes("apply")) await ui.group("~/.claude applied", () => ui.steps(runApply(share)), { done: "already up to date" });
   if (!skip.includes("link")) await ui.group("project files linked", () => ui.steps(placeAll(share)), { done: "already in sync" });
   let secretsOk = true;
   if (!skip.includes("secrets") && m.secretsBackend !== "none") { const sc = await import("./secretscmd.js"); await ui.group("secrets", () => sc.init(share, interactive)); secretsOk = await sc.ensureRecipient(share, interactive); }
-  if (!skip.includes("hooks")) await ui.group("automatic sync", async () => { await (await import("./hooks.js")).runHooks(share, "install"); runApply(share); });
+  if (!skip.includes("hooks")) await ui.group("automatic sync", async () => { await (await import("./hooks.js")).runHooks(share, "install"); ui.steps(runApply(share)); });
   await ui.group("share", () => push(repo), { done: "nothing to push" });
   let rc = 0; if (!skip.includes("doctor")) rc = await ui.group("doctor", () => runDoctor(share, false, true), { done: "all checks passed" });
   const ws = workspace(share); const missing = selectedProjects(share).filter((p) => { const c = locate(p, ws); return p.url && !present(c) && c.why === "missing"; });

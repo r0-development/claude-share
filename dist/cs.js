@@ -5026,6 +5026,7 @@ async function group(title, fn, opts = {}) {
   if (sp) {
     sp.start(title);
     activeSpinner = sp;
+    activeTitle = title;
   }
   let result;
   try {
@@ -5097,6 +5098,16 @@ function cancelled(v) {
   cancel("cancelled");
   process.exit(130);
 }
+async function prompt(fn) {
+  const sp = activeSpinner;
+  if (!sp) return fn();
+  sp.clear();
+  try {
+    return await fn();
+  } finally {
+    sp.start(activeTitle);
+  }
+}
 async function plainLine(q) {
   if (scripted) throw new Error(`cs: scripted answers exhausted at prompt '${q.trim()}'`);
   const rl = createInterface2({ input: process.stdin, output: process.stdout });
@@ -5116,85 +5127,95 @@ async function plainLine(q) {
   });
 }
 async function text2(message, opts = {}) {
-  const a2 = nextAnswer();
-  if (a2 !== void 0) {
-    const v2 = a2 === "<default>" ? opts.default ?? "" : a2;
-    const err = opts.validate?.(v2);
-    if (err) throw new Error(`scripted answer '${v2}' rejected for '${message}': ${err}`);
-    return v2;
-  }
-  if (!isTTY()) {
-    for (; ; ) {
-      const v2 = await plainLine(`? ${message}${opts.default ? ` [${opts.default}]` : ""}: `) || (opts.default ?? "");
+  return prompt(async () => {
+    const a2 = nextAnswer();
+    if (a2 !== void 0) {
+      const v2 = a2 === "<default>" ? opts.default ?? "" : a2;
       const err = opts.validate?.(v2);
-      if (!err) return v2;
-      console.log("  ! " + err);
+      if (err) throw new Error(`scripted answer '${v2}' rejected for '${message}': ${err}`);
+      return v2;
     }
-  }
-  const v = await text({
-    message,
-    placeholder: opts.placeholder,
-    defaultValue: opts.default,
-    initialValue: void 0,
-    validate: (x) => {
-      const val = (x ?? "").trim() || (opts.default ?? "");
-      return opts.validate?.(val);
+    if (!isTTY()) {
+      for (; ; ) {
+        const v2 = await plainLine(`? ${message}${opts.default ? ` [${opts.default}]` : ""}: `) || (opts.default ?? "");
+        const err = opts.validate?.(v2);
+        if (!err) return v2;
+        console.log("  ! " + err);
+      }
     }
+    const v = await text({
+      message,
+      placeholder: opts.placeholder,
+      defaultValue: opts.default,
+      initialValue: void 0,
+      validate: (x) => {
+        const val = (x ?? "").trim() || (opts.default ?? "");
+        return opts.validate?.(val);
+      }
+    });
+    if (isCancel(v)) cancelled(v);
+    return String(v ?? "").trim() || (opts.default ?? "");
   });
-  if (isCancel(v)) cancelled(v);
-  return String(v ?? "").trim() || (opts.default ?? "");
 }
 async function password2(message) {
-  const a2 = nextAnswer();
-  if (a2 !== void 0) return a2;
-  if (!isTTY()) return plainLine(`? ${message}: `);
-  const v = await password({ message });
-  if (isCancel(v)) cancelled(v);
-  return String(v ?? "");
+  return prompt(async () => {
+    const a2 = nextAnswer();
+    if (a2 !== void 0) return a2;
+    if (!isTTY()) return plainLine(`? ${message}: `);
+    const v = await password({ message });
+    if (isCancel(v)) cancelled(v);
+    return String(v ?? "");
+  });
 }
 async function confirm2(message, initial = false) {
-  const a2 = nextAnswer();
-  if (a2 !== void 0) return a2 === "<default>" ? initial : a2 === "y" || a2 === "yes";
-  if (!isTTY()) {
-    const v2 = (await plainLine(`? ${message} [${initial ? "Y/n" : "y/N"}]: `)).toLowerCase();
-    return v2 ? v2.startsWith("y") : initial;
-  }
-  const v = await confirm({ message, initialValue: initial });
-  if (isCancel(v)) cancelled(v);
-  return Boolean(v);
+  return prompt(async () => {
+    const a2 = nextAnswer();
+    if (a2 !== void 0) return a2 === "<default>" ? initial : a2 === "y" || a2 === "yes";
+    if (!isTTY()) {
+      const v2 = (await plainLine(`? ${message} [${initial ? "Y/n" : "y/N"}]: `)).toLowerCase();
+      return v2 ? v2.startsWith("y") : initial;
+    }
+    const v = await confirm({ message, initialValue: initial });
+    if (isCancel(v)) cancelled(v);
+    return Boolean(v);
+  });
 }
 async function select2(message, options, initial) {
-  const a2 = nextAnswer();
-  if (a2 !== void 0) {
-    if (a2 === "<default>") return initial ?? options[0].value;
-    const hit = options.find((o) => o.value === a2 || o.label.toLowerCase().startsWith(a2.toLowerCase()));
-    if (!hit) throw new Error(`scripted answer '${a2}' matches no option for '${message}'`);
-    return hit.value;
-  }
-  if (!isTTY()) {
-    console.log(`? ${message}`);
-    options.forEach((o, i3) => console.log(`  ${i3 + 1}) ${o.label}`));
-    const v2 = await plainLine(`  choose [${options.findIndex((o) => o.value === initial) + 1 || 1}]: `);
-    const i2 = parseInt(v2, 10);
-    return i2 >= 1 && i2 <= options.length ? options[i2 - 1].value : initial ?? options[0].value;
-  }
-  const v = await select({ message, options, initialValue: initial });
-  if (isCancel(v)) cancelled(v);
-  return v;
+  return prompt(async () => {
+    const a2 = nextAnswer();
+    if (a2 !== void 0) {
+      if (a2 === "<default>") return initial ?? options[0].value;
+      const hit = options.find((o) => o.value === a2 || o.label.toLowerCase().startsWith(a2.toLowerCase()));
+      if (!hit) throw new Error(`scripted answer '${a2}' matches no option for '${message}'`);
+      return hit.value;
+    }
+    if (!isTTY()) {
+      console.log(`? ${message}`);
+      options.forEach((o, i3) => console.log(`  ${i3 + 1}) ${o.label}`));
+      const v2 = await plainLine(`  choose [${options.findIndex((o) => o.value === initial) + 1 || 1}]: `);
+      const i2 = parseInt(v2, 10);
+      return i2 >= 1 && i2 <= options.length ? options[i2 - 1].value : initial ?? options[0].value;
+    }
+    const v = await select({ message, options, initialValue: initial });
+    if (isCancel(v)) cancelled(v);
+    return v;
+  });
 }
 async function groupMultiselect2(message, groups, initial = []) {
-  const all = Object.values(groups).flat();
-  const a2 = nextAnswer();
-  if (a2 !== void 0) return a2 === "<default>" ? initial : a2 === "all" ? all.map((o) => o.value) : a2.split(",").map((x) => x.trim()).filter(Boolean);
-  if (!isTTY()) {
-    console.log(`? ${message}`);
-    for (const [g, opts] of Object.entries(groups)) console.log(`  ${g}: ${opts.map((o) => o.value).join(", ")}`);
-    const v2 = await plainLine(`  comma list (Enter = ${initial.length === all.length ? "all" : initial.join(",")}): `);
-    return v2 ? v2.split(",").map((x) => x.trim()) : initial;
-  }
-  const v = await groupMultiselect({ message, options: groups, initialValues: initial, required: false, selectableGroups: true });
-  if (isCancel(v)) cancelled(v);
-  return v;
+  return prompt(async () => {
+    const all = Object.values(groups).flat();
+    const a2 = nextAnswer();
+    if (a2 !== void 0) return a2 === "<default>" ? initial : a2 === "all" ? all.map((o) => o.value) : a2.split(",").map((x) => x.trim()).filter(Boolean);
+    if (!isTTY()) {
+      console.log(`? ${message}`);
+      for (const [g, opts] of Object.entries(groups)) console.log(`  ${g}: ${opts.map((o) => o.value).join(", ")}`);
+      const v2 = await plainLine(`  comma list (Enter = ${initial.length === all.length ? "all" : initial.join(",")}): `);
+      return v2 ? v2.split(",").map((x) => x.trim()) : initial;
+    }
+    const v = await groupMultiselect({ message, options: groups, initialValues: initial, required: false, selectableGroups: true });
+    if (isCancel(v)) cancelled(v);
+    return v;
+  });
 }
 async function proceed(message, doneLabel = "Done \u2014 check again", skipLabel = "Skip for now") {
   return await select2(message, [{ value: "done", label: doneLabel }, { value: "skip", label: skipLabel }]) === "done";
@@ -5210,6 +5231,7 @@ async function spin(label, fn) {
   const s = spinner();
   s.start(label);
   activeSpinner = s;
+  activeTitle = label;
   try {
     const r2 = await fn((l2) => s.message(l2));
     s.stop(label);
@@ -5235,7 +5257,7 @@ async function command(title, fn, opts = {}) {
     throw Object.assign(new Error("__handled__"), { handled: true, code: 1 });
   }
 }
-var import_picocolors, quiet, collecting, setQuiet, strip, isTTY, scripted, isScripted, canAsk, dim, bold, green, yellow, red, cyan, gray, magenta, activeSpinner, width, clip;
+var import_picocolors, quiet, collecting, setQuiet, strip, isTTY, scripted, isScripted, canAsk, dim, bold, green, yellow, red, cyan, gray, magenta, activeSpinner, activeTitle, width, clip;
 var init_ui = __esm({
   "src/ui.ts"() {
     "use strict";
@@ -5260,6 +5282,7 @@ var init_ui = __esm({
     gray = import_picocolors.default.gray;
     magenta = import_picocolors.default.magenta;
     activeSpinner = null;
+    activeTitle = "";
     width = () => Math.max(40, (process.stdout.columns || 100) - 6);
     clip = (s, w = width()) => strip(s).length > w ? s.slice(0, w - 1) + "\u2026" : s;
   }
@@ -6264,7 +6287,7 @@ function exec2(cmd, args, opts = {}) {
   return new Promise((resolve7) => {
     const p = spawn(cmd, args, { cwd: opts.cwd, env: opts.env ?? process.env, stdio: ["pipe", "pipe", "pipe"], detached: !!opts.group });
     let out2 = "", err = "", done = false;
-    const finish2 = (r2) => {
+    const finish3 = (r2) => {
       if (done) return;
       done = true;
       if (timer) clearTimeout(timer);
@@ -6279,12 +6302,12 @@ function exec2(cmd, args, opts = {}) {
       } else p.kill("SIGKILL");
       p.stdout.destroy();
       p.stderr.destroy();
-      finish2({ code: 124, out: out2.trim(), err: (err + "\ntimed out").trim() });
+      finish3({ code: 124, out: out2.trim(), err: (err + "\ntimed out").trim() });
     }, opts.timeout * 1e3) : void 0;
     p.stdout.on("data", (d) => out2 += d);
     p.stderr.on("data", (d) => err += d);
-    p.on("error", (e) => finish2({ code: 127, out: out2, err: err + e.message }));
-    p.on("close", (code) => finish2({ code: code ?? 1, out: out2.trim(), err: err.trim() }));
+    p.on("error", (e) => finish3({ code: 127, out: out2, err: err + e.message }));
+    p.on("close", (code) => finish3({ code: code ?? 1, out: out2.trim(), err: err.trim() }));
     p.stdin.on("error", () => {
     });
     if (opts.input !== void 0) p.stdin.write(opts.input);
@@ -6303,29 +6326,18 @@ var init_proc = __esm({
 import { spawnSync } from "node:child_process";
 import { existsSync as existsSync2, readFileSync as readFileSync3, statSync } from "node:fs";
 import { join as join3, resolve as resolve2, isAbsolute as isAbsolute2 } from "node:path";
-function git(args, cwd, opts = {}) {
-  const env2 = { ...process.env, ...opts.env ?? {} };
-  if (opts.sshKey) env2.GIT_SSH_COMMAND = `ssh -i ${opts.sshKey} -o IdentitiesOnly=yes`;
-  const p = spawnSync("git", args, { cwd, env: env2, encoding: "utf8", timeout: opts.timeout ? opts.timeout * 1e3 : void 0, input: opts.input, stdio: ["pipe", "pipe", "pipe"] });
-  const r2 = { code: p.status ?? 1, out: (p.stdout ?? "").trim(), err: (p.stderr ?? "").trim() };
-  if (opts.check !== false && r2.code !== 0) {
-    const last = r2.err.split("\n").filter(Boolean).pop() ?? "";
-    throw new Error(`cs: git ${args.slice(0, 2).join(" ")} failed in ${cwd ?? "."}
-  ${last}`);
-  }
-  return r2;
+function finish(args, cwd, o, r2) {
+  const res = { code: r2.code, out: r2.out.trim(), err: r2.err.trim() };
+  if (o.check !== false && res.code !== 0) throw new Error(`cs: git ${args.slice(0, 2).join(" ")} failed in ${cwd ?? "."}
+  ${res.err.split("\n").filter(Boolean).pop() ?? ""}`);
+  return res;
 }
-async function gitA(args, cwd, opts = {}) {
-  const { exec: exec4 } = await Promise.resolve().then(() => (init_proc(), proc_exports));
-  const env2 = { ...process.env, ...opts.env ?? {} };
-  if (opts.sshKey) env2.GIT_SSH_COMMAND = `ssh -i ${opts.sshKey} -o IdentitiesOnly=yes`;
-  const r2 = await exec4("git", args, { cwd, env: env2, timeout: opts.timeout });
-  if (opts.check !== false && r2.code !== 0) {
-    const last = r2.err.split("\n").filter(Boolean).pop() ?? "";
-    throw new Error(`cs: git ${args.slice(0, 2).join(" ")} failed in ${cwd ?? "."}
-  ${last}`);
-  }
-  return r2;
+function git(args, cwd, o = {}) {
+  const p = spawnSync("git", args, { cwd, env: envOf(o), encoding: "utf8", timeout: o.timeout ? o.timeout * 1e3 : void 0, input: o.input, stdio: ["pipe", "pipe", "pipe"] });
+  return finish(args, cwd, o, { code: p.status ?? 1, out: p.stdout ?? "", err: p.stderr ?? "" });
+}
+async function gitA(args, cwd, o = {}) {
+  return finish(args, cwd, o, await exec2("git", args, { cwd, env: envOf(o), timeout: o.timeout, input: o.input }));
 }
 function version() {
   const v = out(["--version"]).split(" ").pop() ?? "0.0.0";
@@ -6376,10 +6388,16 @@ function trailers(p, sha) {
   }
   return o;
 }
-var out, isRepo, isBare, toplevel, remoteUrl, currentBranch, dirtyCount, isDirty, worktrees, infoExclude, configGet, identityArgs, rebaseInProgress, slug;
+var envOf, out, isRepo, isBare, toplevel, remoteUrl, currentBranch, dirtyCount, isDirty, worktrees, infoExclude, configGet, identityArgs, rebaseInProgress, slug;
 var init_git = __esm({
   "src/git.ts"() {
     "use strict";
+    init_proc();
+    envOf = (o) => {
+      const env2 = { ...process.env, ...o.env ?? {} };
+      if (o.sshKey) env2.GIT_SSH_COMMAND = `ssh -i ${o.sshKey} -o IdentitiesOnly=yes`;
+      return env2;
+    };
     out = (args, cwd, dflt = "") => {
       const r2 = git(args, cwd, { check: false });
       return r2.code === 0 ? r2.out : dflt;
@@ -6718,7 +6736,7 @@ var init_update = __esm({
     init_paths();
     init_ui();
     cacheFile = () => join6(stateDir(), "update-check.json");
-    behindCount = (finish2, graceMs = 50) => Promise.race([finish2(), new Promise((r2) => setTimeout(() => r2(0), graceMs))]);
+    behindCount = (finish3, graceMs = 50) => Promise.race([finish3(), new Promise((r2) => setTimeout(() => r2(0), graceMs))]);
     behindHint = (behind) => behind > 0 ? yellow(`cs is ${behind} commit(s) behind \u2014 run ${bold("cs update")}`) : "";
   }
 });
@@ -7008,8 +7026,6 @@ function runApply(share, check = false) {
   applyLinks(share.path, check, changes);
   applyGit(share.manifest, check, changes);
   applyShellRc(check, changes);
-  for (const c2 of changes) check ? info(c2) : step(c2);
-  if (!changes.length) ok("~/.claude up to date");
   return changes;
 }
 var LINK_ITEMS, GIT_MARK, GIT_END, stamp, isLink, real, renderSettings;
@@ -7020,7 +7036,6 @@ var init_apply = __esm({
     init_platform();
     init_manifest();
     init_jsonmerge();
-    init_ui();
     LINK_ITEMS = ["CLAUDE.md", "rules", "agents", "themes", "keybindings.json", "statusline.sh"];
     GIT_MARK = "# >>> claude-share >>>";
     GIT_END = "# <<< claude-share <<<";
@@ -7340,7 +7355,7 @@ function fileOf(project, entry) {
   if (entry === project) return ".env";
   return entry.startsWith(project + ".") && entry.length > project.length + 1 ? ".env." + entry.slice(project.length + 1) : void 0;
 }
-function merge3(base, local, stored, decide3 = {}) {
+function merge3(base, local, stored, decide2 = {}) {
   const result = {}, toLocal = [], toStore = [], conflicts = [];
   const keys = /* @__PURE__ */ new Set([...Object.keys(base ?? {}), ...Object.keys(local), ...Object.keys(stored)]);
   const put2 = (k, v) => {
@@ -7356,7 +7371,7 @@ function merge3(base, local, stored, decide3 = {}) {
     }
     const localChanged = base ? l2 !== base[k] : l2 !== void 0, storedChanged = base ? s !== base[k] : s !== void 0;
     if (localChanged && storedChanged) {
-      const side = decide3[k];
+      const side = decide2[k];
       if (side) put2(k, side === "local" ? l2 : s);
       else conflicts.push({ key: k, local: l2, stored: s });
       continue;
@@ -8206,8 +8221,7 @@ __export(sharesync_exports, {
   lastSync: () => lastSync,
   lastSyncFile: () => lastSyncFile,
   newest: () => newest,
-  runShareSync: () => runShareSync,
-  shareGitSync: () => shareGitSync
+  syncShare: () => syncShare
 });
 import { existsSync as existsSync10, mkdirSync as mkdirSync10, readFileSync as readFileSync13, rmSync as rmSync5, statSync as statSync7, writeFileSync as writeFileSync9 } from "node:fs";
 import { join as join14 } from "node:path";
@@ -8225,22 +8239,28 @@ function takeSide(repo, file, side) {
   git(["checkout", side === "ours" ? "--theirs" : "--ours", "--", file], repo);
   git(["add", "--", file], repo);
 }
-function settleRebase(repo, label, local, upstream2, o) {
+function settleRebase(repo, local, upstream2, o, decided) {
   const env2 = { GIT_EDITOR: "true" };
   const ident2 = identityArgs(repo);
   const settled = [];
   let backedUp = false;
   let last = "";
+  const byHand = `cd ${contract(repo)} && git rebase ${out(["rev-parse", "--abbrev-ref", "@{upstream}"], repo)}`;
+  const side = (c2) => {
+    if (decided[c2.file]) return decided[c2.file];
+    if (o.resolve === "ours" || o.resolve === "theirs") return o.resolve;
+    return o.ask && !o.resolve ? void 0 : newest(c2);
+  };
   const abort = () => git(["rebase", "--abort"], repo, { check: false });
   try {
     while (rebaseInProgress(repo)) {
       const stops = conflictsOf(repo, local, upstream2);
       const step2 = rebaseStep(repo);
-      if (!stops.length) throw new Error(`cs: share rebase stopped without a conflict \u2014 cd ${contract(repo)} && git rebase origin/${currentBranch(repo)}`);
-      if (step2 === last) throw new Error(`cs: share rebase keeps stopping on ${stops.map((c2) => c2.file).join(", ")} \u2014 cd ${contract(repo)} && git rebase origin/${currentBranch(repo)}`);
+      if (!stops.length) throw new Error(`cs: share rebase stopped without a conflict \u2014 ${byHand}`);
+      if (step2 === last) throw new Error(`cs: share rebase keeps stopping on ${stops.map((c2) => c2.file).join(", ")} \u2014 ${byHand}`);
       last = step2;
-      const open2 = stops.filter((c2) => !decide2(c2, o.resolve));
-      if (open2.length && o.ask) {
+      const open2 = stops.filter((c2) => !side(c2));
+      if (open2.length) {
         abort();
         return open2;
       }
@@ -8249,9 +8269,9 @@ function settleRebase(repo, label, local, upstream2, o) {
         backedUp = true;
       }
       for (const c2 of stops) {
-        const side = decide2(c2, o.resolve) ?? newest(c2);
-        takeSide(repo, c2.file, side);
-        settled.push(`${c2.file} (${side === "ours" ? "this machine" : "the other machine"})`);
+        const s = side(c2);
+        takeSide(repo, c2.file, s);
+        settled.push(`${c2.file} (${s === "ours" ? "this machine" : "the other machine"})`);
       }
       const empty = git(["diff", "--cached", "--quiet"], repo, { check: false }).code === 0;
       const r2 = git([...ident2, "rebase", empty ? "--skip" : "--continue"], repo, { check: false, env: env2 });
@@ -8261,115 +8281,128 @@ function settleRebase(repo, label, local, upstream2, o) {
     if (rebaseInProgress(repo)) abort();
     throw e;
   }
-  step(`${label}: settled ${settled.join(", ")}`);
+  step(`${LABEL}: settled ${settled.join(", ")}`);
   return void 0;
 }
-async function shareGitSync(share, label, o = {}) {
-  const repo = share.path;
-  if (!isRepo(repo)) {
-    warn(`${label}: not a git repo (${contract(repo)})`);
-    return { ok: false };
+async function rebase(repo, o) {
+  const decided = {};
+  for (; ; ) {
+    const local = out(["rev-parse", "HEAD"], repo), upstream2 = out(["rev-parse", "@{upstream}"], repo);
+    const r2 = git([...identityArgs(repo), "rebase", "-q", "@{upstream}"], repo, { check: false, env: { GIT_EDITOR: "true" } });
+    if (r2.code === 0) return true;
+    if (!rebaseInProgress(repo)) {
+      error(`${LABEL}: could not rebase`, r2.err.split("\n").filter(Boolean).pop() ?? "");
+      return false;
+    }
+    let open2;
+    try {
+      open2 = settleRebase(repo, local, upstream2, o, decided);
+    } catch (e) {
+      error(`${LABEL}: could not settle the rebase`, e.message.replace(/^cs: /, ""));
+      return false;
+    }
+    if (!open2) return true;
+    step(`${LABEL}: ${open2.length} file(s) changed on both machines \u2014 asking`);
+    for (const c2 of open2) decided[c2.file] = await o.ask(c2);
   }
+}
+async function cycle(share, o) {
+  const repo = share.path;
   const timeout = o.timeout ?? 20;
-  const release = acquire();
-  if (!release) {
-    info(`${label}: another sync is running, skipping`);
+  if (!remoteUrl(repo)) {
+    ok(`${LABEL}: no remote configured; local only`);
     return { ok: true };
   }
-  try {
-    if (rebaseInProgress(repo)) {
-      error(`${label}: a rebase is in progress in ${contract(repo)}`, "", "finish it: git rebase --continue \xB7 or drop it: git rebase --abort");
-      return { ok: false };
-    }
-    if (!o.pullOnly && isDirty(repo)) {
-      const n3 = dirtyCount(repo);
-      commit2(share, `sync(${share.machine.name}): ${n3} file(s) ${(/* @__PURE__ */ new Date()).toISOString().slice(0, 16).replace("T", " ")}`);
-      step(`${label}: committed ${n3} change(s)`);
-    }
-    if (!remoteUrl(repo)) {
-      ok(`${label}: no remote configured; local only`);
-      return { ok: true };
-    }
-    if (o.commitOnly) return { ok: true, offline: true };
-    const f = await spin(`${label}: fetching\u2026`, () => gitA(["fetch", "-q", "--prune", "origin"], repo, { check: false, timeout }));
+  if (o.commitOnly) return { ok: true, offline: true };
+  for (let attempt = 0; ; attempt++) {
+    const f = await spin(`${LABEL}: fetching\u2026`, () => gitA(["fetch", "-q", "--prune", "origin"], repo, { check: false, timeout }));
     if (f.code !== 0) {
-      warn(`${label}: offline or fetch timed out; will push later`);
+      warn(`${LABEL}: offline or fetch timed out; will push later`);
       markSync("offline");
       return { ok: true, offline: true };
     }
     const branch = currentBranch(repo);
     if (!branch) {
-      fail(`${label}: detached HEAD; refusing to sync`);
+      fail(`${LABEL}: detached HEAD; refusing to sync`);
       return { ok: false };
     }
     if (!out(["rev-parse", "--abbrev-ref", "@{upstream}"], repo)) {
       if (out(["rev-parse", "--verify", "-q", `origin/${branch}`], repo)) git(["branch", "-q", `--set-upstream-to=origin/${branch}`, branch], repo);
       else if (!o.pullOnly) {
-        await spin(`${label}: pushing\u2026`, () => gitA(["push", "-q", "-u", "origin", branch], repo, { timeout }));
-        ok(`${label}: pushed new branch ${branch}`);
+        await spin(`${LABEL}: pushing\u2026`, () => gitA(["push", "-q", "-u", "origin", branch], repo, { timeout }));
+        ok(`${LABEL}: pushed new branch ${branch}`);
         return { ok: true, pushed: 1 };
       } else return { ok: true };
     }
-    let [ahead, behind] = aheadBehind(repo) ?? [0, 0];
+    const [ahead, behind] = aheadBehind(repo) ?? [0, 0];
     if (behind && !o.pushOnly) {
       if (!ahead) {
         git(["merge", "-q", "--ff-only", "@{upstream}"], repo);
-        step(`${label}: fast-forwarded ${behind} commit(s)`);
+        step(`${LABEL}: fast-forwarded ${behind} commit(s)`);
       } else {
-        const local = out(["rev-parse", "HEAD"], repo), upstream2 = out(["rev-parse", "@{upstream}"], repo);
-        const r2 = git([...identityArgs(repo), "rebase", "-q", "@{upstream}"], repo, { check: false, env: { GIT_EDITOR: "true" } });
-        if (r2.code !== 0) {
-          let open2;
-          try {
-            open2 = settleRebase(repo, label, local, upstream2, o);
-          } catch (e) {
-            error(`${label}: could not settle the rebase`, e.message.replace(/^cs: /, ""));
-            return { ok: false };
-          }
-          if (open2) {
-            step(`${label}: ${open2.length} file(s) changed on both machines \u2014 asking`);
-            return { ok: false, conflicts: open2 };
-          }
-        }
-        step(`${label}: rebased ${ahead} local commit(s) onto ${behind} remote commit(s)`);
+        if (!await rebase(repo, o)) return { ok: false };
+        step(`${LABEL}: rebased ${ahead} local commit(s) onto ${behind} remote commit(s)`);
       }
     }
-    let pushed = 0;
-    if (!o.pullOnly) {
-      const ab = aheadBehind(repo);
-      if (ab && ab[0]) {
-        const pr = await spin(`${label}: pushing\u2026`, () => gitA(["push", "-q", "origin", branch], repo, { check: false, timeout }));
-        if (pr.code !== 0) {
-          warn(`${label}: push rejected, retrying once`);
-          release();
-          return shareGitSync(share, label, o);
+    if (o.pullOnly) {
+      markSync((/* @__PURE__ */ new Date()).toISOString());
+      return { ok: true, pushed: 0 };
+    }
+    const toPush = aheadBehind(repo)?.[0] ?? 0;
+    if (toPush) {
+      const pr = await spin(`${LABEL}: pushing\u2026`, () => gitA(["push", "-q", "origin", branch], repo, { check: false, timeout }));
+      if (pr.code !== 0) {
+        if (attempt) {
+          fail(`${LABEL}: push rejected twice \u2014 ${pr.err.split("\n").filter(Boolean).pop() ?? ""}`);
+          return { ok: false };
         }
-        pushed = ab[0];
-        ok(`${label}: pushed ${ab[0]} commit(s)`);
+        warn(`${LABEL}: push rejected, retrying once`);
+        continue;
       }
+      ok(`${LABEL}: pushed ${toPush} commit(s)`);
     }
     markSync((/* @__PURE__ */ new Date()).toISOString());
-    return { ok: true, pushed };
+    return { ok: true, pushed: toPush };
+  }
+}
+async function syncShare(share, o = {}) {
+  const repo = share.path;
+  if (o.debounce && existsSync10(lastSyncFile()) && Date.now() - statSync7(lastSyncFile()).mtimeMs < o.debounce * 1e3) return { ok: true };
+  if (!isRepo(repo)) {
+    warn(`${LABEL}: not a git repo (${contract(repo)})`);
+    return { ok: false };
+  }
+  const release = acquire();
+  if (!release) {
+    info(`${LABEL}: another sync is running, skipping`);
+    return { ok: true };
+  }
+  try {
+    if (rebaseInProgress(repo)) {
+      error(`${LABEL}: a rebase is in progress in ${contract(repo)}`, "", "finish it: git rebase --continue \xB7 or drop it: git rebase --abort");
+      return { ok: false };
+    }
+    const before = out(["rev-parse", "HEAD"], repo);
+    if (!o.pullOnly) {
+      steps(placeAll(share));
+      if (isDirty(repo)) {
+        const n3 = dirtyCount(repo);
+        commit2(share, `sync(${share.machine.name}): ${n3} file(s) ${(/* @__PURE__ */ new Date()).toISOString().slice(0, 16).replace("T", " ")}`);
+        step(`${LABEL}: committed ${n3} change(s)`);
+      }
+    }
+    const r2 = await cycle(share, o);
+    const after = out(["rev-parse", "HEAD"], repo);
+    if (after !== before || o.pullOnly) {
+      if (o.pullOnly || out(["diff", "--name-only", before, after], repo).split("\n").some(relevant)) steps(runApply(reload(share)));
+      steps(placeAll(reload(share)));
+    }
+    return r2;
   } finally {
     release();
   }
 }
-async function runShareSync(share, o = {}) {
-  const repo = share.path;
-  let rc = 0;
-  if (o.debounce && existsSync10(lastSyncFile()) && Date.now() - statSync7(lastSyncFile()).mtimeMs < o.debounce * 1e3) return 0;
-  const before = out(["rev-parse", "HEAD"], repo);
-  if (!o.pullOnly) placeAll(share);
-  if (!(await shareGitSync(share, "share", { ...o, resolve: o.resolve ?? "newest", ask: false })).ok) rc = 2;
-  const after = out(["rev-parse", "HEAD"], repo);
-  if (after !== before || o.pullOnly) {
-    const changed = before ? out(["diff", "--name-only", before, after], repo) : "";
-    if (o.pullOnly || changed.split("\n").some((x) => x.startsWith("claude/") || x.startsWith("projects.toml") || x.startsWith("plans/"))) runApply(reload(share));
-    placeAll(reload(share));
-  }
-  return rc;
-}
-var lastSyncFile, lastSync, markSync, newest, describe2, decide2;
+var lastSyncFile, lastSync, markSync, newest, describe2, LABEL, relevant;
 var init_sharesync = __esm({
   "src/sharesync.ts"() {
     "use strict";
@@ -8388,7 +8421,8 @@ var init_sharesync = __esm({
     };
     newest = (c2) => Date.parse(c2.theirs.when) > Date.parse(c2.ours.when) ? "theirs" : "ours";
     describe2 = (ch) => `${ch.deleted ? "deleted" : "changed"} ${ch.when.slice(0, 16).replace("T", " ")}`;
-    decide2 = (c2, r2) => r2 === void 0 ? void 0 : r2 === "newest" ? newest(c2) : typeof r2 === "string" ? r2 : r2[c2.file];
+    LABEL = "share";
+    relevant = (file) => file.startsWith("claude/") || file.startsWith("projects.toml") || file.startsWith("plans/");
   }
 });
 
@@ -9198,9 +9232,9 @@ function writeSnapshot(st, values) {
   mkdirSync15(dirname7(f), { recursive: true, mode: 448 });
   writeFileSync14(f, dumpDotenv(values), { mode: 384 });
 }
-async function applyEnv(share, b, st, decide3 = {}) {
+async function applyEnv(share, b, st, decide2 = {}) {
   const repo = share.path;
-  const m = mergeOf(st, decide3);
+  const m = mergeOf(st, decide2);
   if (m.conflicts.length) throw new Error(`cs: ${st.project} ${st.file}: undecided keys ${m.conflicts.map((c2) => c2.key).join(", ")}`);
   const empty = !Object.keys(m.result).length;
   if (m.toStore.length) {
@@ -9236,7 +9270,7 @@ var init_envfiles = __esm({
     init_share();
     init_secrets();
     init_env();
-    mergeOf = (st, decide3 = {}) => st.kind === "local" ? mergeKeys(st.base && Object.keys(st.base), st.local ?? {}, Object.keys(st.stored ?? {}), st.example ?? {}) : merge3(st.base, st.local ?? {}, st.stored ?? {}, decide3);
+    mergeOf = (st, decide2 = {}) => st.kind === "local" ? mergeKeys(st.base && Object.keys(st.base), st.local ?? {}, Object.keys(st.stored ?? {}), st.example ?? {}) : merge3(st.base, st.local ?? {}, st.stored ?? {}, decide2);
     snapshotFile = (project, file) => join20(stateDir(), "env", project, file);
     readValues = (f) => existsSync15(f) ? parseDotenv(readFileSync17(f, "utf8")) : void 0;
     mtime = (f) => new Date(statSync8(f).mtimeMs).toISOString();
@@ -9332,25 +9366,6 @@ async function planScreen(pl) {
   }
   return pl.actions.filter((a2) => picked.has(a2.id));
 }
-async function syncShare(share, title, done, copyBack, opts) {
-  const once = (t2, extra) => group(t2, async () => {
-    copyBack();
-    const r3 = await shareGitSync(share, "share", { ...opts, ...extra, ask: canAsk() });
-    if (r3.offline) step("offline \u2014 local changes wait for the next sync");
-    return r3;
-  }, { done });
-  let r2 = await once(title, {});
-  const answers = {};
-  while (r2.conflicts?.length) {
-    for (const c2 of r2.conflicts) answers[c2.file] = await select2(
-      `${c2.file} changed on both machines \u2014 keep which version?`,
-      [{ value: "ours", label: "this machine's version", hint: describe2(c2.ours) }, { value: "theirs", label: "the other machine's version", hint: describe2(c2.theirs) }],
-      newest(c2)
-    );
-    r2 = await once("share settled", { resolve: answers });
-  }
-  return r2;
-}
 async function askQuestions(qs) {
   const out2 = [];
   for (const q of qs) {
@@ -9401,12 +9416,13 @@ async function runSync(share, o = {}) {
   process.on("exit", release);
   const timeout = o.timeout ?? 20;
   let rc = 0;
-  const copyBack = () => {
-    placeAll(share);
-  };
-  const first = await syncShare(share, "share synced", "already in sync", copyBack, { timeout });
+  const shareStep = (title, done, extra = {}) => group(title, async () => {
+    const r2 = await syncShare(share, { timeout, ...extra, ask: canAsk() ? askSide : void 0 });
+    if (r2.offline) step("offline \u2014 local changes wait for the next sync");
+    return r2;
+  }, { done });
+  const first = await shareStep("share synced", "already in sync");
   if (!first.ok) rc = 2;
-  const man = reload(share).manifest;
   const ws = workspace2(share);
   await group("repaired", async () => {
     const hs = hooksStatus(repo);
@@ -9415,13 +9431,8 @@ async function runSync(share, o = {}) {
       step("Claude Code hooks re-installed");
     }
     if (!hs.timerFiles || hs.timerSupported && !hs.timerActive) step(`timer: ${await installTimer()}`);
-    const changes = [];
-    applySettings(share, false, changes);
-    applyLinks(repo, false, changes);
-    applyGit(man, false, changes);
-    applyShellRc(false, changes);
-    changes.push(...placeAll(share));
-    for (const c2 of changes) step(c2);
+    steps(runApply(share));
+    steps(placeAll(share));
   }, { done: "nothing to repair" });
   const missing = () => new Set(selectedProjects2(share).filter((p) => {
     const c2 = locate(p, ws);
@@ -9477,9 +9488,9 @@ async function runSync(share, o = {}) {
   const keysOnly = states.filter((st) => st.kind === "local" && (st.merge.toLocal.length || st.merge.toStore.length));
   if (envRows.length || keysOnly.length) await group(".env files", async () => {
     const b = await getBackend(m);
-    const one = async (label, st, decide3) => {
+    const one = async (label, st, decide2) => {
       try {
-        const r2 = await applyEnv(share, b, st, decide3);
+        const r2 = await applyEnv(share, b, st, decide2);
         envDone++;
         step(`${label}: ${[r2.stored ? `${count(r2.stored, "key")} stored` : "", r2.local ? `${count(r2.local, "key")} taken${st.storedFrom ? ` from ${st.storedFrom}` : ""}` : ""].filter(Boolean).join(", ")}${r2.toFill.length ? yellow(` \u2014 to fill in: ${r2.toFill.join(", ")}`) : ""}`);
       } catch (e) {
@@ -9492,13 +9503,13 @@ async function runSync(share, o = {}) {
   for (const st of states) snapshotInSync(st);
   const failed = chosen.length + over.length + replace.length + keysOnly.length - sent - applied - pushed - envDone;
   if (failed) rc = rc || 1;
-  const last = await syncShare(share, "share pushed", first.offline ? "committed locally \u2014 offline, pushed by the next sync" : "already in sync", copyBack, { timeout, commitOnly: first.offline });
+  const last = await shareStep("share pushed", first.offline ? "committed locally \u2014 offline, pushed by the next sync" : "already in sync", { commitOnly: first.offline });
   if (!last.ok) rc = 2;
   const bits = [applied ? `${applied} handoff(s) applied` : "", sent ? `${sent} handoff(s) sent` : "", pushed ? `${pushed} branch(es) pushed` : "", envDone ? `${envDone} .env file(s) merged` : "", cloned ? `${cloned} project(s) cloned` : "", kept ? yellow(`${kept} handoff(s) left waiting \u2014 see above`) : ""].filter(Boolean);
   const summary2 = rc === 2 ? red("share not synced \u2014 see above") : failed ? red(`${failed} action(s) failed \u2014 see above`) : bits.length ? bits.join(" \xB7 ") : dim(first.offline || last.offline ? "offline \u2014 local parts done, nothing moved" : "nothing to move");
   return { rc, summary: summary2 };
 }
-var GROUP, mask;
+var GROUP, askSide, mask;
 var init_sync = __esm({
   "src/sync.ts"() {
     "use strict";
@@ -9517,6 +9528,11 @@ var init_sync = __esm({
     init_plan();
     init_ui();
     GROUP = { send: "handoffs to send", apply: "handoffs to apply", push: "branches to push", env: ".env files to store or update" };
+    askSide = (c2) => select2(
+      `${c2.file} changed on both machines \u2014 keep which version?`,
+      [{ value: "ours", label: "this machine's version", hint: describe2(c2.ours) }, { value: "theirs", label: "the other machine's version", hint: describe2(c2.theirs) }],
+      newest(c2)
+    );
     mask = (v) => v === void 0 ? "removed" : v.length > 8 ? v.slice(0, 3) + "\u2026" + v.slice(-2) : "\u2026";
   }
 });
@@ -9994,8 +10010,8 @@ async function ensureRecipient(share, interactive) {
     }
     note2([`${where} run:`, "", `  ${bold(`cs sync && cs trust ${m.name} && cs sync`)}`, "", dim("that machine re-encrypts the secrets so this one can read them \u2014 no secret leaves either machine")], "Trust this machine");
     if (!await proceed("done on the other machine?", "Done \u2014 check now", "Skip for now")) return false;
-    const { runShareSync: runShareSync2 } = await Promise.resolve().then(() => (init_sharesync(), sharesync_exports));
-    await spin("syncing\u2026", () => runShareSync2(share, { pullOnly: true, timeout: 20 }));
+    const { syncShare: syncShare2 } = await Promise.resolve().then(() => (init_sharesync(), sharesync_exports));
+    await spin("syncing\u2026", () => syncShare2(share, { pullOnly: true, timeout: 20 }));
     if (b.ready(repo)) {
       ok("this machine can decrypt secrets");
       return true;
@@ -10182,11 +10198,11 @@ async function runStatus(share, fetch2 = true, showAll = false, timeout = 10) {
 }
 async function runBare(share, fetch2) {
   const m = share.machine;
-  const finish2 = await startUpdateCheck();
+  const finish3 = await startUpdateCheck();
   intro2(`claude-share  ${dim(m.name)}`);
   const r2 = await runStatus(share, fetch2);
   process.exitCode = r2.rc;
-  const tail = [r2.next ? yellow(`run: ${r2.next}`) : "", behindHint(await behindCount(finish2))].filter(Boolean);
+  const tail = [r2.next ? yellow(`run: ${r2.next}`) : "", behindHint(await behindCount(finish3))].filter(Boolean);
   outro2(tail.length ? tail.join("  \xB7  ") : dim("cs sync \xB7 cs new <project> --<identity> \xB7 cs --help"));
 }
 var SYNC, FIX, branchOf, paint;
@@ -10655,9 +10671,9 @@ async function cloneConfig(sshUrl, target) {
   configureRepo(target);
   step(`share cloned to ${dim(contract(target))}`);
 }
-async function askUrl(prompt) {
+async function askUrl(prompt2) {
   for (; ; ) {
-    const raw = await text2(prompt, { placeholder: "https://github.com/<owner>/claude-share-config", validate: (v) => v.trim() ? void 0 : "a URL is required" });
+    const raw = await text2(prompt2, { placeholder: "https://github.com/<owner>/claude-share-config", validate: (v) => v.trim() ? void 0 : "a URL is required" });
     const [sshUrl, gh] = parseRepoUrl(raw);
     if (gh) {
       const vis = await spin("looking up the repository\u2026", () => isPublic(httpsUrl(...gh)));
@@ -10843,9 +10859,9 @@ function push3(repo) {
     r2.code === 0 ? ok("share pushed") : fail(`push failed: ${r2.err}`);
   }
 }
-async function finish(share, interactive, skip2) {
+async function finish2(share, interactive, skip2) {
   const repo = share.path, m = share.machine;
-  if (!skip2.includes("apply")) await group("~/.claude applied", () => runApply(share), { done: "already up to date" });
+  if (!skip2.includes("apply")) await group("~/.claude applied", () => steps(runApply(share)), { done: "already up to date" });
   if (!skip2.includes("link")) await group("project files linked", () => steps(placeAll(share)), { done: "already in sync" });
   let secretsOk = true;
   if (!skip2.includes("secrets") && m.secretsBackend !== "none") {
@@ -10855,7 +10871,7 @@ async function finish(share, interactive, skip2) {
   }
   if (!skip2.includes("hooks")) await group("automatic sync", async () => {
     await (await Promise.resolve().then(() => (init_hooks(), hooks_exports))).runHooks(share, "install");
-    runApply(share);
+    steps(runApply(share));
   });
   await group("share", () => push3(repo), { done: "nothing to push" });
   let rc = 0;
@@ -10930,7 +10946,7 @@ async function init2(o) {
   const share = open(m, target);
   await firstIdentity(share, interactive);
   await keysAndTokens(share, interactive, skip2);
-  return finish(share, interactive, skip2);
+  return finish2(share, interactive, skip2);
 }
 var SHARE_REPO_NAME, PHASES, owner, email, name;
 var init_init = __esm({
@@ -11162,15 +11178,13 @@ setup
 program2.hook("preAction", (_root, cmd) => setQuiet(Boolean(program2.opts().quiet || cmd.opts().quiet)));
 var shareSyncAction = (title) => async (o) => {
   const share = open();
-  const { runShareSync: runShareSync2 } = await Promise.resolve().then(() => (init_sharesync(), sharesync_exports));
+  const { syncShare: syncShare2 } = await Promise.resolve().then(() => (init_sharesync(), sharesync_exports));
   const opts = { pullOnly: o.pullOnly, pushOnly: o.pushOnly, timeout: +o.timeout, resolve: o.resolve, debounce: +o.debounce };
-  if (o.quiet || program2.opts().quiet) {
-    process.exitCode = await runShareSync2(share, opts);
-    return;
-  }
-  await command(title, async () => {
-    process.exitCode = await runShareSync2(share, opts);
-  }, { outro: () => process.exitCode ? red("not synced \u2014 see above") : dim("in sync") });
+  const run = async () => {
+    process.exitCode = (await syncShare2(share, opts)).ok ? 0 : 2;
+  };
+  if (o.quiet || program2.opts().quiet) return run();
+  await command(title, run, { outro: () => process.exitCode ? red("not synced \u2014 see above") : dim("in sync") });
 };
 var shareSyncOpts = (c2) => c2.option("--pull-only").option("--push-only").option("--timeout <s>", "", "20").option("--resolve <ours|theirs|newest>", "how a file changed on both machines is settled (default newest)").option("--debounce <s>", "skip if a sync ran less than N seconds ago", "0").option("-q, --quiet");
 program2.command("sync").description("the daily verb: bring this machine up to date and leave nothing stale here").option("-m, --note <text>", "note carried by the handoffs sent (shown where the work is resumed)").addOption(new Option("--timeout <s>", "").default("20").hideHelp()).addOption(new Option("-q, --quiet").hideHelp()).addOption(new Option("--pull-only").hideHelp()).addOption(new Option("--push-only").hideHelp()).addOption(new Option("--debounce <s>").default("0").hideHelp()).action(async (o) => {
@@ -11304,7 +11318,11 @@ program2.command("apply", HIDDEN).description("render ~/.claude + git identity i
   const share = open();
   const { runApply: runApply2 } = await Promise.resolve().then(() => (init_apply(), apply_exports));
   await command(o.check ? "cs apply --check" : "cs apply", async () => {
-    const n3 = (await group(o.check ? "drift" : "~/.claude applied", () => runApply2(share, o.check), { done: o.check ? "no drift" : "already up to date" })).length;
+    const n3 = (await group(o.check ? "drift" : "~/.claude applied", () => {
+      const lines = runApply2(share, o.check);
+      steps(lines);
+      return lines;
+    }, { done: o.check ? "no drift" : "already up to date" })).length;
     process.exitCode = o.check && n3 ? 1 : 0;
   });
 });
@@ -11417,8 +11435,8 @@ program2.command("handoff [projects...]", HIDDEN).description("send a handoff: u
       const projects = h2.projectsFor(share, names, o.all);
       process.exitCode = await group("handed off", () => h2.handoff(share, projects, { note: o.note, dryRun: o.dryRun, allow: o.allow, overwrite: o.overwrite }), { done: "nothing to hand off" });
       if (!o.dryRun) {
-        const { runShareSync: runShareSync2 } = await Promise.resolve().then(() => (init_sharesync(), sharesync_exports));
-        await group("share pushed", () => runShareSync2(share, { pushOnly: true, timeout: 20 }), { done: "already in sync" });
+        const { syncShare: syncShare2 } = await Promise.resolve().then(() => (init_sharesync(), sharesync_exports));
+        await group("share pushed", () => syncShare2(share, { pushOnly: true, timeout: 20 }), { done: "already in sync" });
       }
     },
     { outro: () => process.exitCode ? red("some units not handed off \u2014 see above") : dim("on the other machine: cs sync") }
@@ -11431,8 +11449,8 @@ program2.command("resume [projects...]", HIDDEN).description("apply waiting hand
     "cs resume",
     async () => {
       const projects = h2.projectsFor(share, names, o.all);
-      const { runShareSync: runShareSync2 } = await Promise.resolve().then(() => (init_sharesync(), sharesync_exports));
-      await group("share pulled", () => runShareSync2(share, { pullOnly: true, timeout: 10 }), { done: "up to date" });
+      const { syncShare: syncShare2 } = await Promise.resolve().then(() => (init_sharesync(), sharesync_exports));
+      await group("share pulled", () => syncShare2(share, { pullOnly: true, timeout: 10 }), { done: "up to date" });
       process.exitCode = await group("resumed", () => h2.resume(share, projects, { replace: o.replace, keepRemote: o.keepRemote, dryRun: o.dryRun }), { done: "no handoffs waiting" });
     },
     { outro: () => process.exitCode ? red("some handoffs not applied \u2014 see above") : dim("carry on: claude") }
@@ -11486,6 +11504,12 @@ program2.command("ui-demo", HIDDEN).description("show every UI element with fake
       const ok2 = await confirm2(`you picked ${v} \u2014 confirm?`, true);
       step(`confirm \u2192 ${ok2}`);
     }
+    if (isTTY()) await group("a phase that asks (the spinner pauses for the prompt)", async () => {
+      await sleep(800);
+      const v = await select2("asked mid-phase", [{ value: "x", label: "X" }, { value: "y", label: "Y" }]);
+      await sleep(800);
+      step(`answered ${v}`);
+    });
   }, { outro: () => dim("demo over") });
 });
 async function main() {
