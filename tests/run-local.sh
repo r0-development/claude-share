@@ -89,14 +89,11 @@ grep -q claude-share.inc "$HOME/.gitconfig" || die "gitconfig include"
 grep -q 'hasconfig:remote.\*.url' "$HOME/.config/git/claude-share.inc" || die "includeIf rendered"
 [ "$(git -C "$HOME/dev/alpha" config user.email)" = "test@example.com" ] || die "identity via includeIf"
 pass apply
+# (the placement rules — newer wins, worktree fan-out, pointer injected here and never stored, exclude, deletions — are tests/projectstate.test.ts's table now; this is the smoke path through cs init)
 SIDE="$CS_CONFIG_DIR/share/projects/alpha"
 [ -f "$SIDE/CLAUDE.md" ] && [ -f "$SIDE/.claude/settings.local.json" ] || die "alpha files imported into project state"
 grep -q autoMemoryDirectory "$HOME/dev/alpha/.claude/settings.local.json" || die "autoMemoryDirectory injected"
-! grep -q autoMemoryDirectory "$SIDE/.claude/settings.local.json" || die "project state stays machine-independent"
-grep -q '^\.claude/$' "$HOME/dev/alpha/.git/info/exclude" || die "exclude written"
 [ -z "$(git -C "$HOME/dev/alpha" status --porcelain)" ] || die "alpha stays clean for git"
-grep -q autoMemoryDirectory "$HOME/dev/beta/wt-feat/.claude/settings.local.json" || die "worktree got settings"
-grep -q autoMemoryDirectory "$HOME/dev/beta/repo/.claude/settings.local.json" || die "main checkout got settings"
 pass link
 $CS import memory alpha >/dev/null || die "import memory"
 [ -f "$SIDE/memory/x.md" ] && grep -q "a fact" "$SIDE/memory/MEMORY.md" || die "memory imported"
@@ -124,7 +121,6 @@ export HOME2="$(mktemp -d)"
   $CS clone >/dev/null || die "clone m2"
   [ -d "$HOME2/dev/alpha/.git" ] && [ -d "$HOME2/dev/gamma/.git" ] && [ -d "$HOME2/dev/beta/repo/.git" ] || die "cloned selected projects"
   grep -q v2 "$HOME2/dev/alpha/CLAUDE.md" || die "m2 got alpha CLAUDE.md"
-  grep -q "$HOME2" "$HOME2/dev/alpha/.claude/settings.local.json" && ! grep -q "$HOME\b" "$HOME2/dev/alpha/.claude/settings.local.json" || true
   # conflict: both machines edit the same memory topic -> union, no block
   echo "- [y](y.md) - m2 fact" >> "$CS_CONFIG_DIR/share/projects/alpha/memory/MEMORY.md"
   $CS share-sync >/dev/null || die "m2 sync"

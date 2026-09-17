@@ -5,7 +5,7 @@ import { claudeDir, claudeJson, contract } from "./paths.js";
 import type { Project } from "./manifest.js";
 import { workspace, type Share } from "./share.js";
 import { checkoutRoot, container, dirs } from "./checkout.js";
-import { memoryDir, projectState, syncProject } from "./link.js";
+import { memoryDir, place, projectState } from "./projectstate.js";
 import { dumps, loads } from "./jsonmerge.js";
 import * as ui from "./ui.js";
 
@@ -18,8 +18,8 @@ export const unionLines = (a: string, b: string) => { const lines = a.split("\n"
 
 function walkFiles(dir: string): string[] { const out: string[] = []; const rec = (d: string) => { for (const e of readdirSync(d, { withFileTypes: true })) { const f = join(d, e.name); e.isDirectory() ? rec(f) : out.push(f); } }; if (existsSync(dir)) rec(dir); return out.sort(); }
 
-export function importMemory(repo: string, p: Project, ws: string, machine: string, check = false): number {
-  const dest = memoryDir(repo, p); let n = 0;
+export function importMemory(share: Share, p: Project, ws: string, check = false): number {
+  const dest = memoryDir(share, p.name), machine = share.machine.name; let n = 0;
   for (const cand of candidatePaths(p, ws)) {
     const src = join(claudeDir(), "projects", claudeProjectKey(cand), "memory");
     if (!existsSync(src)) continue;
@@ -36,8 +36,8 @@ export function importMemory(repo: string, p: Project, ws: string, machine: stri
   if (!n) ui.ok(`${p.name}: no new memory to import`);
   return n;
 }
-export function importProjectFiles(repo: string, p: Project, ws: string, check = false) {
-  const ch = syncProject(repo, p, ws, check); for (const c of ch) ui.step(`${p.name}: ${c}`); if (!ch.length) ui.ok(`${p.name}: nothing to import`); return ch.length;
+export function importProjectFiles(share: Share, p: Project, check = false) {
+  const ch = place(share, p, { check }); for (const c of ch) ui.step(`${p.name}: ${c}`); if (!ch.length) ui.ok(`${p.name}: nothing to import`); return ch.length;
 }
 export function envVarName(server: string, key: string) {
   const st = server.toUpperCase().split(/[^A-Z0-9]+/).filter(Boolean); let kt = key.toUpperCase().split(/[^A-Z0-9]+/).filter(Boolean);
@@ -49,11 +49,11 @@ function localScope(p: Project, ws: string): Record<string, any> {
   for (const cand of candidatePaths(p, ws)) for (const [n, cfg] of Object.entries<any>(data.projects?.[cand]?.mcpServers ?? {})) found[n] ??= cfg;
   return found;
 }
-export function importMcp(repo: string, p: Project, ws: string, check = false, show = false): number {
+export function importMcp(share: Share, p: Project, ws: string, check = false, show = false): number {
   const found = localScope(p, ws);
   if (show) { for (const [n, cfg] of Object.entries<any>(found)) { for (const [k, v] of Object.entries<any>(cfg.env ?? {})) console.log(`${envVarName(n, k)}=${v}`); for (const [k, v] of Object.entries<any>(cfg.headers ?? {})) console.log(`${envVarName(n, k)}=${v}`); } return Object.keys(found).length; }
   if (!Object.keys(found).length) { ui.ok(`${p.name}: no local-scope MCP servers in ~/.claude.json`); return 0; }
-  const side = projectState(repo, p); const f = join(side, ".mcp.json");
+  const side = projectState(share, p.name); const f = join(side, ".mcp.json");
   const existing: any = existsSync(f) ? loads(readFileSync(f, "utf8")) : { mcpServers: {} }; existing.mcpServers ??= {};
   const secrets: Record<string, string> = {};
   for (const [name, orig] of Object.entries<any>(found)) {
@@ -71,8 +71,8 @@ export function importMcp(repo: string, p: Project, ws: string, check = false, s
   return Object.keys(found).length;
 }
 export function runImport(share: Share, what: string, names: string[], check: boolean, show: boolean) {
-  const repo = share.path, m = share.machine, man = share.manifest; const ws = workspace(share);
+  const man = share.manifest; const ws = workspace(share);
   if (!names.length) throw new Error("cs: import needs a project name (or --all)");
   for (const n of names) { const p = man.projects[n]; if (!p) throw new Error(`cs: unknown project '${n}'`);
-    if (what === "memory") importMemory(repo, p, ws, m.name, check); else if (what === "project") importProjectFiles(repo, p, ws, check); else if (what === "mcp") importMcp(repo, p, ws, check, show); else throw new Error(`cs: unknown import target '${what}'`); }
+    if (what === "memory") importMemory(share, p, ws, check); else if (what === "project") importProjectFiles(share, p, check); else if (what === "mcp") importMcp(share, p, ws, check, show); else throw new Error(`cs: unknown import target '${what}'`); }
 }

@@ -100,8 +100,8 @@ program.command("apply", HIDDEN).description("render ~/.claude + git identity in
   .action(async (o) => { const share = open(); const { runApply } = await import("./apply.js");
     await ui.command(o.check ? "cs apply --check" : "cs apply", async () => { const n = (await ui.group(o.check ? "drift" : "~/.claude applied", () => runApply(share, o.check), { done: o.check ? "no drift" : "already up to date" })).length; process.exitCode = o.check && n ? 1 : 0; }); });
 program.command("link [names...]", HIDDEN).description("place project state (Claude files, memory) into project checkouts; newer content flows back").option("--check")
-  .action(async (names, o) => { const share = open(); const { runLink } = await import("./link.js");
-    await ui.command(o.check ? "cs link --check" : "cs link", async () => { const n = await ui.group(o.check ? "pending changes" : "project files linked", () => runLink(share, names, o.check), { done: "nothing pending" }); process.exitCode = o.check && n ? 1 : 0; }); });
+  .action(async (names, o) => { const share = open(); const { placeAll } = await import("./projectstate.js");
+    await ui.command(o.check ? "cs link --check" : "cs link", async () => { const n = await ui.group(o.check ? "pending changes" : "project files linked", () => { const lines = placeAll(share, { names, check: o.check }); for (const l of lines) ui.step(l); return lines.length; }, { done: "nothing pending" }); process.exitCode = o.check && n ? 1 : 0; }); });
 program.command("import <what> [names...]", HIDDEN).description("take existing local state into the share (memory | project | mcp)").option("--all").option("--check").option("--show", "(mcp) print the secret values")
   .action(async (what, names, o) => { const share = open(); const { runImport } = await import("./import.js"); const { selectedProjects } = await import("./share.js");
     const targets = names.length ? names : o.all ? selectedProjects(share).map((p) => p.name) : [];

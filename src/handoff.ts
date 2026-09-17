@@ -7,7 +7,7 @@ import { contract } from "./paths.js";
 import type { Project } from "./manifest.js";
 import { projectForPath, selectedProjects, workspace, type Share } from "./share.js";
 import { apply, enabled, fetchWaiting, handoffRef, loadState, locate, noteFile, present, send, userSlug, type Checkout, type Handoff } from "./checkout.js";
-import { runLink } from "./link.js";
+import { place } from "./projectstate.js";
 import { plan, type HandoffQuestion } from "./plan.js";
 import * as ui from "./ui.js";
 
@@ -45,7 +45,7 @@ export async function resume(share: Share, projects: Project[], o: { replace?: b
   const ws = workspace(share); const m = share.machine; let rc = 0;
   const one = async (c: Checkout, h: Handoff, replace: boolean) => {
     const r = await apply(c, h, m, { replace, keepRemote: o.keepRemote, dryRun: o.dryRun }); if (!r.ok) { if (!o.dryRun) rc = 1; return; }
-    const wasQuiet = ui.isQuiet(); ui.setQuiet(true); try { runLink(share, [c.project.name]); } finally { ui.setQuiet(wasQuiet); }   // project state into the unit (a new worktree has none yet)
+    place(share, c.project);   // project state into the unit (a new worktree has none yet)
     if (r.note) ui.note(r.note.trim().split("\n"), `note from ${h.machine}`);
   };
   for (const p of projects) {

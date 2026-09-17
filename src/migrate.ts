@@ -11,9 +11,9 @@ import { contract, expand, legacyShareDir, legacyShareKey, machineFile, shareDir
 import { saveMachine, shareDir } from "./machine.js";
 import { reload, selectedProjects, workspace, type Share } from "./share.js";
 import { configureRepo, keyPath, usesKey } from "./sharekey.js";
-import { dirs, locate, present, REF_NS } from "./checkout.js";
+import { locate, present, REF_NS } from "./checkout.js";
 import { applyLinks } from "./apply.js";
-import { syncProject } from "./link.js";
+import { placeAll } from "./projectstate.js";
 
 const OLD_REF_NS = "wip";
 /** `move`: the move as the person would read it, `apply` performs it (without `apply` the instruction is all cs can offer);
@@ -45,7 +45,7 @@ export function findOldNames(share: Share): OldName[] {
         let target = repo;
         if (repo === legacyShareDir() && !existsSync(shareDirDefault())) { mkdirSync(join(shareDirDefault(), ".."), { recursive: true }); renameSync(legacyShareDir(), shareDirDefault()); target = shareDirDefault(); }
         if (oldKeyInToml || m.share) { m.share = m.share && expand(m.share) !== legacyShareDir() && expand(m.share) !== shareDirDefault() ? m.share : undefined; saveMachine(m); }
-        if (target !== repo) { const changes: string[] = []; applyLinks(target, false, changes); const ws = workspace(share); for (const p of selectedProjects(share)) if (dirs(p, ws).length) syncProject(target, p, ws); }
+        if (target !== repo) { const changes: string[] = []; applyLinks(target, false, changes); placeAll({ ...share, path: target }); }
       } });
   // state files: last-config → last-sync, link/ → project-state/; sync-config.lock, blocked-config, handoff/pending are gone
   const st = stateDir(), inState = `(in ${contract(st)})`;

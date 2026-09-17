@@ -10,7 +10,7 @@
     "build": "esbuild src/index.ts --bundle --platform=node --target=node18 --format=esm --outfile=dist/cs.js --banner:js=\"import { createRequire as __cr } from 'node:module'; const require = __cr(import.meta.url);\" --log-level=warning",
     "typecheck": "tsc --noEmit",
     "test": "npm run typecheck && npm run build && npm run unit && bash tests/run-local.sh",
-    "unit": "esbuild tests/unit.test.ts tests/checkout.test.ts tests/share.test.ts --bundle --platform=node --format=esm --outdir=.cache --out-extension:.js=.mjs --log-level=warning && node --test .cache/unit.test.mjs .cache/checkout.test.mjs .cache/share.test.mjs"
+    "unit": "esbuild tests/unit.test.ts tests/checkout.test.ts tests/share.test.ts tests/projectstate.test.ts --bundle --platform=node --format=esm --outdir=.cache --out-extension:.js=.mjs --log-level=warning && node --test .cache/unit.test.mjs .cache/checkout.test.mjs .cache/share.test.mjs .cache/projectstate.test.mjs"
   },
   "engines": {
     "node": ">=18"

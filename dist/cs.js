@@ -5232,7 +5232,7 @@ async function command(title, fn, opts = {}) {
     throw Object.assign(new Error("__handled__"), { handled: true, code: 1 });
   }
 }
-var import_picocolors, quiet, collecting, setQuiet, strip, isQuiet, isTTY, scripted, isScripted, canAsk, dim, bold, green, yellow, red, cyan, gray, magenta, activeSpinner, width, clip;
+var import_picocolors, quiet, collecting, setQuiet, strip, isTTY, scripted, isScripted, canAsk, dim, bold, green, yellow, red, cyan, gray, magenta, activeSpinner, width, clip;
 var init_ui = __esm({
   "src/ui.ts"() {
     "use strict";
@@ -5244,7 +5244,6 @@ var init_ui = __esm({
       quiet = q;
     };
     strip = (s) => s.replace(/\x1b\[[0-9;]*m/g, "");
-    isQuiet = () => quiet;
     isTTY = () => Boolean(process.stdin.isTTY && process.stdout.isTTY);
     scripted = process.env.CS_ANSWERS ? JSON.parse(process.env.CS_ANSWERS) : null;
     isScripted = () => scripted !== null;
@@ -7070,8 +7069,8 @@ function walkFiles(dir) {
   if (existsSync5(dir)) rec(dir);
   return out2.sort();
 }
-function importMemory(repo, p, ws, machine, check = false) {
-  const dest = memoryDir(repo, p);
+function importMemory(share, p, ws, check = false) {
+  const dest = memoryDir(share, p.name), machine = share.machine.name;
   let n3 = 0;
   for (const cand of candidatePaths(p, ws)) {
     const src = join9(claudeDir(), "projects", claudeProjectKey(cand), "memory");
@@ -7105,8 +7104,8 @@ function importMemory(repo, p, ws, machine, check = false) {
   if (!n3) ok(`${p.name}: no new memory to import`);
   return n3;
 }
-function importProjectFiles(repo, p, ws, check = false) {
-  const ch = syncProject(repo, p, ws, check);
+function importProjectFiles(share, p, check = false) {
+  const ch = place(share, p, { check });
   for (const c2 of ch) step(`${p.name}: ${c2}`);
   if (!ch.length) ok(`${p.name}: nothing to import`);
   return ch.length;
@@ -7124,7 +7123,7 @@ function localScope(p, ws) {
   for (const cand of candidatePaths(p, ws)) for (const [n3, cfg] of Object.entries(data.projects?.[cand]?.mcpServers ?? {})) found[n3] ??= cfg;
   return found;
 }
-function importMcp(repo, p, ws, check = false, show = false) {
+function importMcp(share, p, ws, check = false, show = false) {
   const found = localScope(p, ws);
   if (show) {
     for (const [n3, cfg] of Object.entries(found)) {
@@ -7137,7 +7136,7 @@ function importMcp(repo, p, ws, check = false, show = false) {
     ok(`${p.name}: no local-scope MCP servers in ~/.claude.json`);
     return 0;
   }
-  const side = projectState(repo, p);
+  const side = projectState(share, p.name);
   const f = join9(side, ".mcp.json");
   const existing = existsSync5(f) ? loads(readFileSync9(f, "utf8")) : { mcpServers: {} };
   existing.mcpServers ??= {};
@@ -7171,15 +7170,15 @@ function importMcp(repo, p, ws, check = false, show = false) {
   return Object.keys(found).length;
 }
 function runImport(share, what, names, check, show) {
-  const repo = share.path, m = share.machine, man = share.manifest;
+  const man = share.manifest;
   const ws = workspace2(share);
   if (!names.length) throw new Error("cs: import needs a project name (or --all)");
   for (const n3 of names) {
     const p = man.projects[n3];
     if (!p) throw new Error(`cs: unknown project '${n3}'`);
-    if (what === "memory") importMemory(repo, p, ws, m.name, check);
-    else if (what === "project") importProjectFiles(repo, p, ws, check);
-    else if (what === "mcp") importMcp(repo, p, ws, check, show);
+    if (what === "memory") importMemory(share, p, ws, check);
+    else if (what === "project") importProjectFiles(share, p, check);
+    else if (what === "mcp") importMcp(share, p, ws, check, show);
     else throw new Error(`cs: unknown import target '${what}'`);
   }
 }
@@ -7190,7 +7189,7 @@ var init_import = __esm({
     init_paths();
     init_share();
     init_checkout();
-    init_link();
+    init_projectstate();
     init_jsonmerge();
     init_ui();
     claudeProjectKey = (p) => p.replace(/[^A-Za-z0-9]/g, "-");
@@ -7339,10 +7338,10 @@ function fileOf(project, entry) {
   if (entry === project) return ".env";
   return entry.startsWith(project + ".") && entry.length > project.length + 1 ? ".env." + entry.slice(project.length + 1) : void 0;
 }
-function merge3(base, local, stored, decide2 = {}) {
+function merge3(base, local, stored, decide3 = {}) {
   const result = {}, toLocal = [], toStore = [], conflicts = [];
   const keys = /* @__PURE__ */ new Set([...Object.keys(base ?? {}), ...Object.keys(local), ...Object.keys(stored)]);
-  const put = (k, v) => {
+  const put2 = (k, v) => {
     if (v !== void 0) result[k] = v;
     if (v !== local[k]) toLocal.push(k);
     if (v !== stored[k]) toStore.push(k);
@@ -7350,17 +7349,17 @@ function merge3(base, local, stored, decide2 = {}) {
   for (const k of keys) {
     const l2 = local[k], s = stored[k];
     if (l2 === s) {
-      put(k, l2);
+      put2(k, l2);
       continue;
     }
     const localChanged = base ? l2 !== base[k] : l2 !== void 0, storedChanged = base ? s !== base[k] : s !== void 0;
     if (localChanged && storedChanged) {
-      const side = decide2[k];
-      if (side) put(k, side === "local" ? l2 : s);
+      const side = decide3[k];
+      if (side) put2(k, side === "local" ? l2 : s);
       else conflicts.push({ key: k, local: l2, stored: s });
       continue;
     }
-    put(k, localChanged ? l2 : s);
+    put2(k, localChanged ? l2 : s);
   }
   return { result, toLocal, toStore, conflicts };
 }
@@ -7404,10 +7403,10 @@ function parseValue2(raw) {
 }
 function describeMerge(m, from) {
   const n3 = (c2) => `${c2} key${c2 === 1 ? "" : "s"}`;
-  const put = m.toStore.filter((k) => k in m.result).length, take = m.toLocal.filter((k) => k in m.result).length;
+  const put2 = m.toStore.filter((k) => k in m.result).length, take = m.toLocal.filter((k) => k in m.result).length;
   return [
-    put ? `store ${n3(put)}` : "",
-    m.toStore.length - put ? `drop ${n3(m.toStore.length - put)} from the share` : "",
+    put2 ? `store ${n3(put2)}` : "",
+    m.toStore.length - put2 ? `drop ${n3(m.toStore.length - put2)} from the share` : "",
     take ? `take ${n3(take)}${from ? ` from ${from}` : ""}` : "",
     m.toLocal.length - take ? `drop ${n3(m.toLocal.length - take)} here` : "",
     m.conflicts.length ? `${n3(m.conflicts.length)} changed on both machines \u2014 asked next` : ""
@@ -7416,10 +7415,10 @@ function describeMerge(m, from) {
 function describeKeys(m, from) {
   const n3 = (c2) => `${c2} key${c2 === 1 ? "" : "s"}`;
   const take = m.toLocal.filter((k) => k in m.result), fill = take.filter((k) => m.toFill.includes(k)).length;
-  const put = m.toStore.filter((k) => k in m.result).length;
+  const put2 = m.toStore.filter((k) => k in m.result).length;
   return [
-    put ? `store ${n3(put)}` : "",
-    m.toStore.length - put ? `drop ${n3(m.toStore.length - put)} from the share` : "",
+    put2 ? `store ${n3(put2)}` : "",
+    m.toStore.length - put2 ? `drop ${n3(m.toStore.length - put2)} from the share` : "",
     take.length ? `take ${n3(take.length)}${from ? ` from ${from}` : ""}${fill ? ` (${fill} to fill in)` : ""}` : "",
     m.toLocal.length - take.length ? `drop ${n3(m.toLocal.length - take.length)} here` : ""
   ].filter(Boolean).join(", ");
@@ -7947,17 +7946,20 @@ var init_checkout = __esm({
   }
 });
 
-// src/link.ts
-var link_exports = {};
-__export(link_exports, {
-  dropPlacedRecord: () => dropPlacedRecord,
-  ensureExclude: () => ensureExclude,
+// src/projectstate.ts
+var projectstate_exports = {};
+__export(projectstate_exports, {
+  decide: () => decide,
+  forget: () => forget,
   memoryDir: () => memoryDir,
+  observe: () => observe,
+  place: () => place,
+  placeAll: () => placeAll,
   projectState: () => projectState,
-  runLink: () => runLink,
-  stripPointer: () => stripPointer,
-  sweepRemoved: () => sweepRemoved,
-  syncProject: () => syncProject
+  statesDir: () => statesDir,
+  stripped: () => stripped,
+  sweep: () => sweep,
+  write: () => write
 });
 import { existsSync as existsSync9, mkdirSync as mkdirSync9, readdirSync as readdirSync4, readFileSync as readFileSync12, renameSync as renameSync2, rmSync as rmSync4, statSync as statSync6, unlinkSync as unlinkSync3, utimesSync, writeFileSync as writeFileSync8 } from "node:fs";
 import { dirname as dirname4, join as join13, relative as relative5 } from "node:path";
@@ -7984,193 +7986,211 @@ function sideRels(side) {
   walk(side, (rel) => rels.add(rel), (rel) => NOT_SYNCED.has(rel.split("/")[0]));
   return rels;
 }
+function withoutPointer(raw) {
+  let d;
+  try {
+    d = JSON.parse(raw.toString("utf8") || "{}");
+  } catch {
+    return void 0;
+  }
+  if (!d || typeof d !== "object") return void 0;
+  const rest = d;
+  const had = POINTER in rest;
+  delete rest[POINTER];
+  return { rest, had };
+}
 function normalize(rel, data) {
   if (rel !== SETTINGS_LOCAL) return data;
-  try {
-    const d = JSON.parse(data.toString("utf8") || "{}");
-    delete d.autoMemoryDirectory;
-    return Buffer.from(Object.keys(d).length ? dumps(d) : "");
-  } catch {
-    return data;
-  }
+  const w = withoutPointer(data);
+  return w ? Buffer.from(Object.keys(w.rest).length ? dumps(w.rest) : "") : data;
 }
-function localize(rel, data, mem) {
+function localize(rel, data, pointer) {
   if (rel !== SETTINGS_LOCAL) return data;
   let d = {};
   try {
     d = data.toString("utf8").trim() ? JSON.parse(data.toString("utf8")) : {};
   } catch {
   }
-  d.autoMemoryDirectory = contract(mem);
+  d[POINTER] = pointer;
   return Buffer.from(dumps(d));
 }
-function stripPointer(checkout) {
-  const f = join13(checkout, SETTINGS_LOCAL);
-  if (!existsSync9(f)) return false;
-  let d;
-  try {
-    d = JSON.parse(readFileSync12(f, "utf8") || "{}");
-  } catch {
-    return false;
+function observe(side, targets, remembered, pointer) {
+  const stampOf2 = (f, rel) => {
+    const raw = readFileSync12(f);
+    return { data: normalize(rel, raw), raw, mtime: statSync6(f).mtimeMs / 1e3 };
+  };
+  const o = { side: {}, targets: {}, remembered: [...remembered], pointer, excludes: [] };
+  for (const rel of sideRels(side)) {
+    const { data, mtime: mtime2 } = stampOf2(join13(side, rel), rel);
+    o.side[rel] = { data, mtime: mtime2 };
   }
-  if (!("autoMemoryDirectory" in d)) return false;
-  delete d.autoMemoryDirectory;
-  Object.keys(d).length ? writeFileSync8(f, dumps(d)) : unlinkSync3(f);
-  return true;
+  const seen = /* @__PURE__ */ new Set();
+  for (const t2 of targets) {
+    o.targets[t2] = {};
+    for (const rel of managedRels(t2)) o.targets[t2][rel] = stampOf2(join13(t2, rel), rel);
+    if (!isRepo(t2)) continue;
+    const file = infoExclude(t2);
+    if (seen.has(file)) continue;
+    seen.add(file);
+    o.excludes.push({ file, target: t2, text: existsSync9(file) ? readFileSync12(file, "utf8") : "" });
+  }
+  return o;
 }
-function sweepRemoved(man, ws) {
-  const changes = [];
-  if (!existsSync9(placedDir())) return changes;
-  for (const f of readdirSync4(placedDir())) {
-    if (!f.endsWith(".json")) continue;
-    const name2 = f.slice(0, -5);
-    if (man.projects[name2]) continue;
-    let root = "";
-    try {
-      root = JSON.parse(readFileSync12(join13(placedDir(), f), "utf8")).root ?? "";
-    } catch {
+function decide(o) {
+  const d = { toSide: [], toTargets: [], removals: [], excludes: [], placed: [] };
+  const targets = Object.keys(o.targets);
+  const remembered = new Set(o.remembered);
+  const rels = /* @__PURE__ */ new Set([...Object.keys(o.side), SETTINGS_LOCAL]);
+  for (const t2 of targets) for (const rel of Object.keys(o.targets[t2])) rels.add(rel);
+  for (const rel of [...rels].sort()) {
+    const side = o.side[rel];
+    let best = side?.data, mtime2 = side?.mtime ?? -1, from = "";
+    for (const t2 of targets) {
+      const s = o.targets[t2][rel];
+      if (s && (!best || !s.data.equals(best)) && s.mtime > mtime2 + 1e-6) {
+        best = s.data;
+        mtime2 = s.mtime;
+        from = t2;
+      }
     }
-    root ||= sniff(join13(ws, name2)).root;
-    for (const c2 of dirsAt(root)) if (stripPointer(c2)) changes.push(`${name2}: auto-memory pointer removed from ${contract(c2)} (project removed from the share)`);
-    dropPlacedRecord(name2);
+    if (!side && remembered.has(rel) && rel !== SETTINGS_LOCAL) {
+      for (const t2 of targets) if (o.targets[t2][rel]) d.removals.push({ target: t2, rel });
+      continue;
+    }
+    if (!best) {
+      if (rel !== SETTINGS_LOCAL) continue;
+      best = Buffer.alloc(0);
+    }
+    const substantive = best.length > 0 || rel !== SETTINGS_LOCAL;
+    if (substantive && (!side || !best.equals(side.data))) d.toSide.push({ rel, data: best, mtime: mtime2, from });
+    if (substantive) d.placed.push(rel);
+    const want = localize(rel, best, o.pointer);
+    for (const t2 of targets) {
+      const have = o.targets[t2][rel]?.raw;
+      if (!have || !have.equals(want)) d.toTargets.push({ target: t2, rel, data: want, mtime: mtime2 });
+    }
   }
-  return changes;
+  for (const e of o.excludes) {
+    const missing = EXCLUDE_LINES.filter((l2) => !e.text.split("\n").includes(l2));
+    if (!missing.length) continue;
+    d.excludes.push({ file: e.file, target: e.target, missing, text: e.text + (!e.text || e.text.endsWith("\n") ? "" : "\n") + "# claude-share managed files\n" + missing.join("\n") + "\n" });
+  }
+  return d;
 }
-function write(path, data, mtime2) {
+function put(path, data, mtime2) {
   mkdirSync9(dirname4(path), { recursive: true });
   const tmp = path + ".cs-tmp";
   writeFileSync8(tmp, data);
-  if (mtime2) utimesSync(tmp, mtime2, mtime2);
+  if (mtime2 > 0) utimesSync(tmp, mtime2, mtime2);
   renameSync2(tmp, path);
 }
-function ensureExclude(checkout, check, changes) {
-  if (!existsSync9(join13(checkout, ".git"))) return;
-  const ex = infoExclude(checkout);
-  const text3 = existsSync9(ex) ? readFileSync12(ex, "utf8") : "";
-  const missing = EXCLUDE_LINES.filter((l2) => !text3.split("\n").includes(l2));
-  if (!missing.length) return;
-  changes.push(`exclude ${missing.join(", ")} in ${contract(checkout)}`);
-  if (!check) {
-    mkdirSync9(dirname4(ex), { recursive: true });
-    writeFileSync8(ex, text3 + (!text3 || text3.endsWith("\n") ? "" : "\n") + "# claude-share managed files\n" + missing.join("\n") + "\n");
-  }
-}
-function syncProject(repo, p, ws, check = false) {
-  const changes = [];
-  const side = projectState(repo, p);
-  const targets = dirs(p, ws);
-  if (!targets.length) return changes;
-  const mem = memoryDir(repo, p);
-  if (!existsSync9(mem) && !check) mkdirSync9(mem, { recursive: true });
-  const previously = loadState2(p);
-  const all = new Set(sideRels(side));
-  for (const t2 of targets) for (const r2 of managedRels(t2)) all.add(r2);
-  all.add(SETTINGS_LOCAL);
-  const final = /* @__PURE__ */ new Set();
-  for (const rel of [...all].sort()) {
-    const sp = join13(side, rel);
-    const sideExists = existsSync9(sp) && statSync6(sp).isFile();
-    const sideData = sideExists ? normalize(rel, readFileSync12(sp)) : void 0;
-    const sideMtime = sideExists ? statSync6(sp).mtimeMs / 1e3 : -1;
-    let best = sideData, bestM = sideMtime, from = "project state";
-    for (const t2 of targets) {
-      const tp = join13(t2, rel);
-      if (existsSync9(tp) && statSync6(tp).isFile()) {
-        const d = normalize(rel, readFileSync12(tp));
-        const mt = statSync6(tp).mtimeMs / 1e3;
-        if ((!best || !d.equals(best)) && mt > bestM + 1e-6) {
-          best = d;
-          bestM = mt;
-          from = contract(t2);
-        }
-      }
+function write(side, memory, d, check = false) {
+  const lines = [];
+  if (!check && !existsSync9(memory)) mkdirSync9(memory, { recursive: true });
+  const rels = [...new Set([...d.removals, ...d.toSide, ...d.toTargets].map((x) => x.rel))].sort();
+  for (const rel of rels) {
+    for (const r2 of d.removals) if (r2.rel === rel) {
+      lines.push(`remove ${rel} from ${contract(r2.target)} (deleted in project state)`);
+      if (!check) unlinkSync3(join13(r2.target, rel));
     }
-    if (!sideExists && previously.has(rel) && rel !== SETTINGS_LOCAL) {
-      for (const t2 of targets) {
-        const tp = join13(t2, rel);
-        if (existsSync9(tp)) {
-          changes.push(`remove ${rel} from ${contract(t2)} (deleted in project state)`);
-          if (!check) unlinkSync3(tp);
-        }
-      }
-      continue;
+    for (const s of d.toSide) if (s.rel === rel) {
+      lines.push(`project state \u2190 ${rel} (from ${contract(s.from)})`);
+      if (!check) put(join13(side, rel), s.data, s.mtime);
     }
-    if (best === void 0) {
-      if (rel === SETTINGS_LOCAL) {
-        best = Buffer.alloc(0);
-        bestM = sideMtime;
-      } else continue;
-    }
-    if ((!sideData || !best.equals(sideData)) && (best.length || rel !== SETTINGS_LOCAL)) {
-      changes.push(`project state \u2190 ${rel} (from ${from})`);
-      if (!check) write(sp, best, bestM > 0 ? bestM : void 0);
-    }
-    if (best.length || rel !== SETTINGS_LOCAL) final.add(rel);
-    for (const t2 of targets) {
-      const tp = join13(t2, rel);
-      const want = localize(rel, best, mem);
-      const have = existsSync9(tp) && statSync6(tp).isFile() ? readFileSync12(tp) : void 0;
-      if (!have || !have.equals(want)) {
-        changes.push(`${contract(t2)}/${rel} \u2190 project state`);
-        if (!check) write(tp, want, bestM > 0 ? bestM : void 0);
-      }
+    for (const t2 of d.toTargets) if (t2.rel === rel) {
+      lines.push(`${contract(t2.target)}/${rel} \u2190 project state`);
+      if (!check) put(join13(t2.target, rel), t2.data, t2.mtime);
     }
   }
-  for (const t2 of targets) ensureExclude(t2, check, changes);
-  if (!check) saveState2(p, ws, final);
-  return changes;
+  for (const e of d.excludes) {
+    lines.push(`exclude ${e.missing.join(", ")} in ${contract(e.target)}`);
+    if (!check) {
+      mkdirSync9(dirname4(e.file), { recursive: true });
+      writeFileSync8(e.file, e.text);
+    }
+  }
+  return lines;
 }
-function runLink(share, names = [], check = false) {
+function loadRecord(name2) {
+  try {
+    const r2 = JSON.parse(readFileSync12(recordFile(name2), "utf8"));
+    return { root: r2.root, files: r2.files ?? [] };
+  } catch {
+    return { files: [] };
+  }
+}
+function saveRecord(name2, root, files) {
+  mkdirSync9(recordsDir(), { recursive: true });
+  writeFileSync8(recordFile(name2), JSON.stringify({ root, files: [...files].sort() }, null, 2));
+}
+function stripped(raw) {
+  const w = raw && withoutPointer(raw);
+  if (!w?.had) return void 0;
+  return Object.keys(w.rest).length ? Buffer.from(dumps(w.rest)) : null;
+}
+function unplace(name2, checkouts, why, check) {
+  const lines = [];
+  for (const c2 of checkouts) {
+    const f = join13(c2, SETTINGS_LOCAL);
+    const next = stripped(existsSync9(f) ? readFileSync12(f) : void 0);
+    if (next === void 0) continue;
+    lines.push(`${name2}: auto-memory pointer removed from ${contract(c2)}${why}`);
+    if (check) continue;
+    next === null ? unlinkSync3(f) : writeFileSync8(f, next);
+  }
+  if (!check) rmSync4(recordFile(name2), { force: true });
+  return lines;
+}
+function place(share, p, o = {}) {
   const ws = workspace2(share);
-  const man = share.manifest;
-  const unknown = names.filter((n3) => !man.projects[n3]);
-  if (unknown.length) throw new Error(`cs: unknown project(s): ${unknown.join(", ")}`);
-  let total = 0;
-  if (!names.length && !check) for (const c2 of sweepRemoved(man, ws)) {
-    step(c2);
-    total++;
-  }
-  for (const p of selectedProjects2(share)) {
-    if (names.length && !names.includes(p.name)) continue;
-    if (!dirs(p, ws).length) continue;
-    const ch = syncProject(share.path, p, ws, check);
-    for (const c2 of ch) check ? info(`${p.name}: ${c2}`) : step(`${p.name}: ${c2}`);
-    total += ch.length;
-  }
-  if (!total) ok("project files in sync");
-  return total;
+  const targets = dirs(p, ws);
+  if (!targets.length) return [];
+  const side = projectState(share, p.name), memory = memoryDir(share, p.name);
+  const d = decide(observe(side, targets, loadRecord(p.name).files, contract(memory)));
+  const lines = write(side, memory, d, o.check);
+  if (!o.check) saveRecord(p.name, checkoutRoot(p, ws), d.placed);
+  return lines;
 }
-var ROOT_FILES, SKIP_UNDER_CLAUDE, EXCLUDE_LINES, SETTINGS_LOCAL, NOT_SYNCED, projectState, memoryDir, placedDir, stateFile2, loadState2, saveState2, dropPlacedRecord;
-var init_link = __esm({
-  "src/link.ts"() {
+function placeAll(share, o = {}) {
+  const names = o.names ?? [];
+  const unknown = names.filter((n3) => !share.manifest.projects[n3]);
+  if (unknown.length) throw new Error(`cs: unknown project(s): ${unknown.join(", ")}`);
+  const lines = names.length ? [] : sweep(share, { check: o.check });
+  for (const p of selectedProjects2(share)) if (!names.length || names.includes(p.name)) for (const l2 of place(share, p, o)) lines.push(`${p.name}: ${l2}`);
+  return lines;
+}
+function sweep(share, o = {}) {
+  const lines = [];
+  const ws = workspace2(share);
+  for (const name2 of records()) {
+    if (share.manifest.projects[name2]) continue;
+    const root = loadRecord(name2).root || sniff(join13(ws, name2)).root;
+    lines.push(...unplace(name2, dirsAt(root), " (project removed from the share)", o.check ?? false));
+  }
+  return lines;
+}
+var ROOT_FILES, SKIP_UNDER_CLAUDE, EXCLUDE_LINES, SETTINGS_LOCAL, NOT_SYNCED, POINTER, statesDir, projectState, memoryDir, recordsDir, recordFile, records, forget;
+var init_projectstate = __esm({
+  "src/projectstate.ts"() {
     "use strict";
     init_git();
     init_paths();
     init_share();
     init_checkout();
     init_jsonmerge();
-    init_ui();
     ROOT_FILES = ["CLAUDE.md", "CLAUDE.local.md", ".mcp.json"];
     SKIP_UNDER_CLAUDE = /* @__PURE__ */ new Set(["worktrees", "plans", "settings.json"]);
     EXCLUDE_LINES = [".claude/", ".mcp.json", "CLAUDE.md", "CLAUDE.local.md"];
     SETTINGS_LOCAL = ".claude/settings.local.json";
     NOT_SYNCED = /* @__PURE__ */ new Set(["memory", "secrets"]);
-    projectState = (repo, p) => join13(repo, "projects", p.name);
-    memoryDir = (repo, p) => join13(projectState(repo, p), "memory");
-    placedDir = () => join13(stateDir(), "project-state");
-    stateFile2 = (p) => join13(placedDir(), `${p.name}.json`);
-    loadState2 = (p) => {
-      try {
-        return new Set(JSON.parse(readFileSync12(stateFile2(p), "utf8")).files);
-      } catch {
-        return /* @__PURE__ */ new Set();
-      }
-    };
-    saveState2 = (p, ws, files) => {
-      mkdirSync9(dirname4(stateFile2(p)), { recursive: true });
-      writeFileSync8(stateFile2(p), JSON.stringify({ root: checkoutRoot(p, ws), files: [...files].sort() }, null, 2));
-    };
-    dropPlacedRecord = (name2) => rmSync4(join13(placedDir(), `${name2}.json`), { force: true });
+    POINTER = "autoMemoryDirectory";
+    statesDir = (share) => join13(share.path, "projects");
+    projectState = (share, name2) => join13(statesDir(share), name2);
+    memoryDir = (share, name2) => join13(projectState(share, name2), "memory");
+    recordsDir = () => join13(stateDir(), "project-state");
+    recordFile = (name2) => join13(recordsDir(), `${name2}.json`);
+    records = () => existsSync9(recordsDir()) ? readdirSync4(recordsDir()).filter((f) => f.endsWith(".json")).map((f) => f.slice(0, -5)) : [];
+    forget = (name2, checkouts) => unplace(name2, checkouts, "", false);
   }
 });
 
@@ -8214,7 +8234,7 @@ function settleRebase(repo, label, local, upstream2, o) {
       if (!stops.length) throw new Error(`cs: share rebase stopped without a conflict \u2014 cd ${contract(repo)} && git rebase origin/${currentBranch(repo)}`);
       if (step2 === last) throw new Error(`cs: share rebase keeps stopping on ${stops.map((c2) => c2.file).join(", ")} \u2014 cd ${contract(repo)} && git rebase origin/${currentBranch(repo)}`);
       last = step2;
-      const open2 = stops.filter((c2) => !decide(c2, o.resolve));
+      const open2 = stops.filter((c2) => !decide2(c2, o.resolve));
       if (open2.length && o.ask) {
         abort();
         return open2;
@@ -8224,7 +8244,7 @@ function settleRebase(repo, label, local, upstream2, o) {
         backedUp = true;
       }
       for (const c2 of stops) {
-        const side = decide(c2, o.resolve) ?? newest(c2);
+        const side = decide2(c2, o.resolve) ?? newest(c2);
         takeSide(repo, c2.file, side);
         settled.push(`${c2.file} (${side === "ours" ? "this machine" : "the other machine"})`);
       }
@@ -8330,23 +8350,21 @@ async function shareGitSync(share, label, o = {}) {
   }
 }
 async function runShareSync(share, o = {}) {
-  const repo = share.path, ws = workspace2(share);
+  const repo = share.path;
   let rc = 0;
   if (o.debounce && existsSync10(lastSyncFile()) && Date.now() - statSync7(lastSyncFile()).mtimeMs < o.debounce * 1e3) return 0;
   const before = out(["rev-parse", "HEAD"], repo);
-  if (!o.pullOnly) {
-    for (const p of selectedProjects2(share)) if (dirs(p, ws).length) syncProject(repo, p, ws);
-  }
+  if (!o.pullOnly) placeAll(share);
   if (!(await shareGitSync(share, "share", { ...o, resolve: o.resolve ?? "newest", ask: false })).ok) rc = 2;
   const after = out(["rev-parse", "HEAD"], repo);
   if (after !== before || o.pullOnly) {
     const changed = before ? out(["diff", "--name-only", before, after], repo) : "";
     if (o.pullOnly || changed.split("\n").some((x) => x.startsWith("claude/") || x.startsWith("projects.toml") || x.startsWith("plans/"))) runApply(reload(share));
-    runLink(reload(share));
+    placeAll(reload(share));
   }
   return rc;
 }
-var lastSyncFile, lastSync, markSync, newest, describe2, decide;
+var lastSyncFile, lastSync, markSync, newest, describe2, decide2;
 var init_sharesync = __esm({
   "src/sharesync.ts"() {
     "use strict";
@@ -8355,8 +8373,7 @@ var init_sharesync = __esm({
     init_lock();
     init_share();
     init_apply();
-    init_link();
-    init_checkout();
+    init_projectstate();
     init_ui();
     lastSyncFile = () => join14(stateDir(), "last-sync");
     lastSync = () => existsSync10(lastSyncFile()) ? readFileSync13(lastSyncFile(), "utf8").trim() : void 0;
@@ -8366,7 +8383,7 @@ var init_sharesync = __esm({
     };
     newest = (c2) => Date.parse(c2.theirs.when) > Date.parse(c2.ours.when) ? "theirs" : "ours";
     describe2 = (ch) => `${ch.deleted ? "deleted" : "changed"} ${ch.when.slice(0, 16).replace("T", " ")}`;
-    decide = (c2, r2) => r2 === void 0 ? void 0 : r2 === "newest" ? newest(c2) : typeof r2 === "string" ? r2 : r2[c2.file];
+    decide2 = (c2, r2) => r2 === void 0 ? void 0 : r2 === "newest" ? newest(c2) : typeof r2 === "string" ? r2 : r2[c2.file];
   }
 });
 
@@ -8743,12 +8760,7 @@ async function add(share, path, o) {
   addProject(share, p);
   ok(`registered ${name2}  ${dim(`${url} \xB7 profiles ${p.profiles.join(",")}`)}`);
   if (!o.noCommit) commit2(share, `projects: add ${name2}`, ["projects.toml"]);
-  setQuiet(true);
-  try {
-    runLink(share, [name2]);
-  } finally {
-    setQuiet(false);
-  }
+  place(share, p);
   return p;
 }
 async function fixRemote(share, p, identityFlag) {
@@ -8811,16 +8823,10 @@ async function clone(share, names, dryRun = false) {
       git(["config", "user.email", ident2.email], root);
     }
     if (p.postClone) spawnSync4("bash", ["-lc", p.postClone], { cwd: cont, stdio: "inherit" });
-    cloned.push(p.name);
+    cloned.push(p);
   }
   if (cloned.length) {
-    const wasQuiet = isQuiet();
-    setQuiet(true);
-    try {
-      runLink(share, cloned);
-    } finally {
-      setQuiet(wasQuiet);
-    }
+    for (const p of cloned) place(share, p);
     step(`project state placed into ${cloned.length} project(s)`);
   }
   return rc;
@@ -8857,12 +8863,7 @@ async function create(share, name2, ident2, o) {
   addProject(share, p);
   commit2(share, `projects: add ${name2}`, ["projects.toml"]);
   step(`registered in projects.toml  ${dim(`profiles ${o.profiles.join(",")}`)}`);
-  setQuiet(true);
-  try {
-    runLink(share, [name2]);
-  } finally {
-    setQuiet(false);
-  }
+  place(share, p);
   step("project state placed (memory \u2192 share)");
   outro2(bold(`cd ${contract(root)} && claude`));
   return 0;
@@ -8875,7 +8876,7 @@ var init_projects = __esm({
     init_paths();
     init_manifest();
     init_share();
-    init_link();
+    init_projectstate();
     init_checkout();
     init_ui();
   }
@@ -9192,9 +9193,9 @@ function writeSnapshot(st, values) {
   mkdirSync15(dirname7(f), { recursive: true, mode: 448 });
   writeFileSync14(f, dumpDotenv(values), { mode: 384 });
 }
-async function applyEnv(share, b, st, decide2 = {}) {
+async function applyEnv(share, b, st, decide3 = {}) {
   const repo = share.path;
-  const m = mergeOf(st, decide2);
+  const m = mergeOf(st, decide3);
   if (m.conflicts.length) throw new Error(`cs: ${st.project} ${st.file}: undecided keys ${m.conflicts.map((c2) => c2.key).join(", ")}`);
   const empty = !Object.keys(m.result).length;
   if (m.toStore.length) {
@@ -9230,7 +9231,7 @@ var init_envfiles = __esm({
     init_share();
     init_secrets();
     init_env();
-    mergeOf = (st, decide2 = {}) => st.kind === "local" ? mergeKeys(st.base && Object.keys(st.base), st.local ?? {}, Object.keys(st.stored ?? {}), st.example ?? {}) : merge3(st.base, st.local ?? {}, st.stored ?? {}, decide2);
+    mergeOf = (st, decide3 = {}) => st.kind === "local" ? mergeKeys(st.base && Object.keys(st.base), st.local ?? {}, Object.keys(st.stored ?? {}), st.example ?? {}) : merge3(st.base, st.local ?? {}, st.stored ?? {}, decide3);
     snapshotFile = (project, file) => join20(stateDir(), "env", project, file);
     readValues = (f) => existsSync15(f) ? parseDotenv(readFileSync17(f, "utf8")) : void 0;
     mtime = (f) => new Date(statSync8(f).mtimeMs).toISOString();
@@ -9396,8 +9397,7 @@ async function runSync(share, o = {}) {
   const timeout = o.timeout ?? 20;
   let rc = 0;
   const copyBack = () => {
-    const ws2 = workspace2(share);
-    for (const p of selectedProjects2(share)) if (dirs(p, ws2).length) syncProject(repo, p, ws2);
+    placeAll(share);
   };
   const first = await syncShare(share, "share synced", "already in sync", copyBack, { timeout });
   if (!first.ok) rc = 2;
@@ -9415,8 +9415,7 @@ async function runSync(share, o = {}) {
     applyLinks(repo, false, changes);
     applyGit(man, false, changes);
     applyShellRc(false, changes);
-    for (const p of selectedProjects2(share)) if (dirs(p, ws).length) for (const c2 of syncProject(repo, p, ws)) changes.push(`${p.name}: ${c2}`);
-    changes.push(...sweepRemoved(man, ws));
+    changes.push(...placeAll(share));
     for (const c2 of changes) step(c2);
   }, { done: "nothing to repair" });
   const missing = () => new Set(selectedProjects2(share).filter((p) => {
@@ -9456,13 +9455,7 @@ async function runSync(share, o = {}) {
       const r2 = await apply(a2.checkout, a2.handoff, m, { replace: replace2 });
       if (!r2.ok) return;
       applied++;
-      const wasQuiet = isQuiet();
-      setQuiet(true);
-      try {
-        runLink(share, [a2.checkout.project.name]);
-      } finally {
-        setQuiet(wasQuiet);
-      }
+      place(share, a2.checkout.project);
       if (r2.note) notes.push([`${a2.checkout.project.name} \u2014 note from ${a2.handoff.machine}`, ...r2.note.trim().split("\n")]);
     };
     for (const a2 of applies) await one(a2, false);
@@ -9479,9 +9472,9 @@ async function runSync(share, o = {}) {
   const keysOnly = states.filter((st) => st.kind === "local" && (st.merge.toLocal.length || st.merge.toStore.length));
   if (envRows.length || keysOnly.length) await group(".env files", async () => {
     const b = await getBackend(m);
-    const one = async (label, st, decide2) => {
+    const one = async (label, st, decide3) => {
       try {
-        const r2 = await applyEnv(share, b, st, decide2);
+        const r2 = await applyEnv(share, b, st, decide3);
         envDone++;
         step(`${label}: ${[r2.stored ? `${count(r2.stored, "key")} stored` : "", r2.local ? `${count(r2.local, "key")} taken${st.storedFrom ? ` from ${st.storedFrom}` : ""}` : ""].filter(Boolean).join(", ")}${r2.toFill.length ? yellow(` \u2014 to fill in: ${r2.toFill.join(", ")}`) : ""}`);
       } catch (e) {
@@ -9507,7 +9500,7 @@ var init_sync = __esm({
     init_lock();
     init_share();
     init_apply();
-    init_link();
+    init_projectstate();
     init_hooks();
     init_sharesync();
     init_projects();
@@ -9640,7 +9633,7 @@ function orphans(share) {
   const repo = share.path, man = share.manifest;
   const names = /* @__PURE__ */ new Set(), state = /* @__PURE__ */ new Set();
   const registered = Object.keys(man.projects);
-  const st = join21(repo, "projects");
+  const st = statesDir(share);
   if (existsSync17(st)) {
     for (const e of readdirSync9(st, { withFileTypes: true })) if (e.isDirectory() && !man.projects[e.name]) {
       names.add(e.name);
@@ -9657,7 +9650,7 @@ function resolve6(share, names) {
   return names.map((name2) => {
     if (!NAME_RE.test(name2)) throw new Error(`cs: '${name2}' is not a project name`);
     const project = man.projects[name2];
-    const state = join21(repo, "projects", name2);
+    const state = projectState(share, name2);
     const t2 = { name: name2, project, state: existsSync17(state) ? state : void 0, secrets: secretsFiles(share, name2), here: project ? dirs(project, ws) : [] };
     if (!t2.project && !t2.state && !t2.secrets.length) throw new Error(`cs: unknown project '${name2}'
 known: ${known.join(", ") || "(none)"}`);
@@ -9706,8 +9699,7 @@ add --yes to remove ${label} unattended`);
       rmSync8(f, { force: true });
       paths.push(relative8(repo, f));
     }
-    for (const c2 of t2.here) if (stripPointer(c2)) step(`${t2.name}: auto-memory pointer removed from ${contract(c2)}`);
-    dropPlacedRecord(t2.name);
+    for (const l2 of forget(t2.name, t2.here)) step(l2);
   }
   const sha = o.noCommit ? "" : commit2(share, `remove ${label}`, [...new Set(paths)]) ?? "";
   ok(`removed ${label} from the share${sha ? `  ${dim(`commit ${sha}`)}` : dim(o.noCommit ? "  (not committed: --no-commit)" : "  (nothing to commit \u2014 the share had none of it committed)")}`);
@@ -9728,7 +9720,7 @@ var init_remove = __esm({
     init_manifest();
     init_share();
     init_checkout();
-    init_link();
+    init_projectstate();
     init_env();
     init_sharekey();
     init_ui();
@@ -10256,8 +10248,7 @@ function findOldNames(share) {
         if (target !== repo) {
           const changes = [];
           applyLinks(target, false, changes);
-          const ws2 = workspace2(share);
-          for (const p of selectedProjects2(share)) if (dirs(p, ws2).length) syncProject(target, p, ws2);
+          placeAll({ ...share, path: target });
         }
       }
     });
@@ -10323,7 +10314,7 @@ var init_migrate = __esm({
     init_sharekey();
     init_checkout();
     init_apply();
-    init_link();
+    init_projectstate();
     OLD_REF_NS = "wip";
   }
 });
@@ -10850,7 +10841,9 @@ function push3(repo) {
 async function finish(share, interactive, skip2) {
   const repo = share.path, m = share.machine;
   if (!skip2.includes("apply")) await group("~/.claude applied", () => runApply(share), { done: "already up to date" });
-  if (!skip2.includes("link")) await group("project files linked", () => runLink(share), { done: "already in sync" });
+  if (!skip2.includes("link")) await group("project files linked", () => {
+    for (const l2 of placeAll(share)) step(l2);
+  }, { done: "already in sync" });
   let secretsOk = true;
   if (!skip2.includes("secrets") && m.secretsBackend !== "none") {
     const sc = await Promise.resolve().then(() => (init_secretscmd(), secretscmd_exports));
@@ -10950,7 +10943,7 @@ var init_init = __esm({
     init_share();
     init_checkout();
     init_apply();
-    init_link();
+    init_projectstate();
     init_doctor();
     init_deps();
     init_identity();
@@ -10975,7 +10968,7 @@ __export(handoff_exports, {
   waitingList: () => waitingList
 });
 import { existsSync as existsSync25, readFileSync as readFileSync23, rmSync as rmSync11 } from "node:fs";
-async function observe(p, ws, o) {
+async function observe2(p, ws, o) {
   if (!enabled(p)) {
     skip(`${p.name}: handoff disabled`);
     return void 0;
@@ -10993,7 +10986,7 @@ async function handoff(share, projects, o) {
   const m = share.machine;
   let rc = 0;
   for (const p of projects) {
-    const f = await observe(p, ws, { allow: o.allow, label: "fetching handoffs" });
+    const f = await observe2(p, ws, { allow: o.allow, label: "fetching handoffs" });
     if (!f) continue;
     const pl = plan([f], m.name);
     const secret = f.checkout.units.filter((u5) => u5.secrets?.length);
@@ -11025,17 +11018,11 @@ async function resume(share, projects, o) {
       if (!o.dryRun) rc = 1;
       return;
     }
-    const wasQuiet = isQuiet();
-    setQuiet(true);
-    try {
-      runLink(share, [c2.project.name]);
-    } finally {
-      setQuiet(wasQuiet);
-    }
+    place(share, c2.project);
     if (r2.note) note2(r2.note.trim().split("\n"), `note from ${h2.machine}`);
   };
   for (const p of projects) {
-    const f = await observe(p, ws, { label: "looking for handoffs" });
+    const f = await observe2(p, ws, { label: "looking for handoffs" });
     if (!f) continue;
     if (!f.waiting.length) {
       skip(`${p.name}: nothing to resume`);
@@ -11057,7 +11044,7 @@ async function waitingList(share, projects) {
   const ws = workspace2(share);
   const all = [];
   for (const p of projects) {
-    const f = await observe(p, ws, { label: "fetching handoffs" });
+    const f = await observe2(p, ws, { label: "fetching handoffs" });
     if (!f) continue;
     for (const h2 of f.waiting) all.push({ ...h2, project: p.name });
   }
@@ -11107,7 +11094,7 @@ var init_handoff = __esm({
     init_paths();
     init_share();
     init_checkout();
-    init_link();
+    init_projectstate();
     init_plan();
     init_ui();
     questions = (pl) => pl.questions.filter((q) => q.kind === "dirty-vs-waiting");
@@ -11320,9 +11307,13 @@ program2.command("apply", HIDDEN).description("render ~/.claude + git identity i
 });
 program2.command("link [names...]", HIDDEN).description("place project state (Claude files, memory) into project checkouts; newer content flows back").option("--check").action(async (names, o) => {
   const share = open();
-  const { runLink: runLink2 } = await Promise.resolve().then(() => (init_link(), link_exports));
+  const { placeAll: placeAll2 } = await Promise.resolve().then(() => (init_projectstate(), projectstate_exports));
   await command(o.check ? "cs link --check" : "cs link", async () => {
-    const n3 = await group(o.check ? "pending changes" : "project files linked", () => runLink2(share, names, o.check), { done: "nothing pending" });
+    const n3 = await group(o.check ? "pending changes" : "project files linked", () => {
+      const lines = placeAll2(share, { names, check: o.check });
+      for (const l2 of lines) step(l2);
+      return lines.length;
+    }, { done: "nothing pending" });
     process.exitCode = o.check && n3 ? 1 : 0;
   });
 });

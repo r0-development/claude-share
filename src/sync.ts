@@ -5,11 +5,11 @@
 import { acquire } from "./lock.js";
 import { reload, selectedProjects, workspace, type Share } from "./share.js";
 import { applyGit, applyLinks, applySettings, applyShellRc } from "./apply.js";
-import { runLink, sweepRemoved, syncProject } from "./link.js";
+import { place, placeAll } from "./projectstate.js";
 import { hooksStatus, installHooks, installTimer } from "./hooks.js";
 import { describe, newest, shareGitSync, type Side, type SyncOpts as ShareOpts } from "./sharesync.js";
 import { clone } from "./projects.js";
-import { apply, dirs, locate, present, push, send } from "./checkout.js";
+import { apply, locate, present, push, send } from "./checkout.js";
 import { gather } from "./gather.js";
 import { getBackend } from "./secrets/index.js";
 import { applyEnv, newestSide, snapshotInSync, type EnvState } from "./envfiles.js";
@@ -100,7 +100,7 @@ export async function runSync(share: Share, o: SyncOpts = {}): Promise<SyncResul
   const release = acquire(); if (!release) throw new Error("cs: another cs sync is running here (or the hooks' share sync, a few seconds) — wait for it to finish");
   process.on("exit", release);
   const timeout = o.timeout ?? 20; let rc = 0;
-  const copyBack = () => { const ws = workspace(share); for (const p of selectedProjects(share)) if (dirs(p, ws).length) syncProject(repo, p, ws); };
+  const copyBack = () => { placeAll(share); };   // newest checkout content into the project state before it is committed
 
   // 1. the share: newest memory/plans/settings in, other machines' changes out
   const first = await syncShare(share, "share synced", "already in sync", copyBack, { timeout });
@@ -113,8 +113,7 @@ export async function runSync(share: Share, o: SyncOpts = {}): Promise<SyncResul
     if (!hs.complete) { installHooks(share); ui.step("Claude Code hooks re-installed"); }
     if (!hs.timerFiles || (hs.timerSupported && !hs.timerActive)) ui.step(`timer: ${await installTimer()}`);
     const changes: string[] = []; applySettings(share, false, changes); applyLinks(repo, false, changes); applyGit(man, false, changes); applyShellRc(false, changes);
-    for (const p of selectedProjects(share)) if (dirs(p, ws).length) for (const c of syncProject(repo, p, ws)) changes.push(`${p.name}: ${c}`);
-    changes.push(...sweepRemoved(man, ws));   // a project removed from the share on another machine: its checkout here loses the pointer we wrote
+    changes.push(...placeAll(share));   // project state into every checkout; a project removed from the share on another machine loses the pointer we wrote
     for (const c of changes) ui.step(c);
   }, { done: "nothing to repair" });
 
@@ -151,7 +150,7 @@ export async function runSync(share: Share, o: SyncOpts = {}): Promise<SyncResul
   if (applies.length || replace.length) await ui.group("handoffs applied", async () => {
     const one = async (a: { checkout: Facts["checkout"]; handoff: HandoffQuestion["handoff"] }, replace: boolean) => {
       const r = await apply(a.checkout, a.handoff, m, { replace }); if (!r.ok) return; applied++;
-      const wasQuiet = ui.isQuiet(); ui.setQuiet(true); try { runLink(share, [a.checkout.project.name]); } finally { ui.setQuiet(wasQuiet); }   // project state into the unit (a new worktree has none yet)
+      place(share, a.checkout.project);   // project state into the unit (a new worktree has none yet)
       if (r.note) notes.push([`${a.checkout.project.name} — note from ${a.handoff.machine}`, ...r.note.trim().split("\n")]);
     };
     for (const a of applies) await one(a, false);

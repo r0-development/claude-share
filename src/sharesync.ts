@@ -7,10 +7,9 @@ import { join } from "node:path";
 import * as git from "./git.js";
 import { contract, stateDir } from "./paths.js";
 import { acquire } from "./lock.js";
-import { commit, reload, selectedProjects, workspace, type Share } from "./share.js";
+import { commit, reload, type Share } from "./share.js";
 import { runApply } from "./apply.js";
-import { runLink, syncProject } from "./link.js";
-import { dirs } from "./checkout.js";
+import { placeAll } from "./projectstate.js";
 import * as ui from "./ui.js";
 
 /** When the share last synced here (ISO time, or "offline" when the last attempt could not fetch); what bare cs and cs doctor show. */
@@ -112,16 +111,16 @@ export async function shareGitSync(share: Share, label: string, o: SyncOpts = {}
 }
 /** The hidden `cs share-sync` (hooks, timer): cannot ask, so conflicts are settled newest-wins per file unless --resolve says otherwise. */
 export async function runShareSync(share: Share, o: SyncOpts & { debounce?: number } = {}): Promise<number> {
-  const repo = share.path, ws = workspace(share); let rc = 0;
+  const repo = share.path; let rc = 0;
   if (o.debounce && existsSync(lastSyncFile()) && Date.now() - statSync(lastSyncFile()).mtimeMs < o.debounce * 1000) return 0;
   const before = git.out(["rev-parse", "HEAD"], repo);
-  if (!o.pullOnly) for (const p of selectedProjects(share)) if (dirs(p, ws).length) syncProject(repo, p, ws);
+  if (!o.pullOnly) placeAll(share);   // newest checkout content into the project state before it is committed
   if (!(await shareGitSync(share, "share", { ...o, resolve: o.resolve ?? "newest", ask: false })).ok) rc = 2;
   const after = git.out(["rev-parse", "HEAD"], repo);
   if (after !== before || o.pullOnly) {
     const changed = before ? git.out(["diff", "--name-only", before, after], repo) : "";
     if (o.pullOnly || changed.split("\n").some((x) => x.startsWith("claude/") || x.startsWith("projects.toml") || x.startsWith("plans/"))) runApply(reload(share));   // the pull may have changed the manifest
-    runLink(reload(share));
+    placeAll(reload(share));
   }
   return rc;
 }
