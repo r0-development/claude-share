@@ -23,9 +23,9 @@ var __export = (target, all) => {
 };
 var __copyProps = (to, from, except, desc) => {
   if (from && typeof from === "object" || typeof from === "function") {
-    for (let key2 of __getOwnPropNames(from))
-      if (!__hasOwnProp.call(to, key2) && key2 !== except)
-        __defProp(to, key2, { get: () => from[key2], enumerable: !(desc = __getOwnPropDesc(from, key2)) || desc.enumerable });
+    for (let key of __getOwnPropNames(from))
+      if (!__hasOwnProp.call(to, key) && key !== except)
+        __defProp(to, key, { get: () => from[key], enumerable: !(desc = __getOwnPropDesc(from, key)) || desc.enumerable });
   }
   return to;
 };
@@ -1000,9 +1000,9 @@ var require_option = __commonJS({
             this.positiveOptions.set(option.attributeName(), option);
           }
         });
-        this.negativeOptions.forEach((value, key2) => {
-          if (this.positiveOptions.has(key2)) {
-            this.dualOptions.add(key2);
+        this.negativeOptions.forEach((value, key) => {
+          if (this.positiveOptions.has(key)) {
+            this.dualOptions.add(key);
           }
         });
       }
@@ -1920,11 +1920,11 @@ Expecting one of '${allowedValues.join("', '")}'`);
        * @param {string} key
        * @return {object} value
        */
-      getOptionValue(key2) {
+      getOptionValue(key) {
         if (this._storeOptionsAsProperties) {
-          return this[key2];
+          return this[key];
         }
-        return this._optionValues[key2];
+        return this._optionValues[key];
       }
       /**
        * Store option value.
@@ -1933,8 +1933,8 @@ Expecting one of '${allowedValues.join("', '")}'`);
        * @param {object} value
        * @return {Command} `this` command for chaining
        */
-      setOptionValue(key2, value) {
-        return this.setOptionValueWithSource(key2, value, void 0);
+      setOptionValue(key, value) {
+        return this.setOptionValueWithSource(key, value, void 0);
       }
       /**
        * Store option value and where the value came from.
@@ -1944,13 +1944,13 @@ Expecting one of '${allowedValues.join("', '")}'`);
        * @param {string} source - expected values are default/config/env/cli/implied
        * @return {Command} `this` command for chaining
        */
-      setOptionValueWithSource(key2, value, source) {
+      setOptionValueWithSource(key, value, source) {
         if (this._storeOptionsAsProperties) {
-          this[key2] = value;
+          this[key] = value;
         } else {
-          this._optionValues[key2] = value;
+          this._optionValues[key] = value;
         }
-        this._optionValueSources[key2] = source;
+        this._optionValueSources[key] = source;
         return this;
       }
       /**
@@ -1960,8 +1960,8 @@ Expecting one of '${allowedValues.join("', '")}'`);
        * @param {string} key
        * @return {string}
        */
-      getOptionValueSource(key2) {
-        return this._optionValueSources[key2];
+      getOptionValueSource(key) {
+        return this._optionValueSources[key];
       }
       /**
        * Get source of option value. See also .optsWithGlobals().
@@ -1970,11 +1970,11 @@ Expecting one of '${allowedValues.join("', '")}'`);
        * @param {string} key
        * @return {string}
        */
-      getOptionValueSourceWithGlobals(key2) {
+      getOptionValueSourceWithGlobals(key) {
         let source;
         this._getCommandAndAncestors().forEach((cmd) => {
-          if (cmd.getOptionValueSource(key2) !== void 0) {
-            source = cmd.getOptionValueSource(key2);
+          if (cmd.getOptionValueSource(key) !== void 0) {
+            source = cmd.getOptionValueSource(key);
           }
         });
         return source;
@@ -2695,8 +2695,8 @@ Expecting one of '${allowedValues.join("', '")}'`);
           const result = {};
           const len = this.options.length;
           for (let i2 = 0; i2 < len; i2++) {
-            const key2 = this.options[i2].attributeName();
-            result[key2] = key2 === this._versionOptionName ? this._version : this[key2];
+            const key = this.options[i2].attributeName();
+            result[key] = key === this._versionOptionName ? this._version : this[key];
           }
           return result;
         }
@@ -5077,8 +5077,8 @@ function outro2(msg) {
 function note2(lines, title) {
   if (!quiet) note(lines.join("\n"), title);
 }
-function kv(key2, value, width2 = 14) {
-  info(`${import_picocolors.default.dim(key2.padEnd(width2))} ${value}`);
+function kv(key, value, width2 = 14) {
+  info(`${import_picocolors.default.dim(key.padEnd(width2))} ${value}`);
 }
 function table(rows, header) {
   if (quiet || !rows.length) return;
@@ -5862,11 +5862,11 @@ function parseInlineTable(ctx, integersAsBigInt) {
     let t2 = res;
     let hasOwn = false;
     let p = ctx.p;
-    let key2 = parseKey(ctx);
-    for (let i2 = 0; i2 < key2.length; i2++) {
+    let key = parseKey(ctx);
+    for (let i2 = 0; i2 < key.length; i2++) {
       if (i2)
         t2 = hasOwn ? t2[k] : t2[k] = {};
-      k = key2[i2];
+      k = key[i2];
       if ((hasOwn = Object.hasOwn(t2, k)) && (typeof t2[k] !== "object" || seen.has(t2[k]))) {
         throw new TomlError("trying to redefine an already defined value", {
           toml: ctx.s,
@@ -5934,13 +5934,13 @@ var init_struct = __esm({
 });
 
 // node_modules/smol-toml/dist/parse.js
-function peekTable(key2, table2, meta, type) {
+function peekTable(key, table2, meta, type) {
   let t2 = table2;
   let m = meta;
   let k;
   let hasOwn = false;
   let state;
-  for (let i2 = 0; i2 < key2.length; i2++) {
+  for (let i2 = 0; i2 < key.length; i2++) {
     if (i2) {
       t2 = hasOwn ? t2[k] : t2[k] = {};
       m = (state = m[k]).c;
@@ -5953,7 +5953,7 @@ function peekTable(key2, table2, meta, type) {
         m = m[l2].c;
       }
     }
-    k = key2[i2];
+    k = key[i2];
     if ((hasOwn = Object.hasOwn(t2, k)) && m[k]?.t === 0 && m[k]?.d) {
       return null;
     }
@@ -5963,7 +5963,7 @@ function peekTable(key2, table2, meta, type) {
         Object.defineProperty(m, k, { enumerable: true, configurable: true, writable: true });
       }
       m[k] = {
-        t: i2 < key2.length - 1 && type === 2 ? 3 : type,
+        t: i2 < key.length - 1 && type === 2 ? 3 : type,
         d: false,
         i: 0,
         c: {}
@@ -6160,15 +6160,15 @@ function stringifyArray(array, depth, numberAsFloat) {
   }
   return res + " ]";
 }
-function stringifyArrayTable(array, key2, depth, numberAsFloat) {
+function stringifyArrayTable(array, key, depth, numberAsFloat) {
   if (depth === 0) {
     throw new Error("Could not stringify the object: maximum object depth exceeded");
   }
   let res = "";
   for (let i2 = 0; i2 < array.length; i2++) {
-    res += `${res && "\n"}[[${key2}]]
+    res += `${res && "\n"}[[${key}]]
 `;
-    res += stringifyTable(0, array[i2], key2, depth, numberAsFloat);
+    res += stringifyTable(0, array[i2], key, depth, numberAsFloat);
   }
   return res;
 }
@@ -6186,14 +6186,14 @@ function stringifyTable(tableKey, obj, prefix, depth, numberAsFloat) {
       if (type === "symbol" || type === "function") {
         throw new TypeError(`cannot serialize values of type '${type}'`);
       }
-      let key2 = BARE_KEY.test(k) ? k : formatString(k);
+      let key = BARE_KEY.test(k) ? k : formatString(k);
       if (type === "array" && isArrayOfTables(obj[k])) {
-        tables += (tables && "\n") + stringifyArrayTable(obj[k], prefix ? `${prefix}.${key2}` : key2, depth - 1, numberAsFloat);
+        tables += (tables && "\n") + stringifyArrayTable(obj[k], prefix ? `${prefix}.${key}` : key, depth - 1, numberAsFloat);
       } else if (type === "object") {
-        let tblKey = prefix ? `${prefix}.${key2}` : key2;
+        let tblKey = prefix ? `${prefix}.${key}` : key;
         tables += (tables && "\n") + stringifyTable(tblKey, obj[k], tblKey, depth - 1, numberAsFloat);
       } else {
-        preamble += key2;
+        preamble += key;
         preamble += " = ";
         preamble += stringifyValue(obj[k], type, depth, numberAsFloat);
         preamble += "\n";
@@ -6388,7 +6388,7 @@ function trailers(p, sha) {
   }
   return o;
 }
-var envOf, lastLine, out, isRepo, isBare, toplevel, remoteUrl, currentBranch, dirtyCount, isDirty, worktrees, infoExclude, configGet, identityArgs, rebaseInProgress, slug;
+var envOf, lastLine, out, isRepo, isBare, toplevel, remoteUrl, currentBranch, dirtyCount, isDirty, worktrees, infoExclude, configGet, identityArgs, rebaseInProgress, slug, changedFiles;
 var init_git = __esm({
   "src/git.ts"() {
     "use strict";
@@ -6415,10 +6415,11 @@ var init_git = __esm({
     isDirty = (p) => dirtyCount(p) > 0;
     worktrees = (p) => out(["worktree", "list", "--porcelain"], p).split("\n").filter((l2) => l2.startsWith("worktree ")).map((l2) => l2.slice(9));
     infoExclude = (p) => join3(commonDir(p), "info", "exclude");
-    configGet = (p, key2) => out(["config", "--get", key2], p);
+    configGet = (p, key) => out(["config", "--get", key], p);
     identityArgs = (p, fallbackName = "cs", fallbackEmail = "cs@localhost") => configGet(p, "user.email") ? [] : ["-c", `user.name=${fallbackName}`, "-c", `user.email=${fallbackEmail}`];
     rebaseInProgress = (p) => existsSync2(join3(commonDir(p), "rebase-merge")) || existsSync2(join3(commonDir(p), "rebase-apply"));
     slug = (s) => s.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "") || "x";
+    changedFiles = (dir) => [...new Set([...out(["diff", "--name-only", "HEAD"], dir).split("\n"), ...out(["ls-files", "-o", "--exclude-standard"], dir).split("\n")].filter(Boolean))].sort();
   }
 });
 
@@ -7076,23 +7077,24 @@ function newest(paths) {
   return best && { file: best.file, ended: new Date(best.mtime).toISOString() };
 }
 function localMcp(c2) {
-  let data = {};
+  if (!existsSync5(claudeJson())) return {};
+  let data;
   try {
     data = JSON.parse(readFileSync9(claudeJson(), "utf8"));
   } catch {
-    return {};
+    throw new Error(`cs: ${contract(claudeJson())} is not valid JSON`);
   }
   const found = {};
   for (const p of keyedPaths(c2)) for (const [n3, cfg] of Object.entries(data?.projects?.[p]?.mcpServers ?? {})) found[n3] ??= cfg;
   return found;
 }
-var key, recordDir, keyedPaths, memoryDirs, latestTranscript;
+var recordKey, recordDir, keyedPaths, memoryDirs, latestTranscript;
 var init_claudecode = __esm({
   "src/claudecode.ts"() {
     "use strict";
     init_paths();
-    key = (path) => path.replace(/[^A-Za-z0-9]/g, "-");
-    recordDir = (path) => join9(claudeDir(), "projects", key(path));
+    recordKey = (path) => path.replace(/[^A-Za-z0-9]/g, "-");
+    recordDir = (path) => join9(claudeDir(), "projects", recordKey(path));
     keyedPaths = (c2) => [.../* @__PURE__ */ new Set([c2.container, c2.root, ...c2.units.map((u5) => u5.path)])];
     memoryDirs = (c2) => keyedPaths(c2).map((p) => join9(recordDir(p), "memory")).filter((d) => existsSync5(d));
     latestTranscript = (c2, unit) => unit && newest([unit.path]) || newest(keyedPaths(c2));
@@ -7530,21 +7532,21 @@ async function claudeSummary(text3) {
   if (r2.code !== 0 || !note3) return { why: `claude failed${r2.err ? " \u2014 " + r2.err.split("\n").filter(Boolean).pop() : ""}` };
   return { note: note3 };
 }
-async function pickNote(unit, c2, explicit, earlier, s = liveSources) {
+async function pickNote(unit, c2, explicit, earlier, sources = liveSources) {
   if (explicit) return { note: explicit, source: "explicit" };
   const typed = earlier?.source === "explicit" && earlier.note ? earlier : void 0;
-  const t2 = s.transcript(c2, unit);
+  const t2 = sources.transcript(c2, unit);
   if (typed && !(t2 && t2.ended > typed.at)) return { note: typed.note, source: "explicit" };
-  const g = await generate(unit, t2, s);
+  const g = await generate(unit, t2, sources);
   return typed && g.source === "git" ? { note: typed.note, source: "explicit" } : g;
 }
-async function generate(unit, t2, s) {
-  const facts = { branch: unit.branch, ...s.facts(unit), ended: t2?.ended, why: "" };
+async function generate(unit, t2, sources) {
+  const facts = { branch: unit.branch, ...sources.facts(unit), ended: t2?.ended, why: "" };
   const fallback = (why) => ({ note: gitNote({ ...facts, why }), source: "git" });
   if (!t2) return fallback("no session transcript for this project");
   const text3 = digest(t2.read());
   if (!text3) return fallback("the session transcript is empty");
-  const r2 = await s.summarise(text3);
+  const r2 = await sources.summarise(text3);
   return "note" in r2 ? { note: r2.note, source: "claude" } : fallback(r2.why);
 }
 var PROMPT, DIGEST_MAX, FILES_SHOWN, noteTimeout, INJECTED, clean, localTime, liveSources;
@@ -7573,10 +7575,7 @@ var init_note = __esm({
         return t2 && { ended: t2.ended, read: () => readFileSync10(t2.file, "utf8") };
       },
       summarise: claudeSummary,
-      facts: (unit) => ({
-        changed: [...new Set([...out(["diff", "--name-only", "HEAD"], unit.path).split("\n"), ...out(["ls-files", "-o", "--exclude-standard"], unit.path).split("\n")].filter(Boolean))].sort(),
-        subject: out(["log", "-1", "--format=%s"], unit.path)
-      })
+      facts: (unit) => ({ changed: changedFiles(unit.path), subject: out(["log", "-1", "--format=%s"], unit.path) })
     };
   }
 });
@@ -7586,7 +7585,7 @@ import { existsSync as existsSync7, mkdirSync as mkdirSync7, readFileSync as rea
 import { basename as basename2, join as join11, relative as relative3 } from "node:path";
 import { userInfo } from "node:os";
 function denyHits(unit, p, allow) {
-  const changed = [...out(["ls-files", "-o", "--exclude-standard"], unit).split("\n"), ...out(["diff", "--name-only", "HEAD"], unit).split("\n")].filter(Boolean);
+  const changed = changedFiles(unit);
   const pats = [...DENY, ...hoff(p).never ?? []];
   return changed.filter((f) => pats.some((g) => globMatch(g, f) || globMatch(g, basename2(f))) && !allow.some((g) => globMatch(g, f)));
 }
@@ -7821,7 +7820,7 @@ async function push(c2, u5) {
   step(`${label} \u2192 ${to}`);
   return { ok: true, to };
 }
-var DENY, SIDE, NOTE_LABEL, REF_NS, container, checkoutRoot, sniff, hoff, enabled, dirsAt, dirs, present, userSlug, handoffRef, refspec, stateFile, noteFile;
+var DENY, SIDE, NOTE_LABEL, REF_NS, container, checkoutRoot, sniff, hoff, enabled, dirsAt, dirs, places, present, userSlug, handoffRef, refspec, stateFile, noteFile;
 var init_checkout = __esm({
   "src/checkout.ts"() {
     "use strict";
@@ -7841,6 +7840,7 @@ var init_checkout = __esm({
     enabled = (p) => p.handoff !== false && hoff(p).enabled !== false;
     dirsAt = (root) => !existsSync7(root) ? [] : !isRepo(root) ? [root] : worktrees(root).length ? worktrees(root) : [root];
     dirs = (p, ws) => dirsAt(checkoutRoot(p, ws));
+    places = (p, ws) => ({ container: container(p, ws), root: checkoutRoot(p, ws), units: dirs(p, ws).map((path) => ({ path })) });
     present = (c2) => "units" in c2;
     userSlug = (p) => slug(configGet(p, "user.name") || userInfo().username);
     handoffRef = (user, branch) => `${REF_NS}/${user}/${slug(branch)}`;
@@ -9377,13 +9377,13 @@ import { chmodSync as chmodSync5, existsSync as existsSync15, mkdirSync as mkdir
 import { dirname as dirname7 } from "node:path";
 import { spawnSync as spawnSync6 } from "node:child_process";
 function ensureKey(machine = "") {
-  const key2 = keyPath2(), pubf = key2 + ".pub";
-  if (existsSync15(key2) && existsSync15(pubf)) return { key: key2, pub: readFileSync18(pubf, "utf8").trim(), created: false };
-  mkdirSync15(dirname7(key2), { recursive: true, mode: 448 });
-  const p = spawnSync6("ssh-keygen", ["-q", "-t", "ed25519", "-N", "", "-C", `cs:${machine || nodename()}:share-key`, "-f", key2]);
+  const key = keyPath2(), pubf = key + ".pub";
+  if (existsSync15(key) && existsSync15(pubf)) return { key, pub: readFileSync18(pubf, "utf8").trim(), created: false };
+  mkdirSync15(dirname7(key), { recursive: true, mode: 448 });
+  const p = spawnSync6("ssh-keygen", ["-q", "-t", "ed25519", "-N", "", "-C", `cs:${machine || nodename()}:share-key`, "-f", key]);
   if (p.status !== 0) throw new Error("cs: ssh-keygen failed");
-  chmodSync5(key2, 384);
-  return { key: key2, pub: readFileSync18(pubf, "utf8").trim(), created: true };
+  chmodSync5(key, 384);
+  return { key, pub: readFileSync18(pubf, "utf8").trim(), created: true };
 }
 function parseRepoUrl(text3) {
   const t2 = text3.trim().replace(/\/+$/, "");
@@ -9630,11 +9630,11 @@ async function unsetValues(share, name2, keys) {
   commitSecrets(share, `secrets: unset ${keys.length} value(s) in ${name2}`);
   return 0;
 }
-async function get(share, name2, key2, show) {
+async function get(share, name2, key, show) {
   const v = await valuesOf(await secretsStore(share), name2);
-  if (key2) {
-    if (!(key2 in v)) return 1;
-    console.log(show ? v[key2] : mask2(v[key2]));
+  if (key) {
+    if (!(key in v)) return 1;
+    console.log(show ? v[key] : mask2(v[key]));
     return 0;
   }
   for (const [k, val] of Object.entries(v)) console.log(`${k}=${show ? val : mask2(val)}`);
@@ -9857,8 +9857,8 @@ function ls(man) {
   table(
     ids.map((i2) => {
       const n3 = Object.values(man.projects).filter((p) => p.identity === i2.id).length;
-      const key2 = expand(keyPath(i2));
-      return [bold(i2.id), `${i2.name} <${i2.email}>`, i2.owner || dim("-"), existsSync18(key2) ? keyPath(i2) : red(keyPath(i2) + " (missing)"), getToken(i2.owner) ? green("token \u2713") : dim("no token"), dim(`${n3} project${n3 === 1 ? "" : "s"}`)];
+      const key = expand(keyPath(i2));
+      return [bold(i2.id), `${i2.name} <${i2.email}>`, i2.owner || dim("-"), existsSync18(key) ? keyPath(i2) : red(keyPath(i2) + " (missing)"), getToken(i2.owner) ? green("token \u2713") : dim("no token"), dim(`${n3} project${n3 === 1 ? "" : "s"}`)];
     }),
     ["id", "commits as", "github owner", "ssh key", "", ""]
   );
@@ -10066,9 +10066,9 @@ function migrate(share) {
   reload(share);
   return done;
 }
-function machineTomlHas(key2) {
+function machineTomlHas(key) {
   try {
-    return key2 in parse(readFileSync20(machineFile(), "utf8"));
+    return key in parse(readFileSync20(machineFile(), "utf8"));
   } catch {
     return false;
   }
@@ -10265,16 +10265,16 @@ __export(ssh_exports, {
 import { chmodSync as chmodSync6, existsSync as existsSync22, mkdirSync as mkdirSync18, readFileSync as readFileSync22, writeFileSync as writeFileSync16 } from "node:fs";
 import { dirname as dirname8, join as join24 } from "node:path";
 import { spawnSync as spawnSync8 } from "node:child_process";
-function keygen2(key2, comment) {
-  mkdirSync18(dirname8(key2), { recursive: true, mode: 448 });
-  const p = spawnSync8("ssh-keygen", ["-q", "-t", "ed25519", "-N", "", "-C", comment, "-f", key2]);
+function keygen2(key, comment) {
+  mkdirSync18(dirname8(key), { recursive: true, mode: 448 });
+  const p = spawnSync8("ssh-keygen", ["-q", "-t", "ed25519", "-N", "", "-C", comment, "-f", key]);
   if (p.status !== 0) throw new Error("cs: ssh-keygen failed");
-  chmodSync6(key2, 384);
+  chmodSync6(key, 384);
 }
-async function githubUserForKey(key2) {
+async function githubUserForKey(key) {
   if (process.env.CS_OFFLINE) return void 0;
   const { exec: exec4 } = await Promise.resolve().then(() => (init_proc(), proc_exports));
-  const p = await exec4("ssh", ["-T", "-i", key2, "-o", "IdentitiesOnly=yes", "-o", "StrictHostKeyChecking=accept-new", "-o", "BatchMode=yes", "git@github.com"], { timeout: 20 });
+  const p = await exec4("ssh", ["-T", "-i", key, "-o", "IdentitiesOnly=yes", "-o", "StrictHostKeyChecking=accept-new", "-o", "BatchMode=yes", "git@github.com"], { timeout: 20 });
   return (p.out + p.err).match(/Hi ([^!]+)!/)?.[1];
 }
 function writeSshConfig() {
@@ -10314,15 +10314,15 @@ async function setup2(share, checkOnly = false) {
   const published = [];
   const unregistered = [];
   for (const i2 of ids) {
-    const key2 = expand(keyPath(i2)), pubf = key2 + ".pub";
+    const key = expand(keyPath(i2)), pubf = key + ".pub";
     const state = [];
-    if (!existsSync22(key2)) {
+    if (!existsSync22(key)) {
       if (checkOnly) {
         rows.push([i2.id, keyPath(i2), red("missing")]);
         unregistered.push(i2);
         continue;
       }
-      keygen2(key2, `cs:${m.name}:${i2.id}`);
+      keygen2(key, `cs:${m.name}:${i2.id}`);
       state.push(green("generated"));
     }
     const pub = readFileSync22(pubf, "utf8").trim();
@@ -10332,11 +10332,11 @@ async function setup2(share, checkOnly = false) {
       writeFileSync16(dest, pub + "\n");
       published.push(dest);
     }
-    let user = await spin(`verifying ${i2.id} key on GitHub\u2026`, () => githubUserForKey(key2));
+    let user = await spin(`verifying ${i2.id} key on GitHub\u2026`, () => githubUserForKey(key));
     if (user) state.push(green(`github: ${user}`));
     else if (!checkOnly) {
       const r2 = await spin(`registering ${i2.id} key\u2026`, () => register(i2, pub, `cs:${m.name}:${i2.id}`));
-      user = await githubUserForKey(key2);
+      user = await githubUserForKey(key);
       if (user) state.push(green(`github: ${user}`));
       else {
         state.push(yellow(r2.startsWith("registered") ? "registered, not verified yet" : "needs registering"));
@@ -10745,12 +10745,6 @@ __export(import_exports, {
 });
 import { copyFileSync as copyFileSync5, existsSync as existsSync24, mkdirSync as mkdirSync20, readdirSync as readdirSync13, readFileSync as readFileSync23, writeFileSync as writeFileSync18 } from "node:fs";
 import { basename as basename4, dirname as dirname10, extname, join as join26, relative as relative9 } from "node:path";
-function checkoutOf(share, p) {
-  const c2 = locate(p, workspace2(share));
-  if (present(c2)) return c2;
-  skip(`${p.name}: ${c2.why === "missing" ? `no checkout at ${contract(c2.root)}` : c2.why}`);
-  return void 0;
-}
 function walkFiles(dir) {
   const out2 = [];
   const rec = (d) => {
@@ -10763,11 +10757,9 @@ function walkFiles(dir) {
   return out2.sort();
 }
 function importMemory(share, p, check = false) {
-  const c2 = checkoutOf(share, p);
-  if (!c2) return 0;
   const dest = memoryDir(share, p.name), machine = share.machine.name;
   let n3 = 0;
-  for (const src of memoryDirs(c2)) {
+  for (const src of memoryDirs(places(p, workspace2(share)))) {
     info(`${p.name}: importing memory from ${contract(src)}`);
     for (const f of walkFiles(src)) {
       const rel = relative9(src, f);
@@ -10803,16 +10795,14 @@ function importProjectFiles(share, p, check = false) {
   if (!ch.length) ok(`${p.name}: nothing to import`);
   return ch.length;
 }
-function envVarName(server, key2) {
+function envVarName(server, key) {
   const st = server.toUpperCase().split(/[^A-Z0-9]+/).filter(Boolean);
-  let kt = key2.toUpperCase().split(/[^A-Z0-9]+/).filter(Boolean);
+  let kt = key.toUpperCase().split(/[^A-Z0-9]+/).filter(Boolean);
   if (st.length && kt.length && kt[0] === st[0]) kt = kt.slice(1);
   return [...st, ...kt].join("_");
 }
 function importMcp(share, p, check = false, show = false) {
-  const c2 = checkoutOf(share, p);
-  if (!c2) return 0;
-  const found = localMcp(c2);
+  const found = localMcp(places(p, workspace2(share)));
   if (show) {
     for (const [n3, cfg] of Object.entries(found)) {
       for (const [k, v] of Object.entries(cfg.env ?? {})) console.log(`${envVarName(n3, k)}=${v}`);

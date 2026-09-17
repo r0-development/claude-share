@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 import { mkdtempSync, mkdirSync, rmSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { key, keyedPaths, latestTranscript, localMcp, memoryDirs, recordDir } from "../src/claudecode.ts";
+import { keyedPaths, latestTranscript, localMcp, memoryDirs, recordDir, recordKey } from "../src/claudecode.ts";
 import type { Checkout } from "../src/checkout.ts";
 
 let tmp: string;
@@ -16,12 +16,13 @@ const checkout = (container: string, root: string, units: string[]): Checkout =>
 const put = (f: string, s = "", mtime?: number) => { mkdirSync(join(f, ".."), { recursive: true }); writeFileSync(f, s); if (mtime) utimesSync(f, mtime, mtime); };
 
 test("claudecode: the key is the path with every non-alphanumeric turned into a dash; the record lives under ~/.claude/projects", () => {
-  assert.equal(key("/home/u/dev/one"), "-home-u-dev-one");
-  assert.equal(key("/home/u/dev/my_proj.v2"), "-home-u-dev-my-proj-v2");
+  assert.equal(recordKey("/home/u/dev/one"), "-home-u-dev-one");
+  assert.equal(recordKey("/home/u/dev/my_proj.v2"), "-home-u-dev-my-proj-v2");
   assert.equal(recordDir("/home/u/dev/one"), join(tmp, ".claude", "projects", "-home-u-dev-one"));
 });
 
-test("claudecode: a checkout is keyed under its container, its root and every unit — once each, in that order", () => {
+test("claudecode: a checkout is keyed under its container, its root and every unit — once each, in that order; a checkout's places without units is the container and root", () => {
+  assert.deepEqual(keyedPaths({ container: "/w/gone", root: "/w/gone/repo", units: [] }), ["/w/gone", "/w/gone/repo"]);
   const plain = checkout("/w/one", "/w/one", ["/w/one"]);
   assert.deepEqual(keyedPaths(plain), ["/w/one"]);
   const wt = checkout("/w/two", "/w/two/repo", ["/w/two/repo", "/w/two/wt-feat"]);
@@ -51,11 +52,11 @@ test("claudecode: latestTranscript — the unit's own newest session first, else
   assert.equal(latestTranscript(c, { path: "/w/three/wt-a" })?.file, join(recordDir("/w/three"), "container.jsonl"));   // none of its own: the checkout's newest
 });
 
-test("claudecode: localMcp — ~/.claude.json's local-scope servers over the keyed paths, the first path to name a server wins; no file or no JSON is nothing", () => {
+test("claudecode: localMcp — ~/.claude.json's local-scope servers over the keyed paths, the first path to name a server wins; no file is none, a file that is not JSON is an error", () => {
   const c = checkout("/w/four", "/w/four/repo", ["/w/four/repo"]);
   assert.deepEqual(localMcp(c), {});
   writeFileSync(join(tmp, ".claude.json"), "not json");
-  assert.deepEqual(localMcp(c), {});
+  assert.throws(() => localMcp(c), /\.claude\.json is not valid JSON/);
   writeFileSync(join(tmp, ".claude.json"), JSON.stringify({ projects: {
     "/w/four": { mcpServers: { a: { type: "stdio", command: "a-from-container" } } },
     "/w/four/repo": { mcpServers: { a: { type: "stdio", command: "a-from-repo" }, b: { type: "http", url: "https://b.example" } } },

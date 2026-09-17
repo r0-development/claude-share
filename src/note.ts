@@ -64,16 +64,19 @@ export function gitNote(f: NoteFacts): string {
 }
 
 // ---------------------------------------------------------------- the sources, and the live ones
+/** A session to summarise: when it ended, and its transcript (jsonl) — read only when asked for. */
+export interface Session { ended: string; read: () => string }
+/** Claude's note over a digest, or why there is none. */
+export type Summary = { note: string } | { why: string };
 export interface NoteSources {
-  /** The session to summarise: the unit's own newest, else the checkout's. `read` gives the transcript (jsonl) only when asked. */
-  transcript: (c: Checkout, unit: { path: string }) => { ended: string; read: () => string } | undefined;
-  /** Claude's note over the digest, or why there is none. */
-  summarise: (digest: string) => Promise<{ note: string } | { why: string }>;
+  /** The session to summarise: the unit's own newest, else the checkout's. */
+  transcript: (c: Checkout, unit: { path: string }) => Session | undefined;
+  summarise: (digest: string) => Promise<Summary>;
   /** What the git-derived note says besides the branch: the changed files and the last commit's subject. */
   facts: (unit: { path: string }) => { changed: string[]; subject: string };
 }
 /** Headless `claude` over the digest, under the cap; offline or without `claude` it says so before starting anything. */
-async function claudeSummary(text: string): Promise<{ note: string } | { why: string }> {
+async function claudeSummary(text: string): Promise<Summary> {
   if (process.env.CS_OFFLINE) return { why: "offline" };
   if (!which("claude")) return { why: "claude not on PATH" };
   const cap = noteTimeout();
@@ -88,29 +91,26 @@ async function claudeSummary(text: string): Promise<{ note: string } | { why: st
 export const liveSources: NoteSources = {
   transcript: (c, unit) => { const t = latestTranscript(c, unit); return t && { ended: t.ended, read: () => readFileSync(t.file, "utf8") }; },
   summarise: claudeSummary,
-  facts: (unit) => ({
-    changed: [...new Set([...git.out(["diff", "--name-only", "HEAD"], unit.path).split("\n"), ...git.out(["ls-files", "-o", "--exclude-standard"], unit.path).split("\n")].filter(Boolean))].sort(),
-    subject: git.out(["log", "-1", "--format=%s"], unit.path),
-  }),
+  facts: (unit) => ({ changed: git.changedFiles(unit.path), subject: git.out(["log", "-1", "--format=%s"], unit.path) }),
 };
 
 // ---------------------------------------------------------------- the decision
 /** The note for a handoff about to be sent. `explicit` is -m and always wins. `earlier` is my own handoff being replaced:
  *  a note typed into it stays unless a session newer than it produced a Claude summary; a generated note is regenerated. */
-export async function pickNote(unit: { path: string; branch: string }, c: Checkout, explicit: string | undefined, earlier: (Note & { at: string }) | undefined, s: NoteSources = liveSources): Promise<Note> {
+export async function pickNote(unit: { path: string; branch: string }, c: Checkout, explicit: string | undefined, earlier: (Note & { at: string }) | undefined, sources: NoteSources = liveSources): Promise<Note> {
   if (explicit) return { note: explicit, source: "explicit" };
   const typed = earlier?.source === "explicit" && earlier.note ? earlier : undefined;
-  const t = s.transcript(c, unit);
+  const t = sources.transcript(c, unit);
   if (typed && !(t && t.ended > typed.at)) return { note: typed.note, source: "explicit" };   // nothing newer to summarise
-  const g = await generate(unit, t, s);
+  const g = await generate(unit, t, sources);
   return typed && g.source === "git" ? { note: typed.note, source: "explicit" } : g;
 }
 /** Claude's summary of the transcript, or the git-derived note with the reason. */
-async function generate(unit: { path: string; branch: string }, t: { ended: string; read: () => string } | undefined, s: NoteSources): Promise<Note> {
-  const facts: NoteFacts = { branch: unit.branch, ...s.facts(unit), ended: t?.ended, why: "" };
+async function generate(unit: { path: string; branch: string }, t: Session | undefined, sources: NoteSources): Promise<Note> {
+  const facts: NoteFacts = { branch: unit.branch, ...sources.facts(unit), ended: t?.ended, why: "" };
   const fallback = (why: string): Note => ({ note: gitNote({ ...facts, why }), source: "git" });
   if (!t) return fallback("no session transcript for this project");
   const text = digest(t.read()); if (!text) return fallback("the session transcript is empty");
-  const r = await s.summarise(text);
+  const r = await sources.summarise(text);
   return "note" in r ? { note: r.note, source: "claude" } : fallback(r.why);
 }

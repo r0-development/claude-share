@@ -80,3 +80,5 @@ export function trailers(p: string, sha: string): Record<string, string> {
 }
 export const slug = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "") || "x";
 export const exists = (p: string) => { try { statSync(p); return true; } catch { return false; } };
+/** Files changed in the working tree: modified against HEAD plus untracked (not ignored), each once, sorted. */
+export const changedFiles = (dir: string) => [...new Set([...out(["diff", "--name-only", "HEAD"], dir).split("\n"), ...out(["ls-files", "-o", "--exclude-standard"], dir).split("\n")].filter(Boolean))].sort();
