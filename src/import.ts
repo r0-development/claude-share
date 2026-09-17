@@ -1,17 +1,19 @@
 /** cs import memory|project|mcp <name>: pull existing local state into the share. */
 import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { basename, dirname, extname, join, relative } from "node:path";
-import { claudeDir, claudeJson, contract } from "./paths.js";
+import { contract } from "./paths.js";
 import type { Project } from "./manifest.js";
 import { workspace, type Share } from "./share.js";
-import { checkoutRoot, container, dirs } from "./checkout.js";
+import { locate, present, type Checkout } from "./checkout.js";
+import { localMcp, memoryDirs } from "./claudecode.js";
 import { memoryDir, place, projectState } from "./projectstate.js";
 import { dumps, loads } from "./jsonmerge.js";
 import * as ui from "./ui.js";
 
-export const claudeProjectKey = (p: string) => p.replace(/[^A-Za-z0-9]/g, "-");
-export function candidatePaths(p: Project, ws: string): string[] {
-  const c = [container(p, ws), checkoutRoot(p, ws), ...dirs(p, ws)]; return [...new Set(c)];
+/** Memory and MCP servers are read from Claude Code's record of the checkout, so there has to be one. */
+function checkoutOf(share: Share, p: Project): Checkout | undefined {
+  const c = locate(p, workspace(share)); if (present(c)) return c;
+  ui.skip(`${p.name}: ${c.why === "missing" ? `no checkout at ${contract(c.root)}` : c.why}`); return undefined;
 }
 export const unionLines = (a: string, b: string) => { const lines = a.split("\n").filter((x, i, arr) => !(i === arr.length - 1 && x === "")); const seen = new Set(lines);
   for (const l of b.split("\n")) if (l && !seen.has(l)) { lines.push(l); seen.add(l); } return lines.join("\n") + "\n"; };
@@ -19,10 +21,9 @@ export const unionLines = (a: string, b: string) => { const lines = a.split("\n"
 function walkFiles(dir: string): string[] { const out: string[] = []; const rec = (d: string) => { for (const e of readdirSync(d, { withFileTypes: true })) { const f = join(d, e.name); e.isDirectory() ? rec(f) : out.push(f); } }; if (existsSync(dir)) rec(dir); return out.sort(); }
 
 export function importMemory(share: Share, p: Project, check = false): number {
-  const dest = memoryDir(share, p.name), machine = share.machine.name, ws = workspace(share); let n = 0;
-  for (const cand of candidatePaths(p, ws)) {
-    const src = join(claudeDir(), "projects", claudeProjectKey(cand), "memory");
-    if (!existsSync(src)) continue;
+  const c = checkoutOf(share, p); if (!c) return 0;
+  const dest = memoryDir(share, p.name), machine = share.machine.name; let n = 0;
+  for (const src of memoryDirs(c)) {
     ui.info(`${p.name}: importing memory from ${contract(src)}`);
     for (const f of walkFiles(src)) {
       const rel = relative(src, f); const target = join(dest, rel);
@@ -43,14 +44,9 @@ export function envVarName(server: string, key: string) {
   const st = server.toUpperCase().split(/[^A-Z0-9]+/).filter(Boolean); let kt = key.toUpperCase().split(/[^A-Z0-9]+/).filter(Boolean);
   if (st.length && kt.length && kt[0] === st[0]) kt = kt.slice(1); return [...st, ...kt].join("_");
 }
-function localScope(p: Project, ws: string): Record<string, any> {
-  if (!existsSync(claudeJson())) return {};
-  const data = JSON.parse(readFileSync(claudeJson(), "utf8")); const found: Record<string, any> = {};
-  for (const cand of candidatePaths(p, ws)) for (const [n, cfg] of Object.entries<any>(data.projects?.[cand]?.mcpServers ?? {})) found[n] ??= cfg;
-  return found;
-}
 export function importMcp(share: Share, p: Project, check = false, show = false): number {
-  const found = localScope(p, workspace(share));
+  const c = checkoutOf(share, p); if (!c) return 0;
+  const found = localMcp(c);
   if (show) { for (const [n, cfg] of Object.entries<any>(found)) { for (const [k, v] of Object.entries<any>(cfg.env ?? {})) console.log(`${envVarName(n, k)}=${v}`); for (const [k, v] of Object.entries<any>(cfg.headers ?? {})) console.log(`${envVarName(n, k)}=${v}`); } return Object.keys(found).length; }
   if (!Object.keys(found).length) { ui.ok(`${p.name}: no local-scope MCP servers in ~/.claude.json`); return 0; }
   const side = projectState(share, p.name); const f = join(side, ".mcp.json");
