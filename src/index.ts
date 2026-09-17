@@ -68,11 +68,8 @@ sec.command("set <name> <pairs...>").description("global | <project>  KEY=VALUE 
 sec.command("get <name> [key]").description("global | <project>  (masked; --show for values)").option("--show").action(async (n, k, o) => { const share = open(); process.exitCode = await (await S()).get(share, n, k, o.show); });
 sec.command("edit <name>").description("global | <project>  in $EDITOR").action(async (n) => { const share = open(); await (await S()).edit(share, n); });
 sec.command("unset <name> <keys...>", HIDDEN).action(async (n, keys) => { const share = open(); await (await S()).unsetValues(share, n, keys); });
-sec.command("init", HIDDEN).action(async () => { const share = open(); await ui.command("cs secrets init", async () => ui.group("secrets", async () => (await S()).init(share, ui.isTTY()))); });
+sec.command("init", HIDDEN).action(async () => { const share = open(); await ui.command("cs secrets init", async () => ui.group("secrets", async () => (await S()).init(share))); });
 sec.command("status", HIDDEN).action(async () => { const share = open(); ui.intro("cs secrets status"); await (await S()).status(share); ui.outro(ui.dim("cs secrets set · cs trust <machine>")); });
-sec.command("pull <project>", HIDDEN).option("--force").action(async (p, o) => { const share = open(); process.exitCode = await (await S()).pull(share, p, o.force); });
-sec.command("push <project>", HIDDEN).action(async (p) => { const share = open(); process.exitCode = await (await S()).push(share, p); });
-sec.command("diff <project>", HIDDEN).action(async (p) => { const share = open(); process.exitCode = await (await S()).diff(share, p); });
 sec.command("exec [command...]", HIDDEN).description("run a command with global + project secrets in its environment").option("-p, --project <name>").passThroughOptions().allowUnknownOption()
   .action(async (command, o) => { const share = open(); const cmd = command[0] === "--" ? command.slice(1) : command; process.exitCode = await (await S()).exec(share, o.project, cmd); });
 sec.command("recovery", HIDDEN).action(async () => { const share = open(); await ui.command("cs secrets recovery", async () => (await S()).recovery(share)); });

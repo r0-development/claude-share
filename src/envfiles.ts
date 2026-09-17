@@ -1,14 +1,14 @@
-/** .env files, the I/O half of src/env.ts: observe a project's files — here, stored in the share's secrets area, and the
- *  last-synced snapshot of this machine — and apply a merge. cs sync's gather step observes; its env step applies what
- *  the plan screen confirmed. Values only ever reach the share through the secrets backend (encrypted). */
+/** .env files, the I/O half of src/env.ts: observe a project's files — here, in the secrets store, and the last-synced
+ *  snapshot of this machine — and apply a merge. cs sync's gather step observes; its env step applies what the plan
+ *  screen confirmed. Values only ever reach the share through the store (encrypted); tests/envfiles.test.ts runs the
+ *  cycles against the in-memory one. */
 import { chmodSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import * as git from "./git.js";
 import { stateDir } from "./paths.js";
 import type { Project } from "./manifest.js";
-import { stampOf, type Share } from "./share.js";
-import { dumpDotenv, envFile, parseDotenv, type Backend } from "./secrets/index.js";
-import { blank, classify, fileOf, isEnvName, merge3, mergeKeys, patchDotenv, storeName, type EnvKind, type KeysMerge, type Merge, type Side, type Values } from "./env.js";
+import type { SecretsStore } from "./secrets/index.js";
+import { blank, classify, dumpDotenv, fileOf, isEnvName, merge3, mergeKeys, parseDotenv, patchDotenv, storeName, type EnvKind, type KeysMerge, type Merge, type Side, type Values } from "./env.js";
 
 /** One `.env*` file of a project: both sides as observed, the snapshot, and the merge they imply (before any decision).
  *  A keys-only file (`kind: "local"`) stores and snapshots blank values; `example` is the project's `.env.example`, where a key new here takes its value from. */
@@ -27,32 +27,30 @@ const snapshotFile = (project: string, file: string) => join(stateDir(), "env", 
 const readValues = (f: string): Values | undefined => (existsSync(f) ? parseDotenv(readFileSync(f, "utf8")) : undefined);
 const mtime = (f: string) => new Date(statSync(f).mtimeMs).toISOString();
 
-/** Stored entries of `project` in the share, as file names (`.env`, `.env.production`); an entry that is another project's name is not one of ours. */
-function storedFiles(repo: string, project: string, others: Set<string>): string[] {
-  const d = join(repo, "secrets", "projects"); if (!existsSync(d)) return [];
-  return readdirSync(d).filter((n) => n.endsWith(".env")).map((n) => n.slice(0, -4)).filter((e) => !others.has(e) || e === project).map((e) => fileOf(project, e)).filter((f): f is string => !!f);
+/** Stored entries of `project`, as file names (`.env`, `.env.production`); an entry that is another project's name is not one of ours. */
+async function storedFiles(store: SecretsStore, project: string, others: Set<string>): Promise<string[]> {
+  return (await store.list()).filter((e) => !others.has(e) || e === project).map((e) => fileOf(project, e)).filter((f): f is string => !!f);
 }
 
-/** Observe every `.env*` file the project has here or in the share. `env = false` projects are never observed (the caller skips them).
+/** Observe every `.env*` file the project has here or in the store. `env = false` projects are never observed (the caller skips them).
  *  A side that has no file at all (fresh checkout, entry dropped from the share) is merged without the snapshot: the other
  *  side's keys are pulled or stored again — a whole file is never deleted because it is missing on one machine.
  *  Keys-only files share everything but the merge: their entry holds the keys with blank values. */
-export async function observeEnv(share: Share, b: Backend, p: Project, root: string, others: Set<string>): Promise<EnvState[]> {
-  const repo = share.path;
+export async function observeEnv(store: SecretsStore, p: Project, root: string, others: Set<string>): Promise<EnvState[]> {
   const extraLocal = (p.env && p.env.local) || [];
   const here = existsSync(root) ? readdirSync(root).filter(isEnvName) : [];
-  const files = [...new Set([...here, ...storedFiles(repo, p.name, others)])].sort();
+  const files = [...new Set([...here, ...(await storedFiles(store, p.name, others))])].sort();
   const out: EnvState[] = []; const example = readValues(join(root, ".env.example"));
   for (const file of files) {
     const tracked = git.git(["ls-files", "--error-unmatch", "--", file], root, { check: false }).code === 0;
     const ignored = git.git(["check-ignore", "-q", "--", file], root, { check: false }).code === 0;
     const kind = classify(file, { tracked, ignored }, extraLocal);
-    const name = storeName(p.name, file), path = join(root, file), sf = envFile(repo, name);
+    const name = storeName(p.name, file), path = join(root, file);
     const st: EnvState = { project: p.name, file, kind, name, path, localText: "", merge: { result: {}, toLocal: [], toStore: [], conflicts: [] } };
     if (kind !== "values" && kind !== "local") { out.push(st); continue; }
     if (kind === "local") st.example = example;
     if (existsSync(path)) { st.localText = readFileSync(path, "utf8"); st.local = parseDotenv(st.localText); st.localWhen = mtime(path); }
-    if (existsSync(sf)) { st.stored = await b.loadEnvA(repo, name); const s = stampOf(share, sf); st.storedWhen = s.when; st.storedFrom = s.from; }
+    const stored = await store.load(name); if (stored) { st.stored = stored.values; st.storedWhen = stored.when; st.storedFrom = stored.from; }
     if (st.local && st.stored) st.base = readValues(snapshotFile(p.name, file));
     st.merge = mergeOf(st);
     out.push(st);
@@ -69,15 +67,14 @@ function writeSnapshot(st: EnvState, values: Values) {
   mkdirSync(dirname(f), { recursive: true, mode: 0o700 }); writeFileSync(f, dumpDotenv(values), { mode: 0o600 });
 }
 
-/** Apply the merge with every conflict decided: the share entry is rewritten (encrypted) when keys change on that side,
- *  the local file is patched in place when keys change here (its previous text kept next to the snapshot as `<file>.prev`),
- *  and the snapshot records the result. Every key removed on both sides → the file goes on both sides. */
-export async function applyEnv(share: Share, b: Backend, st: EnvState, decide: Partial<Record<string, Side>> = {}): Promise<{ stored: number; local: number; toFill: string[] }> {
-  const repo = share.path;
+/** Apply the merge with every conflict decided: the entry is rewritten (encrypted) when keys change on that side, the local
+ *  file is patched in place when keys change here (its previous text kept next to the snapshot as `<file>.prev`), and the
+ *  snapshot records the result. Every key removed on both sides → the file goes on both sides (an empty entry is none). */
+export async function applyEnv(store: SecretsStore, st: EnvState, decide: Partial<Record<string, Side>> = {}): Promise<{ stored: number; local: number; toFill: string[] }> {
   const m = mergeOf(st, decide);
   if (m.conflicts.length) throw new Error(`cs: ${st.project} ${st.file}: undecided keys ${m.conflicts.map((c) => c.key).join(", ")}`);
   const empty = !Object.keys(m.result).length;
-  if (m.toStore.length) { if (empty) rmSync(envFile(repo, st.name), { force: true }); else await b.writeEnvA(repo, st.name, st.kind === "local" ? blank(m.result) : m.result); }
+  if (m.toStore.length) await store.write(st.name, st.kind === "local" ? blank(m.result) : m.result);
   if (m.toLocal.length) {
     if (st.local) { const prev = snapshotFile(st.project, st.file) + ".prev"; mkdirSync(dirname(prev), { recursive: true, mode: 0o700 }); writeFileSync(prev, st.localText, { mode: 0o600 }); }
     if (empty) rmSync(st.path, { force: true });

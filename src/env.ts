@@ -58,6 +58,15 @@ export function mergeKeys(base: string[] | undefined, local: Values, stored: str
   return { result, toLocal: m.toLocal, toStore: m.toStore, conflicts: [], toFill: Object.keys(result).filter((k) => result[k] === "") };
 }
 
+// ---------------------------------------------------------------- the dotenv codec: parse / patch / dump
+/** A `KEY=value` line, `export` allowed: the prefix, the key and the raw value. Anything else (comments, blanks) is not a key. */
+const LINE = /^(\s*(?:export\s+)?)([A-Za-z_][A-Za-z0-9_]*)\s*=(.*)$/;
+/** The values of a dotenv text; a key's first line counts (what `patchDotenv` rewrites), quotes are stripped. */
+export function parseDotenv(text: string): Values {
+  const out: Values = {};
+  for (const line of text.split("\n")) { const m = line.match(LINE); if (m && !(m[2] in out)) out[m[2]] = parseValue(m[3]); }
+  return out;
+}
 /** An empty value is written bare (`KEY=`): what a key to fill in looks like. */
 const quote = (v: string) => (v === "" ? "" : /[ #"'\\$`]/.test(v) ? JSON.stringify(v) : v);
 /** Rewrite a dotenv text to hold exactly `values`: lines of keys that keep their value stay byte for byte (comments, order,
@@ -66,7 +75,7 @@ export function patchDotenv(text: string, values: Values): string {
   const seen = new Set<string>(); const out: string[] = [];
   const lines = text.split("\n"); if (lines[lines.length - 1] === "") lines.pop();
   for (const line of lines) {
-    const m = line.match(/^(\s*(?:export\s+)?)([A-Za-z_][A-Za-z0-9_]*)\s*=(.*)$/);
+    const m = line.match(LINE);
     if (!m || seen.has(m[2])) { out.push(line); continue; }
     const k = m[2]; seen.add(k);
     if (!(k in values)) continue;
@@ -76,6 +85,8 @@ export function patchDotenv(text: string, values: Values): string {
   for (const [k, v] of Object.entries(values)) if (!seen.has(k)) out.push(`${k}=${quote(v)}`);
   return out.length ? out.join("\n") + "\n" : "";
 }
+/** A dotenv text holding exactly `values`, one key per line: a patch of the empty text. */
+export const dumpDotenv = (values: Values) => patchDotenv("", values);
 function parseValue(raw: string): string {
   let v = raw.trim();
   if (v.length >= 2 && v[0] === '"' && v[v.length - 1] === '"') { try { return JSON.parse(v); } catch { return v.slice(1, -1); } }

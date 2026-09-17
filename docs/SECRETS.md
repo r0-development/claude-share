@@ -20,7 +20,6 @@ so diffs make sense. A pre-commit guard refuses plaintext there.
 | `cs secrets set global KEY=VALUE …` / `unset` / `get [--show]` / `edit` | manage values |
 | `cs secrets set <project> KEY=VALUE` | project-scoped values (override global) |
 | `cs sync` | carries the project's gitignored `.env*` files, merged per key (below) |
-| `cs secrets push <project>` / `pull <project>` / `diff <project>` | (hidden) the project's whole `.env` file ⇄ the share, no merge |
 | `cs secrets exec [-p project] -- cmd` | run anything with global + project values in its environment |
 | `cs secrets recovery` | add a recovery recipient; prints its private key once for your password manager |
 

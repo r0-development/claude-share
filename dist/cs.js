@@ -157,8 +157,8 @@ var require_argument = __commonJS({
        * @param {string[]} values
        * @return {Argument}
        */
-      choices(values) {
-        this.argChoices = values.slice();
+      choices(values2) {
+        this.argChoices = values2.slice();
         this.parseArg = (arg, previous) => {
           if (!this.argChoices.includes(arg)) {
             throw new InvalidArgumentError2(
@@ -925,8 +925,8 @@ var require_option = __commonJS({
        * @param {string[]} values
        * @return {Option}
        */
-      choices(values) {
-        this.argChoices = values.slice();
+      choices(values2) {
+        this.argChoices = values2.slice();
         this.parseArg = (arg, previous) => {
           if (!this.argChoices.includes(arg)) {
             throw new InvalidArgumentError2(
@@ -6508,9 +6508,9 @@ function loadManifest(repo) {
   if (errs.length) throw new Error("cs: projects.toml invalid:\n  " + errs.join("\n  "));
   return m;
 }
-function block2(header, values) {
+function block2(header, values2) {
   const clean2 = {};
-  for (const [k, v] of Object.entries(values)) if (v !== void 0 && v !== "" && !(Array.isArray(v) && !v.length)) clean2[k] = v;
+  for (const [k, v] of Object.entries(values2)) if (v !== void 0 && v !== "" && !(Array.isArray(v) && !v.length)) clean2[k] = v;
   return `[${header}]
 ` + stringify(clean2).trimEnd() + "\n";
 }
@@ -7387,24 +7387,32 @@ function mergeKeys(base, local, stored, example) {
   for (const k of Object.keys(m.result)) result[k] = local[k] ?? example[k] ?? "";
   return { result, toLocal: m.toLocal, toStore: m.toStore, conflicts: [], toFill: Object.keys(result).filter((k) => result[k] === "") };
 }
-function patchDotenv(text3, values) {
+function parseDotenv(text3) {
+  const out2 = {};
+  for (const line of text3.split("\n")) {
+    const m = line.match(LINE);
+    if (m && !(m[2] in out2)) out2[m[2]] = parseValue2(m[3]);
+  }
+  return out2;
+}
+function patchDotenv(text3, values2) {
   const seen = /* @__PURE__ */ new Set();
   const out2 = [];
   const lines = text3.split("\n");
   if (lines[lines.length - 1] === "") lines.pop();
   for (const line of lines) {
-    const m = line.match(/^(\s*(?:export\s+)?)([A-Za-z_][A-Za-z0-9_]*)\s*=(.*)$/);
+    const m = line.match(LINE);
     if (!m || seen.has(m[2])) {
       out2.push(line);
       continue;
     }
     const k = m[2];
     seen.add(k);
-    if (!(k in values)) continue;
+    if (!(k in values2)) continue;
     const cur = parseValue2(m[3]);
-    out2.push(cur === values[k] ? line : `${m[1]}${k}=${quote(values[k])}`);
+    out2.push(cur === values2[k] ? line : `${m[1]}${k}=${quote(values2[k])}`);
   }
-  for (const [k, v] of Object.entries(values)) if (!seen.has(k)) out2.push(`${k}=${quote(v)}`);
+  for (const [k, v] of Object.entries(values2)) if (!seen.has(k)) out2.push(`${k}=${quote(v)}`);
   return out2.length ? out2.join("\n") + "\n" : "";
 }
 function parseValue2(raw) {
@@ -7441,14 +7449,16 @@ function describeKeys(m, from) {
     m.toLocal.length - take.length ? `drop ${n3(m.toLocal.length - take.length)} here` : ""
   ].filter(Boolean).join(", ");
 }
-var isEnvName, storeName, blank, quote;
+var isEnvName, storeName, blank, LINE, quote, dumpDotenv;
 var init_env = __esm({
   "src/env.ts"() {
     "use strict";
     isEnvName = (name2) => /^\.env(\..+)?$/.test(name2);
     storeName = (project, file) => file === ".env" ? project : `${project}.${file.slice(".env.".length)}`;
     blank = (v) => Object.fromEntries((Array.isArray(v) ? v : Object.keys(v)).map((k) => [k, ""]));
+    LINE = /^(\s*(?:export\s+)?)([A-Za-z_][A-Za-z0-9_]*)\s*=(.*)$/;
     quote = (v) => v === "" ? "" : /[ #"'\\$`]/.test(v) ? JSON.stringify(v) : v;
+    dumpDotenv = (values2) => patchDotenv("", values2);
   }
 });
 
@@ -7527,16 +7537,16 @@ function handoffs(f, machine, actions, questions2, skipped) {
     }
     if (!u5.dirty && !u5.unpushed) continue;
     const label = `${name2} \xB7 ${u5.branch}`;
-    const push4 = u5.unpushed ? { id: `push:${name2}:${u5.branch}`, kind: "push", checkout: c2, unit: u5, label, hint: `${count(u5.unpushed, "unpushed commit")} \u2192 upstream`, checked: false } : void 0;
+    const push3 = u5.unpushed ? { id: `push:${name2}:${u5.branch}`, kind: "push", checkout: c2, unit: u5, label, hint: `${count(u5.unpushed, "unpushed commit")} \u2192 upstream`, checked: false } : void 0;
     if (handled.has(u5.branch) || u5.secrets?.length) {
       if (u5.secrets?.length) skipped.push(`${label}: not sent \u2014 files that look secret: ${u5.secrets.join(", ")}  (cs handoff --allow <glob>)`);
-      if (push4) actions.push(push4);
+      if (push3) actions.push(push3);
       continue;
     }
     const own = f.waiting.some((w) => w.branch === u5.branch && w.machine === machine);
     const bits = [u5.dirty ? count(u5.dirty, "change") : "", u5.unpushed ? count(u5.unpushed, "unpushed commit") : "", own ? "replaces the handoff sent from here earlier" : ""].filter(Boolean);
     actions.push({ id: `send:${name2}:${u5.branch}`, kind: "send", checkout: c2, unit: u5, label, hint: bits.join(", "), checked: true });
-    if (push4) actions.push(push4);
+    if (push3) actions.push(push3);
   }
 }
 function status(f, machine) {
@@ -7828,10 +7838,10 @@ async function send(c2, u5, m, o = {}) {
   const { note: note3, source } = await spin(`${label}: writing the note\u2026`, () => pickNote(u5, c2, o.note, earlier));
   const { sha, files } = await spin(`${label}: snapshotting\u2026`, () => buildSnapshot(u5, p, m, note3, hoff(p).extra ?? [], hoff(p).exclude ?? [], source));
   git(["update-ref", `refs/heads/${ref}`, sha], u5.path);
-  const push4 = await spin(`${label}: pushing ${ref}\u2026`, () => gitA(["push", "-q", `--force-with-lease=refs/heads/${ref}:${lease || ""}`, "origin", `refs/heads/${ref}:refs/heads/${ref}`], u5.path, { check: false, timeout: 120 }));
+  const push3 = await spin(`${label}: pushing ${ref}\u2026`, () => gitA(["push", "-q", `--force-with-lease=refs/heads/${ref}:${lease || ""}`, "origin", `refs/heads/${ref}:refs/heads/${ref}`], u5.path, { check: false, timeout: 120 }));
   git(["update-ref", "-d", `refs/heads/${ref}`], u5.path, { check: false });
-  if (push4.code !== 0) {
-    fail(`${label}: push rejected \u2014 ${push4.err.split("\n").pop()}`);
+  if (push3.code !== 0) {
+    fail(`${label}: push rejected \u2014 ${push3.err.split("\n").pop()}`);
     return { ok: false };
   }
   saveState(p, { handedOff: [{ ref, sha, branch: u5.branch, worktree: u5.rel, at: (/* @__PURE__ */ new Date()).toISOString() }], machine: m.name });
@@ -8914,23 +8924,22 @@ var init_projects = __esm({
 // src/secrets/sops.ts
 var sops_exports = {};
 __export(sops_exports, {
-  SopsBackend: () => SopsBackend,
+  edit: () => edit2,
+  envFile: () => envFile,
+  init: () => init,
   keyFile: () => keyFile,
   machinePubFile: () => machinePubFile,
   publicKey: () => publicKey,
   recipients: () => recipients,
+  sopsStore: () => sopsStore,
+  status: () => status2,
   updatekeys: () => updatekeys,
   writeRecipients: () => writeRecipients
 });
 import { chmodSync as chmodSync3, copyFileSync as copyFileSync4, existsSync as existsSync14, mkdirSync as mkdirSync14, readdirSync as readdirSync6, readFileSync as readFileSync16, rmSync as rmSync6, writeFileSync as writeFileSync13 } from "node:fs";
 import { dirname as dirname6, join as join18, relative as relative7 } from "node:path";
 import { spawnSync as spawnSync5 } from "node:child_process";
-function sops(args, repo, input, check = true) {
-  const p = spawnSync5(exe("sops"), args, { cwd: repo, env: env(), encoding: "utf8", input, stdio: ["pipe", "pipe", "pipe"] });
-  if (check && p.status !== 0) throw new Error(`cs: sops ${args.join(" ")} failed: ${(p.stderr ?? "").trim()}`);
-  return p;
-}
-async function sopsA(args, repo) {
+async function sops(args, repo) {
   const { exec: exec4 } = await Promise.resolve().then(() => (init_proc(), proc_exports));
   const p = await exec4(exe("sops"), args, { cwd: repo, env: env() });
   if (p.code !== 0) throw new Error(`cs: sops ${args.join(" ")} failed: ${p.err}`);
@@ -8964,7 +8973,7 @@ creation_rules:
     age: >-
 ` + recs.map((r2) => `      ${r2}`).join(",\n") + "\n");
 }
-function envFiles(repo) {
+function envFiles(dir) {
   const out2 = [];
   const rec = (d) => {
     if (!existsSync14(d)) return;
@@ -8973,27 +8982,109 @@ function envFiles(repo) {
       e.isDirectory() ? rec(f) : f.endsWith(".env") && out2.push(f);
     }
   };
-  rec(join18(repo, "secrets"));
+  rec(dir);
   return out2.sort();
 }
 async function updatekeys(repo) {
   const { exec: exec4 } = await Promise.resolve().then(() => (init_proc(), proc_exports));
   let n3 = 0;
-  for (const f of envFiles(repo)) if (isEncrypted(f)) {
+  for (const f of envFiles(join18(repo, "secrets"))) if (isEncrypted(f)) {
     const p = await exec4(exe("sops"), ["updatekeys", "-y", relative7(repo, f)], { cwd: repo, env: env() });
     if (p.code !== 0) throw new Error(`cs: sops updatekeys failed: ${p.err}`);
     n3++;
   }
   return n3;
 }
-var RULE, keyFile, env, exe, machinePubFile, isEncrypted, SopsBackend;
+function sopsStore(share) {
+  const repo = share.path;
+  return {
+    name: "sops",
+    ready: () => existsSync14(keyFile()) && recipients(repo).includes(publicKey()),
+    list: async () => {
+      const d = join18(repo, "secrets", "projects");
+      return [...existsSync14(envFile(repo, "global")) ? ["global"] : [], ...existsSync14(d) ? readdirSync6(d).filter((f) => f.endsWith(".env")).map((f) => f.slice(0, -4)).sort() : []];
+    },
+    async load(name2) {
+      const f = envFile(repo, name2);
+      if (!existsSync14(f)) return void 0;
+      const values2 = parseDotenv((await sops(["-d", ...DOTENV, relative7(repo, f)], repo)).out);
+      return { values: values2, ...stampOf(share, f) };
+    },
+    async write(name2, values2) {
+      const f = envFile(repo, name2);
+      if (!Object.keys(values2).length) {
+        rmSync6(f, { force: true });
+        return;
+      }
+      mkdirSync14(dirname6(f), { recursive: true });
+      const tmp = join18(dirname6(f), `.${name2.replace(/\//g, "_")}.plain.${process.pid}.env`);
+      writeFileSync13(tmp, dumpDotenv(values2), { mode: 384 });
+      try {
+        const p = await sops(["-e", ...DOTENV, "--filename-override", relative7(repo, f), relative7(repo, tmp)], repo);
+        writeFileSync13(f, p.out);
+      } finally {
+        rmSync6(tmp, { force: true });
+      }
+    }
+  };
+}
+async function init(share) {
+  const repo = share.path, m = share.machine;
+  if (existsSync14(keyFile())) skip(`age key present at ${contract(keyFile())}`);
+  else {
+    keygen();
+    ok(`generated age key ${contract(keyFile())} (0600, never synced)`);
+  }
+  const pub = publicKey();
+  const pf = machinePubFile(repo, m.name);
+  if (!existsSync14(pf) || readFileSync16(pf, "utf8").trim() !== pub) {
+    mkdirSync14(dirname6(pf), { recursive: true });
+    writeFileSync13(pf, pub + "\n");
+    commit2(share, `machines: ${m.name} age.pub`, [pf]);
+    ok(`published ${contract(pf)}`);
+  }
+  const recs = recipients(repo);
+  if (!recs.length) {
+    writeRecipients(repo, [pub]);
+    commit2(share, "secrets: first recipient", [".sops.yaml"]);
+    ok("this is the first machine: registered as the only recipient");
+    const hook = join18(repo, ".git", "hooks", "pre-commit"), src = join18(toolRoot(), "hooks", "pre-commit-secrets-guard.sh");
+    if (existsSync14(src) && !existsSync14(hook)) {
+      copyFileSync4(src, hook);
+      chmodSync3(hook, 493);
+      ok("installed pre-commit plaintext guard in the share");
+    }
+  } else if (recs.includes(pub)) ok("this machine can decrypt secrets");
+  else step("this machine is not a recipient yet");
+  mkdirSync14(join18(repo, "secrets", "projects"), { recursive: true });
+}
+async function edit2(share, name2) {
+  const repo = share.path, f = envFile(repo, name2);
+  if (!existsSync14(f)) await sopsStore(share).write(name2, { EXAMPLE_KEY: "value" });
+  spawnSync5(exe("sops"), [...DOTENV, relative7(repo, f)], { cwd: repo, env: env(), stdio: "inherit" });
+}
+function status2(share) {
+  const repo = share.path, m = share.machine;
+  const pub = publicKey(), recs = recipients(repo);
+  kv("age key", contract(keyFile()) + (existsSync14(keyFile()) ? "" : red("  missing")));
+  kv("recipient", pub && recs.includes(pub) ? green("yes") : red("no \u2014 cs trust " + m.name));
+  const names = {};
+  const md = join18(repo, "machines");
+  if (existsSync14(md)) for (const d of readdirSync6(md)) {
+    const pf = join18(md, d, "age.pub");
+    if (existsSync14(pf)) names[readFileSync16(pf, "utf8").trim()] = d;
+  }
+  kv("recipients", recs.map((r2) => names[r2] ?? r2.slice(0, 14) + "\u2026").join(", ") || "-");
+  kv("files", envFiles(join18(repo, "secrets")).map((f) => relative7(repo, f)).join(", ") || "-");
+}
+var RULE, keyFile, env, exe, DOTENV, envFile, machinePubFile, isEncrypted;
 var init_sops = __esm({
   "src/secrets/sops.ts"() {
     "use strict";
     init_paths();
     init_deps();
     init_share();
-    init_secrets();
+    init_env();
     init_ui();
     RULE = "^secrets/.*\\.env$";
     keyFile = () => process.env.SOPS_AGE_KEY_FILE || join18(home(), ".config", "sops", "age", "keys.txt");
@@ -9003,6 +9094,8 @@ var init_sops = __esm({
       return e;
     };
     exe = (n3) => which(n3) || join18(home(), ".local", "bin", n3);
+    DOTENV = ["--input-type", "dotenv", "--output-type", "dotenv"];
+    envFile = (repo, name2) => name2 === "global" ? join18(repo, "secrets", "global.env") : join18(repo, "secrets", "projects", `${name2}.env`);
     machinePubFile = (repo, machine) => join18(repo, "machines", machine, "age.pub");
     isEncrypted = (f) => {
       try {
@@ -9011,184 +9104,52 @@ var init_sops = __esm({
         return false;
       }
     };
-    SopsBackend = {
-      name: "sops",
-      async init(share) {
-        const repo = share.path, m = share.machine;
-        if (existsSync14(keyFile())) skip(`age key present at ${contract(keyFile())}`);
-        else {
-          keygen();
-          ok(`generated age key ${contract(keyFile())} (0600, never synced)`);
-        }
-        const pub = publicKey();
-        const pf = machinePubFile(repo, m.name);
-        if (!existsSync14(pf) || readFileSync16(pf, "utf8").trim() !== pub) {
-          mkdirSync14(dirname6(pf), { recursive: true });
-          writeFileSync13(pf, pub + "\n");
-          commit2(share, `machines: ${m.name} age.pub`, [pf]);
-          ok(`published ${contract(pf)}`);
-        }
-        const recs = recipients(repo);
-        if (!recs.length) {
-          writeRecipients(repo, [pub]);
-          commit2(share, "secrets: first recipient", [".sops.yaml"]);
-          ok("this is the first machine: registered as the only recipient");
-          const hook = join18(repo, ".git", "hooks", "pre-commit"), src = join18(toolRoot(), "hooks", "pre-commit-secrets-guard.sh");
-          if (existsSync14(src) && !existsSync14(hook)) {
-            copyFileSync4(src, hook);
-            chmodSync3(hook, 493);
-            ok("installed pre-commit plaintext guard in the share");
-          }
-        } else if (recs.includes(pub)) ok("this machine can decrypt secrets");
-        else step("this machine is not a recipient yet");
-        mkdirSync14(join18(repo, "secrets", "projects"), { recursive: true });
-      },
-      ready: (repo) => existsSync14(keyFile()) && recipients(repo).includes(publicKey()),
-      loadEnv(repo, name2) {
-        const f = envFile(repo, name2);
-        if (!existsSync14(f)) return {};
-        return parseDotenv(sops(["-d", "--input-type", "dotenv", "--output-type", "dotenv", relative7(repo, f)], repo).stdout);
-      },
-      writeEnv(repo, name2, values) {
-        const f = envFile(repo, name2);
-        mkdirSync14(dirname6(f), { recursive: true });
-        const rel = relative7(repo, f);
-        const tmp = join18(dirname6(f), `.${name2.replace(/\//g, "_")}.plain.${process.pid}.env`);
-        writeFileSync13(tmp, dumpDotenv(values), { mode: 384 });
-        try {
-          const p = sops(["-e", "--input-type", "dotenv", "--output-type", "dotenv", "--filename-override", rel, relative7(repo, tmp)], repo);
-          writeFileSync13(f, p.stdout);
-        } finally {
-          rmSync6(tmp, { force: true });
-        }
-        return f;
-      },
-      async loadEnvA(repo, name2) {
-        const f = envFile(repo, name2);
-        if (!existsSync14(f)) return {};
-        return parseDotenv((await sopsA(["-d", "--input-type", "dotenv", "--output-type", "dotenv", relative7(repo, f)], repo)).out);
-      },
-      async writeEnvA(repo, name2, values) {
-        const f = envFile(repo, name2);
-        mkdirSync14(dirname6(f), { recursive: true });
-        const rel = relative7(repo, f);
-        const tmp = join18(dirname6(f), `.${name2.replace(/\//g, "_")}.plain.${process.pid}.env`);
-        writeFileSync13(tmp, dumpDotenv(values), { mode: 384 });
-        try {
-          const p = await sopsA(["-e", "--input-type", "dotenv", "--output-type", "dotenv", "--filename-override", rel, relative7(repo, tmp)], repo);
-          writeFileSync13(f, p.out);
-        } finally {
-          rmSync6(tmp, { force: true });
-        }
-        return f;
-      },
-      edit(repo, name2) {
-        const f = envFile(repo, name2);
-        if (!existsSync14(f)) this.writeEnv(repo, name2, { EXAMPLE_KEY: "value" });
-        spawnSync5(exe("sops"), ["--input-type", "dotenv", "--output-type", "dotenv", relative7(repo, f)], { cwd: repo, env: env(), stdio: "inherit" });
-      },
-      status(share) {
-        const repo = share.path, m = share.machine;
-        const pub = publicKey(), recs = recipients(repo);
-        kv("age key", contract(keyFile()) + (existsSync14(keyFile()) ? "" : red("  missing")));
-        kv("recipient", pub && recs.includes(pub) ? green("yes") : red("no \u2014 cs trust " + m.name));
-        const names = {};
-        const md = join18(repo, "machines");
-        if (existsSync14(md)) for (const d of readdirSync6(md)) {
-          const pf = join18(md, d, "age.pub");
-          if (existsSync14(pf)) names[readFileSync16(pf, "utf8").trim()] = d;
-        }
-        kv("recipients", recs.map((r2) => names[r2] ?? r2.slice(0, 14) + "\u2026").join(", ") || "-");
-        kv("files", envFiles(repo).map((f) => relative7(repo, f)).join(", ") || "-");
-      }
-    };
-  }
-});
-
-// src/secrets/none.ts
-var none_exports = {};
-__export(none_exports, {
-  NoneBackend: () => NoneBackend
-});
-var no, NoneBackend;
-var init_none = __esm({
-  "src/secrets/none.ts"() {
-    "use strict";
-    init_ui();
-    no = () => {
-      throw new Error("cs: secrets backend 'none' cannot store secrets");
-    };
-    NoneBackend = {
-      name: "none",
-      async init() {
-        info(`secrets backend is 'none' \u2014 set [secrets].backend = "sops" in machine.toml to enable`);
-      },
-      ready: () => true,
-      loadEnv: () => ({}),
-      writeEnv: no,
-      loadEnvA: async () => ({}),
-      writeEnvA: no,
-      edit: no,
-      status: () => info("backend none")
-    };
   }
 });
 
 // src/secrets/index.ts
-import { join as join19 } from "node:path";
-async function getBackend(m) {
-  if (m.secretsBackend === "sops") return (await Promise.resolve().then(() => (init_sops(), sops_exports))).SopsBackend;
-  if (m.secretsBackend === "none") return (await Promise.resolve().then(() => (init_none(), none_exports))).NoneBackend;
-  throw new Error(`cs: unknown secrets backend '${m.secretsBackend}' (sops | none)`);
+async function secretsStore(share) {
+  const backend = share.machine.secretsBackend;
+  if (backend === "sops") return (await Promise.resolve().then(() => (init_sops(), sops_exports))).sopsStore(share);
+  if (backend === "none") return noneStore;
+  throw new Error(`cs: unknown secrets backend '${backend}' (sops | none)`);
 }
-function parseDotenv(text3) {
-  const out2 = {};
-  for (let line of text3.split("\n")) {
-    line = line.trim();
-    if (!line || line.startsWith("#") || !line.includes("=")) continue;
-    let [k, ...rest] = line.split("=");
-    let v = rest.join("=").trim();
-    k = k.trim().replace(/^export\s+/, "");
-    if (v.length >= 2 && v[0] === '"' && v[v.length - 1] === '"') {
-      try {
-        v = JSON.parse(v);
-      } catch {
-        v = v.slice(1, -1);
-      }
-    } else if (v.length >= 2 && v[0] === "'" && v[v.length - 1] === "'") v = v.slice(1, -1);
-    out2[k] = v;
-  }
-  return out2;
-}
-var envFile, dumpDotenv;
+var values, noneStore, noneInfo;
 var init_secrets = __esm({
   "src/secrets/index.ts"() {
     "use strict";
-    envFile = (repo, name2) => name2 === "global" ? join19(repo, "secrets", "global.env") : join19(repo, "secrets", "projects", `${name2}.env`);
-    dumpDotenv = (v) => Object.entries(v).map(([k, val]) => `${k}=${/[ #"'\\$`]/.test(val) || val === "" ? JSON.stringify(val) : val}`).join("\n") + (Object.keys(v).length ? "\n" : "");
+    init_ui();
+    values = async (store, name2) => (await store.load(name2))?.values ?? {};
+    noneStore = {
+      name: "none",
+      ready: () => true,
+      list: async () => [],
+      load: async () => void 0,
+      async write() {
+        throw new Error("cs: secrets backend 'none' cannot store secrets");
+      }
+    };
+    noneInfo = () => info(`secrets backend is 'none' \u2014 set [secrets].backend = "sops" in machine.toml to enable`);
   }
 });
 
 // src/envfiles.ts
 import { chmodSync as chmodSync4, existsSync as existsSync15, mkdirSync as mkdirSync15, readdirSync as readdirSync7, readFileSync as readFileSync17, rmSync as rmSync7, statSync as statSync8, writeFileSync as writeFileSync14 } from "node:fs";
-import { dirname as dirname7, join as join20 } from "node:path";
-function storedFiles(repo, project, others) {
-  const d = join20(repo, "secrets", "projects");
-  if (!existsSync15(d)) return [];
-  return readdirSync7(d).filter((n3) => n3.endsWith(".env")).map((n3) => n3.slice(0, -4)).filter((e) => !others.has(e) || e === project).map((e) => fileOf(project, e)).filter((f) => !!f);
+import { dirname as dirname7, join as join19 } from "node:path";
+async function storedFiles(store, project, others) {
+  return (await store.list()).filter((e) => !others.has(e) || e === project).map((e) => fileOf(project, e)).filter((f) => !!f);
 }
-async function observeEnv(share, b, p, root, others) {
-  const repo = share.path;
+async function observeEnv(store, p, root, others) {
   const extraLocal = p.env && p.env.local || [];
   const here = existsSync15(root) ? readdirSync7(root).filter(isEnvName) : [];
-  const files = [.../* @__PURE__ */ new Set([...here, ...storedFiles(repo, p.name, others)])].sort();
+  const files = [.../* @__PURE__ */ new Set([...here, ...await storedFiles(store, p.name, others)])].sort();
   const out2 = [];
-  const example = readValues(join20(root, ".env.example"));
+  const example = readValues(join19(root, ".env.example"));
   for (const file of files) {
     const tracked = git(["ls-files", "--error-unmatch", "--", file], root, { check: false }).code === 0;
     const ignored = git(["check-ignore", "-q", "--", file], root, { check: false }).code === 0;
     const kind = classify(file, { tracked, ignored }, extraLocal);
-    const name2 = storeName(p.name, file), path = join20(root, file), sf = envFile(repo, name2);
+    const name2 = storeName(p.name, file), path = join19(root, file);
     const st = { project: p.name, file, kind, name: name2, path, localText: "", merge: { result: {}, toLocal: [], toStore: [], conflicts: [] } };
     if (kind !== "values" && kind !== "local") {
       out2.push(st);
@@ -9200,11 +9161,11 @@ async function observeEnv(share, b, p, root, others) {
       st.local = parseDotenv(st.localText);
       st.localWhen = mtime(path);
     }
-    if (existsSync15(sf)) {
-      st.stored = await b.loadEnvA(repo, name2);
-      const s = stampOf(share, sf);
-      st.storedWhen = s.when;
-      st.storedFrom = s.from;
+    const stored = await store.load(name2);
+    if (stored) {
+      st.stored = stored.values;
+      st.storedWhen = stored.when;
+      st.storedFrom = stored.from;
     }
     if (st.local && st.stored) st.base = readValues(snapshotFile(p.name, file));
     st.merge = mergeOf(st);
@@ -9212,25 +9173,21 @@ async function observeEnv(share, b, p, root, others) {
   }
   return out2;
 }
-function writeSnapshot(st, values) {
+function writeSnapshot(st, values2) {
   const f = snapshotFile(st.project, st.file);
-  if (st.kind === "local") values = blank(values);
-  if (!Object.keys(values).length) {
+  if (st.kind === "local") values2 = blank(values2);
+  if (!Object.keys(values2).length) {
     rmSync7(f, { force: true });
     return;
   }
   mkdirSync15(dirname7(f), { recursive: true, mode: 448 });
-  writeFileSync14(f, dumpDotenv(values), { mode: 384 });
+  writeFileSync14(f, dumpDotenv(values2), { mode: 384 });
 }
-async function applyEnv(share, b, st, decide2 = {}) {
-  const repo = share.path;
+async function applyEnv(store, st, decide2 = {}) {
   const m = mergeOf(st, decide2);
   if (m.conflicts.length) throw new Error(`cs: ${st.project} ${st.file}: undecided keys ${m.conflicts.map((c2) => c2.key).join(", ")}`);
   const empty = !Object.keys(m.result).length;
-  if (m.toStore.length) {
-    if (empty) rmSync7(envFile(repo, st.name), { force: true });
-    else await b.writeEnvA(repo, st.name, st.kind === "local" ? blank(m.result) : m.result);
-  }
+  if (m.toStore.length) await store.write(st.name, st.kind === "local" ? blank(m.result) : m.result);
   if (m.toLocal.length) {
     if (st.local) {
       const prev = snapshotFile(st.project, st.file) + ".prev";
@@ -9257,11 +9214,9 @@ var init_envfiles = __esm({
     "use strict";
     init_git();
     init_paths();
-    init_share();
-    init_secrets();
     init_env();
     mergeOf = (st, decide2 = {}) => st.kind === "local" ? mergeKeys(st.base && Object.keys(st.base), st.local ?? {}, Object.keys(st.stored ?? {}), st.example ?? {}) : merge3(st.base, st.local ?? {}, st.stored ?? {}, decide2);
-    snapshotFile = (project, file) => join20(stateDir(), "env", project, file);
+    snapshotFile = (project, file) => join19(stateDir(), "env", project, file);
     readValues = (f) => existsSync15(f) ? parseDotenv(readFileSync17(f, "utf8")) : void 0;
     mtime = (f) => new Date(statSync8(f).mtimeMs).toISOString();
     newestSide = (st) => st.storedWhen && st.localWhen && Date.parse(st.storedWhen) > Date.parse(st.localWhen) ? "stored" : "local";
@@ -9274,8 +9229,8 @@ async function gather(share, o) {
   const ws = workspace2(share);
   const m = share.machine;
   const facts = [];
-  const backend = await getBackend(m);
-  const canRead = backend.name !== "none" && backend.ready(share.path);
+  const store = await secretsStore(share);
+  const canRead = store.name !== "none" && store.ready();
   const envSkipped = [];
   const names = new Set(Object.keys(share.manifest.projects));
   for (const p of selectedProjects2(share)) {
@@ -9286,11 +9241,11 @@ async function gather(share, o) {
     if (p.env !== false) {
       if (canRead) {
         try {
-          f.env = await observeEnv(share, backend, p, c2.root, names);
+          f.env = await observeEnv(store, p, c2.root, names);
         } catch (e) {
           envSkipped.push(`${p.name}: .env files not carried \u2014 ${String(e?.message ?? e).replace(/^cs: /, "").split("\n")[0]}`);
         }
-      } else if (!envSkipped.length && hasIgnoredEnv(c2.root)) envSkipped.push(backend.name === "none" ? ".env files not carried \u2014 secrets backend is 'none' (machine.toml [secrets].backend)" : `.env files not carried \u2014 this machine cannot read the secrets yet: cs secrets init here, or cs trust ${m.name} on a machine that can`);
+      } else if (!envSkipped.length && hasIgnoredEnv(c2.root)) envSkipped.push(store.name === "none" ? ".env files not carried \u2014 secrets backend is 'none' (machine.toml [secrets].backend)" : `.env files not carried \u2014 this machine cannot read the secrets yet: cs secrets init here, or cs trust ${m.name} on a machine that can`);
     }
     if (!enabled(p)) continue;
     const r2 = await spin(`${p.name}: fetching\u2026`, () => fetchWaiting(c2, { timeout: o.timeout, fetch: o.fetch }));
@@ -9477,10 +9432,10 @@ async function runSync(share, o = {}) {
   const states = facts.flatMap((f) => f.env ?? []);
   const keysOnly = states.filter((st) => st.kind === "local" && (st.merge.toLocal.length || st.merge.toStore.length));
   if (envRows.length || keysOnly.length) await group(".env files", async () => {
-    const b = await getBackend(m);
+    const store = await secretsStore(share);
     const one = async (label, st, decide2) => {
       try {
-        const r2 = await applyEnv(share, b, st, decide2);
+        const r2 = await applyEnv(store, st, decide2);
         envDone++;
         step(`${label}: ${[r2.stored ? `${count(r2.stored, "key")} stored` : "", r2.local ? `${count(r2.local, "key")} taken${st.storedFrom ? ` from ${st.storedFrom}` : ""}` : ""].filter(Boolean).join(", ")}${r2.toFill.length ? yellow(` \u2014 to fill in: ${r2.toFill.join(", ")}`) : ""}`);
       } catch (e) {
@@ -9636,9 +9591,9 @@ __export(remove_exports, {
   secretsFiles: () => secretsFiles
 });
 import { existsSync as existsSync17, readdirSync as readdirSync9, rmSync as rmSync8 } from "node:fs";
-import { join as join21, relative as relative8 } from "node:path";
+import { join as join20, relative as relative8 } from "node:path";
 function secretsFiles(share, name2) {
-  return secretEntries(share.path).filter((e) => fileOf(name2, e) && (e === name2 || !share.manifest.projects[e])).map((e) => join21(secretsDir(share.path), `${e}.env`));
+  return secretEntries(share.path).filter((e) => fileOf(name2, e) && (e === name2 || !share.manifest.projects[e])).map((e) => join20(secretsDir(share.path), `${e}.env`));
 }
 function orphans(share) {
   const repo = share.path, man = share.manifest;
@@ -9735,9 +9690,9 @@ var init_remove = __esm({
     init_env();
     init_sharekey();
     init_ui();
-    secretsDir = (repo) => join21(repo, "secrets", "projects");
+    secretsDir = (repo) => join20(repo, "secrets", "projects");
     secretEntries = (repo) => existsSync17(secretsDir(repo)) ? readdirSync9(secretsDir(repo)).filter((f) => f.endsWith(".env")).map((f) => f.slice(0, -4)).sort() : [];
-    countFiles = (dir) => readdirSync9(dir, { withFileTypes: true }).reduce((n3, e) => n3 + (e.isDirectory() ? countFiles(join21(dir, e.name)) : e.isFile() && e.name !== ".gitkeep" ? 1 : 0), 0);
+    countFiles = (dir) => readdirSync9(dir, { withFileTypes: true }).reduce((n3, e) => n3 + (e.isDirectory() ? countFiles(join20(dir, e.name)) : e.isFile() && e.name !== ".gitkeep" ? 1 : 0), 0);
     subTables = (text3, name2) => [...text3.matchAll(projectTableRe(name2, "gm"))].map((m) => m[0].replace(/\s*(#.*)?$/, ""));
   }
 });
@@ -9745,66 +9700,64 @@ var init_remove = __esm({
 // src/secretscmd.ts
 var secretscmd_exports = {};
 __export(secretscmd_exports, {
-  diff: () => diff,
-  edit: () => edit2,
+  edit: () => edit3,
   ensureRecipient: () => ensureRecipient,
   environment: () => environment,
   exec: () => exec3,
   get: () => get,
-  init: () => init,
-  pull: () => pull,
-  push: () => push2,
+  init: () => init2,
   recovery: () => recovery,
   setValues: () => setValues,
-  status: () => status2,
+  status: () => status3,
   trust: () => trust,
   unsetValues: () => unsetValues,
   untrust: () => untrust
 });
-import { chmodSync as chmodSync6, existsSync as existsSync18, mkdirSync as mkdirSync17, readdirSync as readdirSync10, readFileSync as readFileSync19, writeFileSync as writeFileSync15, rmSync as rmSync9 } from "node:fs";
-import { join as join22, relative as relative9 } from "node:path";
+import { existsSync as existsSync18, mkdirSync as mkdirSync17, readFileSync as readFileSync19, writeFileSync as writeFileSync15, rmSync as rmSync9 } from "node:fs";
+import { join as join21 } from "node:path";
 import { spawnSync as spawnSync7 } from "node:child_process";
-async function init(share, interactive = true) {
-  await (await getBackend(share.machine)).init(share, interactive);
+async function init2(share) {
+  if (sops2(share)) await init(share);
+  else noneInfo();
   return 0;
 }
-async function status2(share) {
+async function status3(share) {
   info(bold(`secrets backend: ${share.machine.secretsBackend}`));
-  (await getBackend(share.machine)).status(share);
+  if (sops2(share)) status2(share);
+  else noneInfo();
   return 0;
 }
-async function edit2(share, name2) {
-  (await getBackend(share.machine)).edit(share.path, name2);
+async function edit3(share, name2) {
+  if (!sops2(share)) throw new Error("cs: secrets backend 'none' cannot store secrets");
+  await edit2(share, name2);
   commitSecrets(share, `secrets: edit ${name2}`);
   return 0;
 }
 async function setValues(share, name2, pairs) {
-  const repo = share.path;
-  const b = await getBackend(share.machine);
+  const store = await secretsStore(share);
   await spin(`encrypting ${name2}\u2026`, async () => {
-    const v = b.loadEnv(repo, name2);
+    const v = await values(store, name2);
     for (const p of pairs) {
       const i2 = p.indexOf("=");
       if (i2 < 1) throw new Error(`cs: expected KEY=VALUE, got '${p}'`);
       v[p.slice(0, i2).trim()] = p.slice(i2 + 1);
     }
-    b.writeEnv(repo, name2, v);
+    await store.write(name2, v);
     commitSecrets(share, `secrets: set ${pairs.length} value(s) in ${name2}`);
   });
   ok(`${name2}: ${pairs.map((p) => p.split("=")[0]).join(", ")} stored (encrypted)`);
   return 0;
 }
 async function unsetValues(share, name2, keys) {
-  const repo = share.path;
-  const b = await getBackend(share.machine);
-  const v = b.loadEnv(repo, name2);
+  const store = await secretsStore(share);
+  const v = await values(store, name2);
   for (const k of keys) delete v[k];
-  b.writeEnv(repo, name2, v);
+  await store.write(name2, v);
   commitSecrets(share, `secrets: unset ${keys.length} value(s) in ${name2}`);
   return 0;
 }
 async function get(share, name2, key, show) {
-  const v = (await getBackend(share.machine)).loadEnv(share.path, name2);
+  const v = await values(await secretsStore(share), name2);
   if (key) {
     if (!(key in v)) return 1;
     console.log(show ? v[key] : mask2(v[key]));
@@ -9813,64 +9766,16 @@ async function get(share, name2, key, show) {
   for (const [k, val] of Object.entries(v)) console.log(`${k}=${show ? val : mask2(val)}`);
   return 0;
 }
-async function pull(share, project, force) {
-  const repo = share.path, m = share.machine;
-  const p = share.manifest.projects[project];
-  if (!p) throw new Error(`cs: unknown project '${project}'`);
-  const v = (await getBackend(m)).loadEnv(repo, project);
-  if (!Object.keys(v).length) {
-    warn(`no secrets stored for ${project} (cs secrets push ${project} / cs secrets set ${project} K=V)`);
-    return 1;
-  }
-  const root = checkoutRoot(p, workspace2(share)), target = join22(root, ".env"), text3 = dumpDotenv(v);
-  if (existsSync18(target) && readFileSync19(target, "utf8") !== text3 && !force) {
-    fail(`${contract(target)} exists and differs \u2014 cs secrets diff ${project}; use --force to overwrite`);
-    return 1;
-  }
-  writeFileSync15(target, text3);
-  chmodSync6(target, 384);
-  checkIgnored(root, target);
-  ok(`wrote ${contract(target)} (${Object.keys(v).length} keys)`);
-  return 0;
-}
-async function push2(share, project) {
-  const repo = share.path, m = share.machine;
-  const p = share.manifest.projects[project];
-  if (!p) throw new Error(`cs: unknown project '${project}'`);
-  const root = checkoutRoot(p, workspace2(share)), src = join22(root, ".env");
-  if (!existsSync18(src)) throw new Error(`cs: ${contract(src)} not found`);
-  const v = parseDotenv(readFileSync19(src, "utf8"));
-  (await getBackend(m)).writeEnv(repo, project, v);
-  commitSecrets(share, `secrets: ${project} .env`);
-  checkIgnored(root, src);
-  ok(`${project}: ${Object.keys(v).length} keys encrypted into ${contract(envFile(repo, project))}`);
-  return 0;
-}
-async function diff(share, project) {
-  const p = share.manifest.projects[project];
-  if (!p) throw new Error(`cs: unknown project '${project}'`);
-  const stored = (await getBackend(share.machine)).loadEnv(share.path, project);
-  const lf = join22(checkoutRoot(p, workspace2(share)), ".env");
-  const local = existsSync18(lf) ? parseDotenv(readFileSync19(lf, "utf8")) : {};
-  const rows = [.../* @__PURE__ */ new Set([...Object.keys(stored), ...Object.keys(local)])].sort().filter((k) => stored[k] !== local[k]).map((k) => [k, k in stored ? mask2(stored[k]) : dim("-"), k in local ? mask2(local[k]) : dim("-")]);
-  if (rows.length) {
-    table(rows, ["key", "stored", "local .env"]);
-    return 1;
-  }
-  ok("no differences");
-  return 0;
-}
 async function environment(share, project, warnMissing = true) {
   const env2 = { ...process.env };
   if (env2.CS_SECRETS_LOADED === "1") return env2;
-  const repo = share.path;
-  const b = await getBackend(share.machine);
-  if (b.name !== "none" && !b.ready(repo)) {
+  const store = await secretsStore(share);
+  if (!store.ready()) {
     if (warnMissing) warn("secrets not available on this machine (cs secrets init / cs trust) \u2014 continuing without them");
     return env2;
   }
-  Object.assign(env2, b.loadEnv(repo, "global"));
-  if (project) Object.assign(env2, b.loadEnv(repo, project));
+  Object.assign(env2, await values(store, "global"));
+  if (project) Object.assign(env2, await values(store, project));
   env2.CS_SECRETS_LOADED = "1";
   return env2;
 }
@@ -9905,29 +9810,21 @@ async function untrust(share, machine) {
   if (pub && recs.includes(pub)) {
     writeRecipients(repo, recs.filter((r2) => r2 !== pub));
     const n3 = await spin("re-encrypting secrets without that machine\u2026", () => updatekeys(repo));
-    rmSync9(join22(repo, "machines", machine), { recursive: true, force: true });
+    rmSync9(join21(repo, "machines", machine), { recursive: true, force: true });
     commit2(share, `secrets: untrust ${machine}`, [".sops.yaml", "secrets", "machines"]);
     ok(`untrusted ${machine}; re-encrypted ${n3} file(s)`);
   } else warn(`${machine} was not a recipient`);
-  const b = await getBackend(m);
+  const store = await secretsStore(share);
   const keys = /* @__PURE__ */ new Set();
-  for (const name2 of ["global", ...Object.keys(man_projects(repo))]) for (const k of Object.keys(b.loadEnv(repo, name2))) keys.add(k);
+  for (const name2 of await store.list()) for (const k of Object.keys(await values(store, name2))) keys.add(k);
   if (keys.size) warn("that machine could read these \u2014 rotate them at the source: " + [...keys].sort().join(", "));
   return 0;
 }
-function man_projects(repo) {
-  const d = join22(repo, "secrets", "projects");
-  const out2 = {};
-  if (existsSync18(d)) {
-    for (const f of readdirSync10(d)) if (f.endsWith(".env")) out2[f.slice(0, -4)] = true;
-  }
-  return out2;
-}
 async function recovery(share) {
   const repo = share.path;
-  const tmp = join22(home(), ".cache", `cs-recovery-${process.pid}.txt`);
-  const exe2 = which("age-keygen") || join22(home(), ".local", "bin", "age-keygen");
-  mkdirSync17(join22(home(), ".cache"), { recursive: true });
+  const tmp = join21(home(), ".cache", `cs-recovery-${process.pid}.txt`);
+  const exe2 = which("age-keygen") || join21(home(), ".local", "bin", "age-keygen");
+  mkdirSync17(join21(home(), ".cache"), { recursive: true });
   const p = spawnSync7(exe2, ["-o", tmp], { encoding: "utf8" });
   if (p.status !== 0) throw new Error(`cs: age-keygen failed: ${(p.stderr || "").trim()}`);
   const text3 = readFileSync19(tmp, "utf8");
@@ -9935,7 +9832,7 @@ async function recovery(share) {
   const pub = text3.split("\n").find((l2) => l2.startsWith("# public key:")).split(":")[1].trim();
   const priv = text3.split("\n").find((l2) => l2.startsWith("AGE-SECRET-KEY-"));
   const pf = machinePubFile(repo, "recovery");
-  mkdirSync17(join22(repo, "machines", "recovery"), { recursive: true });
+  mkdirSync17(join21(repo, "machines", "recovery"), { recursive: true });
   writeFileSync15(pf, pub + "\n");
   writeRecipients(repo, [...recipients(repo), pub]);
   const n3 = await updatekeys(repo);
@@ -9946,13 +9843,13 @@ async function recovery(share) {
 }
 async function ensureRecipient(share, interactive) {
   const repo = share.path, m = share.machine;
-  const b = await getBackend(m);
-  if (b.name === "none" || b.ready(repo)) return true;
+  const store = await secretsStore(share);
+  if (store.ready()) return true;
   const { existsSync: ex, readdirSync: rd } = await import("node:fs");
-  const md = join22(repo, "machines");
+  const md = join21(repo, "machines");
   const others = ex(md) ? rd(md).filter((d) => d !== m.name && d !== "recovery" && recipients(repo).includes((() => {
     try {
-      return readFileSync19(join22(md, d, "age.pub"), "utf8").trim();
+      return readFileSync19(join21(md, d, "age.pub"), "utf8").trim();
     } catch {
       return "";
     }
@@ -9975,8 +9872,8 @@ async function ensureRecipient(share, interactive) {
         warn("that does not look like an age secret key");
         continue;
       }
-      const tmp = join22(home(), ".cache", `cs-recovery-${process.pid}.txt`);
-      (await import("node:fs")).mkdirSync(join22(home(), ".cache"), { recursive: true });
+      const tmp = join21(home(), ".cache", `cs-recovery-${process.pid}.txt`);
+      (await import("node:fs")).mkdirSync(join21(home(), ".cache"), { recursive: true });
       writeFileSync15(tmp, priv.trim() + "\n", { mode: 384 });
       const prev = process.env.SOPS_AGE_KEY_FILE;
       process.env.SOPS_AGE_KEY_FILE = tmp;
@@ -9996,36 +9893,32 @@ async function ensureRecipient(share, interactive) {
         else process.env.SOPS_AGE_KEY_FILE = prev;
         rmSync9(tmp, { force: true });
       }
-      return b.ready(repo);
+      return store.ready();
     }
     note2([`${where} run:`, "", `  ${bold(`cs sync && cs trust ${m.name} && cs sync`)}`, "", dim("that machine re-encrypts the secrets so this one can read them \u2014 no secret leaves either machine")], "Trust this machine");
     if (!await proceed("done on the other machine?", "Done \u2014 check now", "Skip for now")) return false;
     const { syncShare: syncShare2 } = await Promise.resolve().then(() => (init_sharesync(), sharesync_exports));
     await spin("syncing\u2026", () => syncShare2(share, { pullOnly: true, timeout: 20 }));
-    if (b.ready(repo)) {
+    if (store.ready()) {
       ok("this machine can decrypt secrets");
       return true;
     }
     warn("still not a recipient \u2014 did the other machine run cs sync after trusting it?");
   }
 }
-var mask2, commitSecrets, checkIgnored;
+var mask2, commitSecrets, sops2;
 var init_secretscmd = __esm({
   "src/secretscmd.ts"() {
     "use strict";
-    init_git();
     init_paths();
     init_deps();
     init_share();
-    init_checkout();
     init_secrets();
     init_sops();
     init_ui();
     mask2 = (v) => v.length > 8 ? v.slice(0, 3) + "\u2026" + v.slice(-2) : "\u2026";
     commitSecrets = (share, msg) => commit2(share, msg, ["secrets"]);
-    checkIgnored = (root, f) => {
-      if (isRepo(root) && git(["check-ignore", "-q", f], root, { check: false }).code !== 0) warn(`${relative9(root, f)} is NOT gitignored in ${contract(root)} \u2014 add it to .gitignore`);
-    };
+    sops2 = (share) => share.machine.secretsBackend === "sops";
   }
 });
 
@@ -10116,12 +10009,12 @@ __export(status_exports, {
   runStatus: () => runStatus,
   unregisteredDirs: () => unregisteredDirs
 });
-import { existsSync as existsSync20, readdirSync as readdirSync11 } from "node:fs";
-import { join as join23 } from "node:path";
+import { existsSync as existsSync20, readdirSync as readdirSync10 } from "node:fs";
+import { join as join22 } from "node:path";
 function unregisteredDirs(ws, known) {
   if (!existsSync20(ws)) return [];
-  return readdirSync11(ws, { withFileTypes: true }).filter((d) => d.isDirectory() && !d.name.startsWith(".") && !known.has(d.name)).map((d) => d.name).sort().map((name2) => {
-    const { root } = sniff(join23(ws, name2));
+  return readdirSync10(ws, { withFileTypes: true }).filter((d) => d.isDirectory() && !d.name.startsWith(".") && !known.has(d.name)).map((d) => d.name).sort().map((name2) => {
+    const { root } = sniff(join22(ws, name2));
     return { name: name2, remote: isRepo(root) ? remoteUrl(root) : "" };
   });
 }
@@ -10181,7 +10074,7 @@ async function runStatus(share, fetch2 = true, showAll = false, timeout = 10) {
   table(rows, ["project", "", "branch", "state"]);
   for (const s of envSkipped) warn(s);
   for (const d of unregisteredDirs(ws, known)) {
-    warn(`${d.name}: ${d.remote ? "not registered" : "not registered, no remote"}  ${dim(`cs add ${contract(join23(ws, d.name))}`)}`);
+    warn(`${d.name}: ${d.remote ? "not registered" : "not registered, no remote"}  ${dim(`cs add ${contract(join22(ws, d.name))}`)}`);
     attention = true;
   }
   return { rc: pending || attention || stuck ? 1 : 0, next: pending ? "cs sync" : attention ? "cs doctor --fix" : void 0 };
@@ -10217,8 +10110,8 @@ var init_status = __esm({
 });
 
 // src/migrate.ts
-import { existsSync as existsSync21, mkdirSync as mkdirSync18, readdirSync as readdirSync12, readFileSync as readFileSync20, renameSync as renameSync4, rmSync as rmSync10, writeFileSync as writeFileSync16 } from "node:fs";
-import { join as join24 } from "node:path";
+import { existsSync as existsSync21, mkdirSync as mkdirSync18, readdirSync as readdirSync11, readFileSync as readFileSync20, renameSync as renameSync4, rmSync as rmSync10, writeFileSync as writeFileSync16 } from "node:fs";
+import { join as join23 } from "node:path";
 function findOldNames(share) {
   const repo = share.path, m = share.machine;
   const out2 = [];
@@ -10235,7 +10128,7 @@ function findOldNames(share) {
     out2.push({ what: `two share keys: ${contract(legacyShareKey())} and ${contract(shareKeyDefault())}`, move: `remove the one that is not registered as the share's deploy key (cs ssh share-key checks ${contract(shareKeyDefault())})` });
   else if (isRepo(repo) && remoteUrl(repo) && !usesKey(repo) && configGet(repo, "core.sshCommand").includes(contract(legacyShareKey())))
     out2.push({ what: `the share's core.sshCommand names ${contract(legacyShareKey())}`, move: `git -C ${contract(repo)} config core.sshCommand "ssh -i ${contract(keyPath2())} -o IdentitiesOnly=yes"`, apply: () => configureRepo(repo) });
-  const mf = join24(repo, "projects.toml");
+  const mf = join23(repo, "projects.toml");
   const text3 = existsSync21(mf) ? readFileSync20(mf, "utf8") : "";
   if (/^\s*(kind|github_owner)\s*=/m.test(text3))
     out2.push({ what: "projects.toml keys `kind` / `github_owner`", move: "drop `kind = \u2026` lines, rename `github_owner` to `owner` (the next cs sync carries it)", apply: () => writeFileSync16(mf, text3.split("\n").filter((l2) => !/^\s*kind\s*=/.test(l2)).map((l2) => l2.replace(/^(\s*)github_owner(\s*=)/, "$1owner$2")).join("\n")) });
@@ -10248,7 +10141,7 @@ function findOldNames(share) {
       apply: () => {
         let target = repo;
         if (repo === legacyShareDir() && !existsSync21(shareDirDefault())) {
-          mkdirSync18(join24(shareDirDefault(), ".."), { recursive: true });
+          mkdirSync18(join23(shareDirDefault(), ".."), { recursive: true });
           renameSync4(legacyShareDir(), shareDirDefault());
           target = shareDirDefault();
         }
@@ -10264,12 +10157,12 @@ function findOldNames(share) {
       }
     });
   const st = stateDir(), inState = `(in ${contract(st)})`;
-  if (existsSync21(join24(st, "last-config"))) out2.push({ what: "state file last-config", move: `mv last-config last-sync ${inState}`, apply: () => {
-    if (existsSync21(join24(st, "last-sync"))) rmSync10(join24(st, "last-config"));
-    else renameSync4(join24(st, "last-config"), join24(st, "last-sync"));
+  if (existsSync21(join23(st, "last-config"))) out2.push({ what: "state file last-config", move: `mv last-config last-sync ${inState}`, apply: () => {
+    if (existsSync21(join23(st, "last-sync"))) rmSync10(join23(st, "last-config"));
+    else renameSync4(join23(st, "last-config"), join23(st, "last-sync"));
   } });
-  if (existsSync21(join24(st, "link"))) out2.push({ what: "state directory link/", move: `mv link project-state ${inState}`, apply: () => mergeDir(join24(st, "link"), join24(st, "project-state")) });
-  for (const f of ["sync-config.lock", "blocked-config", "handoff/pending"]) if (existsSync21(join24(st, f))) out2.push({ what: `state file ${f}`, move: `rm ${f} ${inState} \u2014 no longer read`, apply: () => rmSync10(join24(st, f), { force: true }) });
+  if (existsSync21(join23(st, "link"))) out2.push({ what: "state directory link/", move: `mv link project-state ${inState}`, apply: () => mergeDir(join23(st, "link"), join23(st, "project-state")) });
+  for (const f of ["sync-config.lock", "blocked-config", "handoff/pending"]) if (existsSync21(join23(st, f))) out2.push({ what: `state file ${f}`, move: `rm ${f} ${inState} \u2014 no longer read`, apply: () => rmSync10(join23(st, f), { force: true }) });
   const ws = workspace2(share);
   for (const p of selectedProjects2(share)) {
     const c2 = locate(p, ws);
@@ -10310,7 +10203,7 @@ function mergeDir(from, to) {
     renameSync4(from, to);
     return;
   }
-  for (const f of readdirSync12(from)) if (!existsSync21(join24(to, f))) renameSync4(join24(from, f), join24(to, f));
+  for (const f of readdirSync11(from)) if (!existsSync21(join23(to, f))) renameSync4(join23(from, f), join23(to, f));
   rmSync10(from, { recursive: true, force: true });
 }
 var OLD_REF_NS;
@@ -10337,8 +10230,8 @@ __export(doctor_exports, {
   remoteless: () => remoteless,
   runDoctor: () => runDoctor
 });
-import { existsSync as existsSync22, lstatSync as lstatSync2, readdirSync as readdirSync13, readFileSync as readFileSync21 } from "node:fs";
-import { join as join25 } from "node:path";
+import { existsSync as existsSync22, lstatSync as lstatSync2, readdirSync as readdirSync12, readFileSync as readFileSync21 } from "node:fs";
+import { join as join24 } from "node:path";
 function remoteless(share) {
   const ws = workspace2(share);
   const man = share.manifest;
@@ -10360,7 +10253,7 @@ async function fix(share) {
     if (await confirm2(`${p.name} has no remote \u2014 create a private GitHub repo and push it?`, true)) await fixRemote(share, p);
   }
   for (const d of dirs2) {
-    const path = join25(ws, d.name);
+    const path = join24(ws, d.name);
     if (!canAsk()) {
       warn(`${d.name}: not registered \u2014 cs add ${contract(path)}`);
       continue;
@@ -10403,7 +10296,7 @@ async function runDoctor(share, doFix = false, compact = false) {
   res.push(isWSL() && ws.startsWith("/mnt/") ? ["fail", `workspace ${ws} is on the Windows filesystem; use the WSL home`] : ["ok", `workspace ${contract(ws)}`]);
   const broken = LINKS.filter((i2) => {
     try {
-      return lstatSync2(join25(claudeDir(), i2)).isSymbolicLink() && !existsSync22(join25(claudeDir(), i2));
+      return lstatSync2(join24(claudeDir(), i2)).isSymbolicLink() && !existsSync22(join24(claudeDir(), i2));
     } catch {
       return false;
     }
@@ -10440,8 +10333,8 @@ async function runDoctor(share, doFix = false, compact = false) {
   res.push(hs.complete ? ["ok", `hooks installed (${HOOK_EVENTS.join(", ")})`] : ["warn", `hooks ${hs.events.length ? "outdated" : "not installed"}  (cs sync re-installs them)`]);
   res.push(hs.timerActive ? ["ok", "timer active (share sync every 15 min)"] : hs.timerFiles ? ["warn", "timer installed but not active  (cs sync re-installs it)"] : ["warn", "timer not installed  (cs sync installs it)"]);
   res.push(hs.lastSync ? ["ok", `last share sync ${ago(hs.lastSync)}`] : ["warn", "the share has never synced here  (cs sync)"]);
-  if (m.secretsBackend !== "none" && existsSync22(join25(repo, ".sops.yaml"))) {
-    const machines = existsSync22(join25(repo, "machines")) ? readdirSync13(join25(repo, "machines")).filter((d) => existsSync22(join25(repo, "machines", d, "age.pub"))) : [];
+  if (m.secretsBackend !== "none" && existsSync22(join24(repo, ".sops.yaml"))) {
+    const machines = existsSync22(join24(repo, "machines")) ? readdirSync12(join24(repo, "machines")).filter((d) => existsSync22(join24(repo, "machines", d, "age.pub"))) : [];
     if (!machines.includes("recovery")) res.push(["warn", "secrets have no recovery key \u2014 cs secrets recovery (print it once, keep it in your password manager)"]);
     const others = machines.filter((d) => d !== m.name && d !== "recovery");
     if (others.length) res.push(["ok", `machines trusted with the secrets: ${others.join(", ")}  (cs untrust <machine> when one is retired)`]);
@@ -10451,7 +10344,7 @@ async function runDoctor(share, doFix = false, compact = false) {
   if (!old.length) res.push(["ok", "on-disk names current (share key, share, handoffs, state)"]);
   const rl = remoteless(share);
   for (const p of rl.projects) res.push(["fail", `${p.name}: no remote  (cs doctor --fix \xB7 or cs remove ${p.name})`]);
-  for (const d of rl.dirs) res.push(["warn", `${contract(join25(ws, d.name))}: not registered${d.remote ? "" : ", no remote"}  (cs add ${contract(join25(ws, d.name))})`]);
+  for (const d of rl.dirs) res.push(["warn", `${contract(join24(ws, d.name))}: not registered${d.remote ? "" : ", no remote"}  (cs add ${contract(join24(ws, d.name))})`]);
   if (!rl.projects.length && !rl.dirs.length) res.push(["ok", "every project has a remote; nothing unregistered under the workspace"]);
   const left = orphans(share);
   for (const n3 of left) res.push(["warn", `${n3}: state/secrets in the share but not registered  (cs remove ${n3})`]);
@@ -10494,14 +10387,14 @@ __export(ssh_exports, {
   setup: () => setup2,
   writeSshConfig: () => writeSshConfig
 });
-import { chmodSync as chmodSync7, existsSync as existsSync23, mkdirSync as mkdirSync19, readFileSync as readFileSync22, writeFileSync as writeFileSync17 } from "node:fs";
-import { dirname as dirname9, join as join26 } from "node:path";
+import { chmodSync as chmodSync6, existsSync as existsSync23, mkdirSync as mkdirSync19, readFileSync as readFileSync22, writeFileSync as writeFileSync17 } from "node:fs";
+import { dirname as dirname9, join as join25 } from "node:path";
 import { spawnSync as spawnSync8 } from "node:child_process";
 function keygen2(key, comment) {
   mkdirSync19(dirname9(key), { recursive: true, mode: 448 });
   const p = spawnSync8("ssh-keygen", ["-q", "-t", "ed25519", "-N", "", "-C", comment, "-f", key]);
   if (p.status !== 0) throw new Error("cs: ssh-keygen failed");
-  chmodSync7(key, 384);
+  chmodSync6(key, 384);
 }
 async function githubUserForKey(key) {
   if (process.env.CS_OFFLINE) return void 0;
@@ -10510,14 +10403,14 @@ async function githubUserForKey(key) {
   return (p.out + p.err).match(/Hi ([^!]+)!/)?.[1];
 }
 function writeSshConfig() {
-  const cfg = join26(home(), ".ssh", "config");
+  const cfg = join25(home(), ".ssh", "config");
   const text3 = existsSync23(cfg) ? readFileSync22(cfg, "utf8") : "";
   const block3 = [MARK, "Host github.com", "    IdentitiesOnly yes", "    AddKeysToAgent yes", ...isMac() ? ["    UseKeychain yes"] : [], END].join("\n") + "\n";
   const next = text3.includes(MARK) ? text3.slice(0, text3.indexOf(MARK)) + block3 + text3.slice(text3.indexOf(END) + END.length + 1) : block3 + (text3 && !text3.startsWith("\n") ? "\n" : "") + text3;
   if (next === text3) return false;
   mkdirSync19(dirname9(cfg), { recursive: true, mode: 448 });
   writeFileSync17(cfg, next);
-  chmodSync7(cfg, 384);
+  chmodSync6(cfg, 384);
   return true;
 }
 async function register(i2, pub, title) {
@@ -10558,7 +10451,7 @@ async function setup2(share, checkOnly = false) {
       state.push(green("generated"));
     }
     const pub = readFileSync22(pubf, "utf8").trim();
-    const dest = join26(repo, "machines", m.name, "ssh", `${i2.id}.pub`);
+    const dest = join25(repo, "machines", m.name, "ssh", `${i2.id}.pub`);
     if (!checkOnly && (!existsSync23(dest) || readFileSync22(dest, "utf8").trim() !== pub)) {
       mkdirSync19(dirname9(dest), { recursive: true });
       writeFileSync17(dest, pub + "\n");
@@ -10611,17 +10504,17 @@ var init_exports = {};
 __export(init_exports, {
   PHASES: () => PHASES,
   SHARE_REPO_NAME: () => SHARE_REPO_NAME,
-  init: () => init2,
+  init: () => init3,
   newShare: () => newShare
 });
-import { copyFileSync as copyFileSync5, existsSync as existsSync24, mkdirSync as mkdirSync20, readdirSync as readdirSync14, writeFileSync as writeFileSync18 } from "node:fs";
-import { dirname as dirname10, join as join27, relative as relative10 } from "node:path";
+import { copyFileSync as copyFileSync5, existsSync as existsSync24, mkdirSync as mkdirSync20, readdirSync as readdirSync13, writeFileSync as writeFileSync18 } from "node:fs";
+import { dirname as dirname10, join as join26, relative as relative9 } from "node:path";
 function newShare(dest, branch = "master") {
   const src = templatesDir() + "/share";
   mkdirSync20(dest, { recursive: true });
   const copy = (d) => {
-    for (const e of readdirSync14(d, { withFileTypes: true })) {
-      const f = join27(d, e.name), t2 = join27(dest, relative10(src, f));
+    for (const e of readdirSync13(d, { withFileTypes: true })) {
+      const f = join26(d, e.name), t2 = join26(dest, relative9(src, f));
       if (e.isDirectory()) {
         mkdirSync20(t2, { recursive: true });
         copy(f);
@@ -10633,8 +10526,8 @@ function newShare(dest, branch = "master") {
   };
   copy(src);
   for (const d of ["plans", "projects", "secrets", "claude/skills", "claude/rules", "claude/agents", "machines"]) {
-    mkdirSync20(join27(dest, d), { recursive: true });
-    if (!readdirSync14(join27(dest, d)).length) writeFileSync18(join27(dest, d, ".gitkeep"), "");
+    mkdirSync20(join26(dest, d), { recursive: true });
+    if (!readdirSync13(join26(dest, d)).length) writeFileSync18(join26(dest, d, ".gitkeep"), "");
   }
   if (!isRepo(dest)) git(["init", "-q", "-b", branch], dest);
   git(["add", "-A"], dest);
@@ -10727,8 +10620,8 @@ async function machinePhase(repo, nm, profiles, ws, interactive) {
     } else skip(`machine ${m2.name}  ${m2.profiles.join(", ")}`);
     return m2;
   }
-  const md = join27(repo, "machines");
-  const existing = existsSync24(md) ? readdirSync14(md, { withFileTypes: true }).filter((d) => d.isDirectory() && d.name !== "recovery").map((d) => d.name).sort() : [];
+  const md = join26(repo, "machines");
+  const existing = existsSync24(md) ? readdirSync13(md, { withFileTypes: true }).filter((d) => d.isDirectory() && d.name !== "recovery").map((d) => d.name).sort() : [];
   if (existing.length) step(`machines already in this share: ${existing.map((x) => bold(x)).join(", ")}`);
   while (existing.includes(nm)) {
     if (!interactive) throw new Error(`cs: machine '${nm}' already exists in the share`);
@@ -10841,7 +10734,7 @@ async function keysAndTokens(share, interactive, skip2) {
     }
   }
 }
-function push3(repo) {
+function push2(repo) {
   if (!remoteUrl(repo)) return;
   const ab = aheadBehind(repo);
   if (ab === void 0 || ab[0]) {
@@ -10856,14 +10749,14 @@ async function finish2(share, interactive, skip2) {
   let secretsOk = true;
   if (!skip2.includes("secrets") && m.secretsBackend !== "none") {
     const sc = await Promise.resolve().then(() => (init_secretscmd(), secretscmd_exports));
-    await group("secrets", () => sc.init(share, interactive));
+    await group("secrets", () => sc.init(share));
     secretsOk = await sc.ensureRecipient(share, interactive);
   }
   if (!skip2.includes("hooks")) await group("automatic sync", async () => {
     await (await Promise.resolve().then(() => (init_hooks(), hooks_exports))).runHooks(share, "install");
     steps(runApply(share));
   });
-  await group("share", () => push3(repo), { done: "nothing to push" });
+  await group("share", () => push2(repo), { done: "nothing to push" });
   let rc = 0;
   if (!skip2.includes("doctor")) rc = await group("doctor", () => runDoctor(share, false, true), { done: "all checks passed" });
   const ws = workspace2(share);
@@ -10884,7 +10777,7 @@ async function finish2(share, interactive, skip2) {
   outro2(bold("done"));
   return rc;
 }
-async function init2(o) {
+async function init3(o) {
   const skip2 = (o.skip ?? []).map((x) => x === "repo" ? "share" : x);
   for (const x of skip2) if (!PHASES.includes(x)) throw new Error(`cs: unknown phase '${x}' (phases: ${PHASES.join(", ")})`);
   const interactive = o.interactive ?? (isTTY() || isScripted());
@@ -11146,8 +11039,8 @@ init_share();
 init_paths();
 init_update();
 import { readFileSync as readFileSync24 } from "node:fs";
-import { join as join28 } from "node:path";
-var pkg = JSON.parse(readFileSync24(join28(toolRoot(), "package.json"), "utf8"));
+import { join as join27 } from "node:path";
+var pkg = JSON.parse(readFileSync24(join27(toolRoot(), "package.json"), "utf8"));
 var csv = (s) => s ? s.split(",").map((x) => x.trim()).filter(Boolean) : [];
 var HIDDEN = { hidden: true };
 var program2 = new Command("cs").description("claude-share: your projects and Claude Code setup, identical on every machine").version(pkg.version, "-V, --version").option("-q, --quiet", "only warnings/errors").configureHelp({ sortSubcommands: false }).showSuggestionAfterError(true).enablePositionalOptions().addHelpText("after", `
@@ -11231,25 +11124,13 @@ sec.command("unset <name> <keys...>", HIDDEN).action(async (n3, keys) => {
 });
 sec.command("init", HIDDEN).action(async () => {
   const share = open();
-  await command("cs secrets init", async () => group("secrets", async () => (await S()).init(share, isTTY())));
+  await command("cs secrets init", async () => group("secrets", async () => (await S()).init(share)));
 });
 sec.command("status", HIDDEN).action(async () => {
   const share = open();
   intro2("cs secrets status");
   await (await S()).status(share);
   outro2(dim("cs secrets set \xB7 cs trust <machine>"));
-});
-sec.command("pull <project>", HIDDEN).option("--force").action(async (p, o) => {
-  const share = open();
-  process.exitCode = await (await S()).pull(share, p, o.force);
-});
-sec.command("push <project>", HIDDEN).action(async (p) => {
-  const share = open();
-  process.exitCode = await (await S()).push(share, p);
-});
-sec.command("diff <project>", HIDDEN).action(async (p) => {
-  const share = open();
-  process.exitCode = await (await S()).diff(share, p);
 });
 sec.command("exec [command...]", HIDDEN).description("run a command with global + project secrets in its environment").option("-p, --project <name>").passThroughOptions().allowUnknownOption().action(async (command2, o) => {
   const share = open();
@@ -11293,8 +11174,8 @@ program2.command("update").description("update the cs tool itself").action(async
   await command("cs update", runUpdate2, { outro: () => dim(`cs ${pkg.version}`) });
 });
 program2.command("init").description("set this machine up (wizard) \u2014 or --repo <url> / --owner <owner> for scripts").option("--repo <url>", "existing share: git URL or local path").option("--owner <owner>", "GitHub user/org to create claude-share-config under").option("--key <path>", "ssh key for cloning --repo (instead of the share key)").option("--non-interactive").option("--name <name>", "machine name").option("--profiles <list>", "comma list").option("--workspace <path>").option("--skip <phases>", "comma list: deps,share,ssh,apply,link,secrets,hooks,doctor").option("--install-deps").action(async (o) => {
-  const { init: init3 } = await Promise.resolve().then(() => (init_init(), init_exports));
-  process.exitCode = await init3({ repo: o.repo, owner: o.owner, key: o.key, name: o.name, profiles: csv(o.profiles), workspace: o.workspace, skip: csv(o.skip), installDeps: o.installDeps, interactive: !o.nonInteractive && (isTTY() || isScripted()) });
+  const { init: init4 } = await Promise.resolve().then(() => (init_init(), init_exports));
+  process.exitCode = await init4({ repo: o.repo, owner: o.owner, key: o.key, name: o.name, profiles: csv(o.profiles), workspace: o.workspace, skip: csv(o.skip), installDeps: o.installDeps, interactive: !o.nonInteractive && (isTTY() || isScripted()) });
 });
 program2.command("status", HIDDEN).description("what bare `cs` shows").option("--no-fetch").option("--all").action(async (o) => {
   const share = open();

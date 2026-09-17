@@ -11,7 +11,7 @@ import { describe, newest, syncShare, type Conflict, type Side } from "./sharesy
 import { clone } from "./projects.js";
 import { apply, locate, present, push, send } from "./checkout.js";
 import { gather } from "./gather.js";
-import { getBackend } from "./secrets/index.js";
+import { secretsStore } from "./secrets/index.js";
 import { applyEnv, newestSide, snapshotInSync, type EnvState } from "./envfiles.js";
 import { describeKeys, describeMerge, type Side as EnvSide } from "./env.js";
 import { count, plan, when, type Action, type Answer, type EnvQuestion, type Facts, type HandoffQuestion, type Plan } from "./plan.js";
@@ -162,9 +162,9 @@ export async function runSync(share: Share, o: SyncOpts = {}): Promise<SyncResul
   let envDone = 0; const states = facts.flatMap((f) => f.env ?? []);
   const keysOnly = states.filter((st) => st.kind === "local" && (st.merge.toLocal.length || st.merge.toStore.length));
   if (envRows.length || keysOnly.length) await ui.group(".env files", async () => {
-    const b = await getBackend(m);
+    const store = await secretsStore(share);
     const one = async (label: string, st: EnvState, decide: Partial<Record<string, EnvSide>>) => {
-      try { const r = await applyEnv(share, b, st, decide); envDone++;
+      try { const r = await applyEnv(store, st, decide); envDone++;
         ui.step(`${label}: ${[r.stored ? `${count(r.stored, "key")} stored` : "", r.local ? `${count(r.local, "key")} taken${st.storedFrom ? ` from ${st.storedFrom}` : ""}` : ""].filter(Boolean).join(", ")}${r.toFill.length ? ui.yellow(` — to fill in: ${r.toFill.join(", ")}`) : ""}`); }
       catch (e: any) { ui.fail(`${label}: ${String(e?.message ?? e).replace(/^cs: /, "")}`); }
     };

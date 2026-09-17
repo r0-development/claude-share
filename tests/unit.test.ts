@@ -6,12 +6,11 @@ import { canonicalGithub } from "../src/git.ts";
 import { parseRepoUrl } from "../src/sharekey.ts";
 import { newProjectOptions, rewriteIdentityFlags } from "../src/projects.ts";
 import { envVarName } from "../src/import.ts";
-import { parseDotenv, dumpDotenv } from "../src/secrets/index.ts";
 import { plan, status, type Facts } from "../src/plan.ts";
 import type { Unit } from "../src/checkout.ts";
 import type { EnvState } from "../src/envfiles.ts";
 import { digest, gitNote } from "../src/note.ts";
-import { classify, storeName, fileOf, merge3, mergeKeys, patchDotenv, describeMerge, describeKeys, blank } from "../src/env.ts";
+import { classify, storeName, fileOf, merge3, mergeKeys, parseDotenv, patchDotenv, dumpDotenv, describeMerge, describeKeys, blank } from "../src/env.ts";
 
 test("jsonmerge: dicts recurse, scalars override, permission lists union, plain lists replace", () => {
   assert.deepEqual(mergeLayers({ a: { x: 1 } }, { a: { y: 2 } }), { a: { x: 1, y: 2 } });
@@ -369,9 +368,11 @@ test("env: keys-only merge — keys travel, values never: a new key arrives with
   assert.deepEqual(mergeKeys(["A"], { A: "" }, ["A"], {}).toFill, ["A"]);
   assert.deepEqual(blank({ A: "1", B: "" }), { A: "", B: "" });
 });
-test("env: an empty value is written as KEY= (to fill in), never KEY=\"\"", () => {
+test("env: an empty value is written as KEY= (to fill in), never KEY=\"\" — by dump and by patch alike", () => {
   assert.equal(patchDotenv("A=1\n", { A: "1", KEY: "" }), "A=1\nKEY=\n");
   assert.equal(patchDotenv("KEY=old\n", { KEY: "" }), "KEY=\n");
+  assert.equal(dumpDotenv({ A: "1", KEY: "" }), "A=1\nKEY=\n");
+  assert.equal(dumpDotenv({}), "");
   assert.deepEqual(parseDotenv("KEY=\n"), { KEY: "" });
 });
 test("env: the keys-only hint counts keys, names the machine, and says how many are still to fill in", () => {
