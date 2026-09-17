@@ -107,7 +107,7 @@ export async function runSync(share: Share, o: SyncOpts = {}): Promise<SyncResul
 
   // 2. self-heal, never a question: hooks, timer, ~/.claude, git includes, shell rc, project state in every checkout
   await ui.group("repaired", async () => {
-    const hs = hooksStatus(repo);
+    const hs = hooksStatus(share);
     if (!hs.complete) { installHooks(share); ui.step("Claude Code hooks re-installed"); }
     if (!hs.timerFiles || (hs.timerSupported && !hs.timerActive)) ui.step(`timer: ${await installTimer()}`);
     ui.steps(runApply(share)); ui.steps(placeAll(share));   // drift since the last run (the share cycle already applied what the pull brought)

@@ -8309,32 +8309,36 @@ __export(hooks_exports, {
   hooksStatus: () => hooksStatus,
   installHooks: () => installHooks,
   installTimer: () => installTimer,
-  runHooks: () => runHooks
+  runHooks: () => runHooks,
+  withCsHooks: () => withCsHooks
 });
 import { existsSync as existsSync10, mkdirSync as mkdirSync10, readFileSync as readFileSync14, unlinkSync as unlinkSync4, writeFileSync as writeFileSync9 } from "node:fs";
 import { join as join14 } from "node:path";
 import { spawnSync as spawnSync3 } from "node:child_process";
+function withCsHooks(settings2, { remove: remove2 = false } = {}) {
+  const before = settings2.hooks ?? {};
+  const want = remove2 ? {} : entries();
+  const hooks = {};
+  for (const ev of /* @__PURE__ */ new Set([...Object.keys(before), ...Object.keys(want)])) {
+    const next = [...(before[ev] ?? []).filter((e) => !ours(e)), ...want[ev] ?? []];
+    if (next.length) hooks[ev] = next;
+  }
+  const out2 = {};
+  const any = Object.keys(hooks).length > 0;
+  for (const [k, v] of Object.entries(settings2)) {
+    if (k !== "hooks") out2[k] = v;
+    else if (any) out2.hooks = hooks;
+  }
+  if (any && !("hooks" in settings2)) out2.hooks = hooks;
+  return out2;
+}
 function installHooks(share, remove2 = false) {
-  const f = join14(share.path, "claude", "settings.base.json");
-  const data = existsSync10(f) ? loads(readFileSync14(f, "utf8")) : {};
-  data.hooks ??= {};
-  let changed = false;
-  const want = entries();
-  for (const ev of /* @__PURE__ */ new Set([...Object.keys(want), ...Object.keys(data.hooks)])) {
-    const cur = (data.hooks[ev] ?? []).filter((e) => !ours(e));
-    const next = remove2 ? cur : [...cur, ...want[ev] ?? []];
-    if (JSON.stringify(next) !== JSON.stringify(data.hooks[ev] ?? [])) {
-      data.hooks[ev] = next;
-      changed = true;
-    }
-    if (!data.hooks[ev]?.length) delete data.hooks[ev];
-  }
-  if (!Object.keys(data.hooks).length) delete data.hooks;
-  if (changed) {
-    writeFileSync9(f, dumps(data));
-    commit2(share, `claude: ${remove2 ? "remove" : "install"} cs share-sync hooks`, [f]);
-  }
-  return changed;
+  const data = readBaseSettings(share);
+  const next = withCsHooks(data, { remove: remove2 });
+  if (JSON.stringify(next) === JSON.stringify(data)) return false;
+  writeFileSync9(baseSettingsFile(share), dumps(next));
+  commit2(share, `claude: ${remove2 ? "remove" : "install"} cs share-sync hooks`, [baseSettingsFile(share)]);
+  return true;
 }
 async function installTimer(remove2 = false) {
   mkdirSync10(stateDir(), { recursive: true });
@@ -8384,24 +8388,24 @@ StandardError=append:${log2}
   const e = await exec2("systemctl", ["--user", "enable", "--now", "cs-sync.timer"]);
   return "systemd user timer every 15 min" + (e.code === 0 ? "" : ` (enable failed: ${e.err})`);
 }
-function hooksStatus(repo) {
-  const f = join14(repo, "claude", "settings.base.json");
-  const data = existsSync10(f) ? loads(readFileSync14(f, "utf8")) : {};
-  const want = entries();
-  const events = Object.keys(data.hooks ?? {}).filter((ev) => (data.hooks?.[ev] ?? []).some(ours));
-  const complete = [.../* @__PURE__ */ new Set([...Object.keys(want), ...events])].every((ev) => JSON.stringify((data.hooks?.[ev] ?? []).filter(ours)) === JSON.stringify(want[ev] ?? []));
+function hooksStatus(share) {
+  const data = readBaseSettings(share);
+  const hooks = data.hooks ?? {};
+  const csHooks = (h2) => Object.entries(h2).map(([ev, es]) => [ev, es.filter(ours)]).filter(([, es]) => es.length).sort(([a2], [b]) => a2.localeCompare(b));
+  const events = Object.keys(hooks).filter((ev) => hooks[ev].some(ours));
+  const complete = JSON.stringify(csHooks(hooks)) === JSON.stringify(csHooks(entries()));
   const timerFiles = isMac() ? existsSync10(join14(home(), "Library", "LaunchAgents", "dev.claude-share.sync.plist")) : existsSync10(join14(home(), ".config", "systemd", "user", "cs-sync.timer"));
   const state = isMac() ? "" : spawnSync3("systemctl", ["--user", "is-active", "cs-sync.timer"], { encoding: "utf8" }).stdout?.trim() ?? "";
   const timerActive = isMac() ? timerFiles : state === "active";
   const timerSupported = isMac() || state !== "";
-  return { events, complete, timerActive, timerFiles, timerSupported, lastSync: lastSync() };
+  return { events, complete, timerActive, timerFiles, timerSupported };
 }
 async function runHooks(share, action, timer = true) {
   if (action === "status") {
-    const st = hooksStatus(share.path);
+    const st = hooksStatus(share);
     kv("hooks", st.events.length ? st.events.join(", ") + (st.complete ? "" : yellow("  (outdated \u2014 cs hooks install)")) : dim("not installed"));
     kv("timer", st.timerActive ? green("active") : dim("not active"));
-    kv("last sync", st.lastSync ?? dim("never"));
+    kv("last sync", lastSync() ?? dim("never"));
     return 0;
   }
   const remove2 = action === "remove";
@@ -8409,7 +8413,7 @@ async function runHooks(share, action, timer = true) {
   if (timer) ok(await installTimer(remove2));
   return 0;
 }
-var STOP, START, entries, HOOK_EVENTS, ours;
+var STOP, START, entries, HOOK_EVENTS, ours, baseSettingsFile, readBaseSettings;
 var init_hooks = __esm({
   "src/hooks.ts"() {
     "use strict";
@@ -8428,6 +8432,8 @@ var init_hooks = __esm({
     });
     HOOK_EVENTS = Object.keys(entries());
     ours = (e) => (e.hooks ?? []).some((h2) => /\bcs (share-sync|sync|handoff|note)\b/.test(String(h2.command ?? "")));
+    baseSettingsFile = (share) => join14(share.path, "claude", "settings.base.json");
+    readBaseSettings = (share) => existsSync10(baseSettingsFile(share)) ? loads(readFileSync14(baseSettingsFile(share), "utf8")) : {};
   }
 });
 
@@ -9244,7 +9250,7 @@ async function runSync(share, o = {}) {
   if (!first.ok) rc = 2;
   const ws = workspace2(share);
   await group("repaired", async () => {
-    const hs = hooksStatus(repo);
+    const hs = hooksStatus(share);
     if (!hs.complete) {
       installHooks(share);
       step("Claude Code hooks re-installed");
@@ -9905,7 +9911,7 @@ async function shareLine(repo, fetch2, timeout) {
   const dirty = dirtyCount(repo);
   const [ahead, behind] = aheadBehind(repo) ?? [0, 0];
   const bits = [dirty ? yellow(`${dirty} dirty`) : "", ahead ? yellow(`\u2191${ahead} unpushed`) : "", behind ? yellow(`\u2193${behind} from other machines`) : "", offline ? dim("offline") : ""].filter(Boolean);
-  const last = hooksStatus(repo).lastSync;
+  const last = lastSync();
   const when2 = !last ? "never synced" : isNaN(Date.parse(last)) ? `last sync failed (${last})` : `synced ${ago(last)}`;
   const pending = dirty + ahead + behind > 0;
   return { row: row(branchOf(repo), (bits.length ? bits.join("  ") : green("clean")) + "  " + dim(when2) + (pending ? SYNC : "")), pending, broken: false };
@@ -9973,7 +9979,7 @@ var init_status = __esm({
     init_share();
     init_checkout();
     init_gather();
-    init_hooks();
+    init_sharesync();
     init_update();
     init_plan();
     init_ui();
@@ -10204,10 +10210,11 @@ async function runDoctor(share, doFix = false, compact = false) {
     if (ident2 && email2 !== ident2.email) idr.push(["fail", `${p.name}: user.email resolves to '${email2 || "UNSET"}', expected ${ident2.email}`]);
   }
   res.push(...idr.length ? idr : [["ok", "git identities resolve per manifest"]]);
-  const hs = hooksStatus(repo);
+  const hs = hooksStatus(share);
   res.push(hs.complete ? ["ok", `hooks installed (${HOOK_EVENTS.join(", ")})`] : ["warn", `hooks ${hs.events.length ? "outdated" : "not installed"}  (cs sync re-installs them)`]);
   res.push(hs.timerActive ? ["ok", "timer active (share sync every 15 min)"] : hs.timerFiles ? ["warn", "timer installed but not active  (cs sync re-installs it)"] : ["warn", "timer not installed  (cs sync installs it)"]);
-  res.push(hs.lastSync ? ["ok", `last share sync ${ago(hs.lastSync)}`] : ["warn", "the share has never synced here  (cs sync)"]);
+  const last = lastSync();
+  res.push(last ? ["ok", `last share sync ${ago(last)}`] : ["warn", "the share has never synced here  (cs sync)"]);
   if (m.secretsBackend !== "none" && existsSync21(join23(repo, ".sops.yaml"))) {
     const machines = existsSync21(join23(repo, "machines")) ? readdirSync11(join23(repo, "machines")).filter((d) => existsSync21(join23(repo, "machines", d, "age.pub"))) : [];
     if (!machines.includes("recovery")) res.push(["warn", "secrets have no recovery key \u2014 cs secrets recovery (print it once, keep it in your password manager)"]);
@@ -10248,6 +10255,7 @@ var init_doctor = __esm({
     init_status();
     init_plan();
     init_hooks();
+    init_sharesync();
     init_projects();
     init_migrate();
     init_remove();

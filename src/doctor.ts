@@ -13,6 +13,7 @@ import { which } from "./deps.js";
 import { unregisteredDirs } from "./status.js";
 import { ago } from "./plan.js";
 import { HOOK_EVENTS, hooksStatus } from "./hooks.js";
+import { lastSync } from "./sharesync.js";
 import { add, fixRemote } from "./projects.js";
 import { findOldNames, migrate } from "./migrate.js";
 import { orphans } from "./remove.js";
@@ -73,10 +74,10 @@ export async function runDoctor(share: Share, doFix = false, compact = false): P
     else if (url && p.url && url !== p.url) idr.push(["warn", `${p.name}: remote uses alias/other form ${url}; manifest ${p.url}  (cs doctor --fix)`]);
     if (ident && email !== ident.email) idr.push(["fail", `${p.name}: user.email resolves to '${email || "UNSET"}', expected ${ident.email}`]); }
   res.push(...(idr.length ? idr : [["ok", "git identities resolve per manifest"] as R]));
-  const hs = hooksStatus(repo);
+  const hs = hooksStatus(share);
   res.push(hs.complete ? ["ok", `hooks installed (${HOOK_EVENTS.join(", ")})`] : ["warn", `hooks ${hs.events.length ? "outdated" : "not installed"}  (cs sync re-installs them)`]);
   res.push(hs.timerActive ? ["ok", "timer active (share sync every 15 min)"] : hs.timerFiles ? ["warn", "timer installed but not active  (cs sync re-installs it)"] : ["warn", "timer not installed  (cs sync installs it)"]);
-  res.push(hs.lastSync ? ["ok", `last share sync ${ago(hs.lastSync)}`] : ["warn", "the share has never synced here  (cs sync)"]);
+  const last = lastSync(); res.push(last ? ["ok", `last share sync ${ago(last)}`] : ["warn", "the share has never synced here  (cs sync)"]);
   if (m.secretsBackend !== "none" && existsSync(join(repo, ".sops.yaml"))) {
     const machines = existsSync(join(repo, "machines")) ? readdirSync(join(repo, "machines")).filter((d) => existsSync(join(repo, "machines", d, "age.pub"))) : [];
     if (!machines.includes("recovery")) res.push(["warn", "secrets have no recovery key — cs secrets recovery (print it once, keep it in your password manager)"]);
