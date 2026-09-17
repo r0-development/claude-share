@@ -5,7 +5,7 @@ import { spawnSync } from "node:child_process";
 import * as git from "./git.js";
 import * as github from "./github.js";
 import { contract, expand } from "./paths.js";
-import { identityByFlag, identityForUrl, keyPath, NAME_RE, validate, type Identity, type Manifest, type Project } from "./manifest.js";
+import { identityByFlag, identityForUrl, keyPath, NAME_RE, selected, validate, type Identity, type Manifest, type Project } from "./manifest.js";
 import { addProject, commit, selectedProjects, updateProject, workspace, type Share } from "./share.js";
 import { place } from "./projectstate.js";
 import { checkoutRoot, container, locate, present, sniff } from "./checkout.js";
@@ -72,7 +72,7 @@ export async function add(share: Share, path: string | undefined, o: { profiles:
   const errs = validate({ ...man, projects: { [name]: p } }); if (errs.length) throw new Error("cs: " + errs.join("; "));
   addProject(share, p); ui.ok(`registered ${name}  ${ui.dim(`${url} · profiles ${p.profiles.join(",")}`)}`);
   if (!o.noCommit) commit(share, `projects: add ${name}`, ["projects.toml"]);
-  place(share, p);
+  if (selected(p, share.machine)) place(share, p);   // a project registered here for other profiles is not this machine's to keep placed
   return p;
 }
 
@@ -138,7 +138,7 @@ export async function create(share: Share, name: string, ident: Identity, o: { p
   const p: Project = { name, url, identity: ident.id, profiles: o.profiles, machines: [], branch: git.currentBranch(root) || branch, layout: "plain", description: o.description, handoff: {} };
   addProject(share, p); commit(share, `projects: add ${name}`, ["projects.toml"]);
   ui.step(`registered in projects.toml  ${ui.dim(`profiles ${o.profiles.join(",")}`)}`);
-  place(share, p);
+  if (selected(p, share.machine)) place(share, p);
   ui.step("project state placed (memory → share)");
   ui.outro(ui.bold(`cd ${contract(root)} && claude`));
   return 0;

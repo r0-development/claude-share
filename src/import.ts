@@ -18,8 +18,8 @@ export const unionLines = (a: string, b: string) => { const lines = a.split("\n"
 
 function walkFiles(dir: string): string[] { const out: string[] = []; const rec = (d: string) => { for (const e of readdirSync(d, { withFileTypes: true })) { const f = join(d, e.name); e.isDirectory() ? rec(f) : out.push(f); } }; if (existsSync(dir)) rec(dir); return out.sort(); }
 
-export function importMemory(share: Share, p: Project, ws: string, check = false): number {
-  const dest = memoryDir(share, p.name), machine = share.machine.name; let n = 0;
+export function importMemory(share: Share, p: Project, check = false): number {
+  const dest = memoryDir(share, p.name), machine = share.machine.name, ws = workspace(share); let n = 0;
   for (const cand of candidatePaths(p, ws)) {
     const src = join(claudeDir(), "projects", claudeProjectKey(cand), "memory");
     if (!existsSync(src)) continue;
@@ -49,8 +49,8 @@ function localScope(p: Project, ws: string): Record<string, any> {
   for (const cand of candidatePaths(p, ws)) for (const [n, cfg] of Object.entries<any>(data.projects?.[cand]?.mcpServers ?? {})) found[n] ??= cfg;
   return found;
 }
-export function importMcp(share: Share, p: Project, ws: string, check = false, show = false): number {
-  const found = localScope(p, ws);
+export function importMcp(share: Share, p: Project, check = false, show = false): number {
+  const found = localScope(p, workspace(share));
   if (show) { for (const [n, cfg] of Object.entries<any>(found)) { for (const [k, v] of Object.entries<any>(cfg.env ?? {})) console.log(`${envVarName(n, k)}=${v}`); for (const [k, v] of Object.entries<any>(cfg.headers ?? {})) console.log(`${envVarName(n, k)}=${v}`); } return Object.keys(found).length; }
   if (!Object.keys(found).length) { ui.ok(`${p.name}: no local-scope MCP servers in ~/.claude.json`); return 0; }
   const side = projectState(share, p.name); const f = join(side, ".mcp.json");
@@ -71,8 +71,8 @@ export function importMcp(share: Share, p: Project, ws: string, check = false, s
   return Object.keys(found).length;
 }
 export function runImport(share: Share, what: string, names: string[], check: boolean, show: boolean) {
-  const man = share.manifest; const ws = workspace(share);
+  const man = share.manifest;
   if (!names.length) throw new Error("cs: import needs a project name (or --all)");
   for (const n of names) { const p = man.projects[n]; if (!p) throw new Error(`cs: unknown project '${n}'`);
-    if (what === "memory") importMemory(share, p, ws, check); else if (what === "project") importProjectFiles(share, p, check); else if (what === "mcp") importMcp(share, p, ws, check, show); else throw new Error(`cs: unknown import target '${what}'`); }
+    if (what === "memory") importMemory(share, p, check); else if (what === "project") importProjectFiles(share, p, check); else if (what === "mcp") importMcp(share, p, check, show); else throw new Error(`cs: unknown import target '${what}'`); }
 }

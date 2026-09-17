@@ -157,7 +157,7 @@ function push(repo: string) {
 async function finish(share: Share, interactive: boolean, skip: string[]): Promise<number> {
   const repo = share.path, m = share.machine;
   if (!skip.includes("apply")) await ui.group("~/.claude applied", () => runApply(share), { done: "already up to date" });
-  if (!skip.includes("link")) await ui.group("project files linked", () => { for (const l of placeAll(share)) ui.step(l); }, { done: "already in sync" });
+  if (!skip.includes("link")) await ui.group("project files linked", () => ui.steps(placeAll(share)), { done: "already in sync" });
   let secretsOk = true;
   if (!skip.includes("secrets") && m.secretsBackend !== "none") { const sc = await import("./secretscmd.js"); await ui.group("secrets", () => sc.init(share, interactive)); secretsOk = await sc.ensureRecipient(share, interactive); }
   if (!skip.includes("hooks")) await ui.group("automatic sync", async () => { await (await import("./hooks.js")).runHooks(share, "install"); runApply(share); });

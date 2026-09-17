@@ -24,6 +24,8 @@ export const dim = pc.dim, bold = pc.bold, green = pc.green, yellow = pc.yellow,
 export function info(msg = "") { if (quiet) return; if (collecting) { if (msg) collecting.push(msg); return; } p.log.message(msg); }
 export function ok(msg: string) { if (quiet) return; if (collecting) { collecting.push(msg); return; } p.log.success(msg); }
 export function step(msg: string) { if (quiet) return; if (collecting) { collecting.push(msg); return; } p.log.step(msg); }
+/** The change lines a silent module returned, one step each. */
+export function steps(lines: string[]) { for (const l of lines) step(l); }
 export function skip(msg: string) { if (quiet || collecting) return; p.log.message(pc.dim("○ " + msg)); }
 
 let activeSpinner: { message: (s: string) => void } | null = null;

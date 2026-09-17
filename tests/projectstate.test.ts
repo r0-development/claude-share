@@ -16,60 +16,60 @@ const MEM = "~/share/projects/x/memory";
 const pointer = (rest: Record<string, unknown> = {}) => JSON.stringify({ ...rest, autoMemoryDirectory: MEM }, null, 2) + "\n";
 
 // ---------------------------------------------------------------- decide: the newer-wins table
-/** A stamp as observe would build it: content with the pointer stripped, mtime in seconds; `raw` what a checkout has on disk. */
+/** A stamp as observe would build it: content with the pointer stripped, mtime in seconds; `raw` what a unit has on disk. */
 const at = (s: string, mtime: number) => ({ data: Buffer.from(s), mtime });
 const on = (s: string, mtime: number, raw = s) => ({ data: Buffer.from(s), raw: Buffer.from(raw), mtime });
-const obs = (o: Partial<Observation>): Observation => ({ side: {}, targets: {}, remembered: [], pointer: MEM, excludes: [], ...o });
+const obs = (o: Partial<Observation>): Observation => ({ state: {}, targets: {}, remembered: [], pointer: MEM, excludes: [], ...o });
 /** Decisions with buffers as strings, so a table reads. */
 const text = (d: ReturnType<typeof decide>) => ({
-  toSide: d.toSide.map((x) => [x.rel, x.data.toString(), x.mtime, x.from]),
+  toState: d.toState.map((x) => [x.rel, x.data.toString(), x.mtime, x.from]),
   toTargets: d.toTargets.map((x) => [x.target, x.rel, x.data.toString(), x.mtime]),
   removals: d.removals.map((x) => [x.target, x.rel]), excludes: d.excludes.map((x) => [x.target, x.missing]), placed: d.placed,
 });
 
-test("decide: copy-back — the newest checkout copy goes to the project state and to every other checkout, stamped with its mtime", () => {
-  const d = text(decide(obs({ side: { "CLAUDE.md": at("v1\n", 10) }, targets: { "/a": { "CLAUDE.md": on("v2\n", 20), [SL]: on("", 5, pointer()) }, "/b": { "CLAUDE.md": on("v1\n", 10), [SL]: on("", 5, pointer()) } } })));
-  assert.deepEqual(d.toSide, [["CLAUDE.md", "v2\n", 20, "/a"]]);
+test("decide: copy-back — the newest unit's copy goes to the project state and to every other unit, stamped with its mtime", () => {
+  const d = text(decide(obs({ state: { "CLAUDE.md": at("v1\n", 10) }, targets: { "/a": { "CLAUDE.md": on("v2\n", 20), [SL]: on("", 5, pointer()) }, "/b": { "CLAUDE.md": on("v1\n", 10), [SL]: on("", 5, pointer()) } } })));
+  assert.deepEqual(d.toState, [["CLAUDE.md", "v2\n", 20, "/a"]]);
   assert.deepEqual(d.toTargets, [["/b", "CLAUDE.md", "v2\n", 20]]);
   assert.deepEqual([d.removals, d.placed], [[], ["CLAUDE.md"]]);
 });
-test("decide: fan-out — the project state, when newest, goes to every checkout that differs; an older checkout copy never wins", () => {
-  const d = text(decide(obs({ side: { "CLAUDE.md": at("v2\n", 30), ".claude/commands/x.md": at("cmd\n", 30) }, targets: { "/a": { "CLAUDE.md": on("v1\n", 20), [SL]: on("", 5, pointer()) }, "/b": { "CLAUDE.md": on("v2\n", 30), [SL]: on("", 5, pointer()) } } })));
-  assert.deepEqual(d.toSide, []);
+test("decide: fan-out — the project state, when newest, goes to every unit that differs; an older copy in a unit never wins", () => {
+  const d = text(decide(obs({ state: { "CLAUDE.md": at("v2\n", 30), ".claude/commands/x.md": at("cmd\n", 30) }, targets: { "/a": { "CLAUDE.md": on("v1\n", 20), [SL]: on("", 5, pointer()) }, "/b": { "CLAUDE.md": on("v2\n", 30), [SL]: on("", 5, pointer()) } } })));
+  assert.deepEqual(d.toState, []);
   assert.deepEqual(d.toTargets, [["/a", ".claude/commands/x.md", "cmd\n", 30], ["/b", ".claude/commands/x.md", "cmd\n", 30], ["/a", "CLAUDE.md", "v2\n", 30]]);
   assert.deepEqual(d.placed, [".claude/commands/x.md", "CLAUDE.md"]);
 });
 test("decide: a tie on mtime keeps the project state's copy; a different content with the same mtime does not win", () => {
-  const d = text(decide(obs({ side: { "CLAUDE.md": at("side\n", 10) }, targets: { "/a": { "CLAUDE.md": on("mine\n", 10), [SL]: on("", 5, pointer()) } } })));
-  assert.deepEqual([d.toSide, d.toTargets], [[], [["/a", "CLAUDE.md", "side\n", 10]]]);
+  const d = text(decide(obs({ state: { "CLAUDE.md": at("side\n", 10) }, targets: { "/a": { "CLAUDE.md": on("mine\n", 10), [SL]: on("", 5, pointer()) } } })));
+  assert.deepEqual([d.toState, d.toTargets], [[], [["/a", "CLAUDE.md", "side\n", 10]]]);
 });
-test("decide: deletion — a file placed last time and now gone from the project state is removed from every checkout, whatever they did to it, and forgotten", () => {
-  const d = text(decide(obs({ side: {}, remembered: ["CLAUDE.md", ".claude/gone.md"], targets: { "/a": { "CLAUDE.md": on("edited later\n", 99), [SL]: on("", 5, pointer()) }, "/b": { [SL]: on("", 5, pointer()) } } })));
+test("decide: deletion — a file placed last time and now gone from the project state is removed from every unit, whatever it did to it, and forgotten", () => {
+  const d = text(decide(obs({ state: {}, remembered: ["CLAUDE.md", ".claude/gone.md"], targets: { "/a": { "CLAUDE.md": on("edited later\n", 99), [SL]: on("", 5, pointer()) }, "/b": { [SL]: on("", 5, pointer()) } } })));
   assert.deepEqual(d.removals, [["/a", "CLAUDE.md"]]);
-  assert.deepEqual([d.toSide, d.toTargets, d.placed], [[], [], []]);
+  assert.deepEqual([d.toState, d.toTargets, d.placed], [[], [], []]);
 });
-test("decide: a file new in a checkout that was never placed is not a deletion — it is imported into the project state", () => {
-  const d = text(decide(obs({ side: {}, targets: { "/a": { ".mcp.json": on("{}\n", 7), [SL]: on("", 5, pointer()) } } })));
-  assert.deepEqual([d.toSide, d.placed], [[[".mcp.json", "{}\n", 7, "/a"]], [".mcp.json"]]);
+test("decide: a file new in a unit that was never placed is not a deletion — it is imported into the project state", () => {
+  const d = text(decide(obs({ state: {}, targets: { "/a": { ".mcp.json": on("{}\n", 7), [SL]: on("", 5, pointer()) } } })));
+  assert.deepEqual([d.toState, d.placed], [[[".mcp.json", "{}\n", 7, "/a"]], [".mcp.json"]]);
 });
-test("decide: settings.local.json — the pointer is this machine's: never compared, never stored, always present in the checkout", () => {
-  // nothing anywhere: every checkout gets a pointer-only file, the project state gets nothing, nothing is remembered
+test("decide: settings.local.json — the pointer is this machine's: never compared, never stored, always present in the unit", () => {
+  // nothing anywhere: every unit gets a pointer-only file, the project state gets nothing, nothing is remembered
   const fresh = text(decide(obs({ targets: { "/a": {} } })));
-  assert.deepEqual([fresh.toSide, fresh.toTargets, fresh.placed], [[], [["/a", SL, pointer(), -1]], []]);
-  // a checkout whose file is only the pointer, already right: nothing to do
+  assert.deepEqual([fresh.toState, fresh.toTargets, fresh.placed], [[], [["/a", SL, pointer(), -1]], []]);
+  // a unit whose file is only the pointer, already right: nothing to do
   assert.deepEqual(text(decide(obs({ targets: { "/a": { [SL]: on("", 5, pointer()) } } }))).toTargets, []);
   // a stale pointer (the share moved) is rewritten even though the content compares equal
   assert.deepEqual(text(decide(obs({ targets: { "/a": { [SL]: on("", 5, JSON.stringify({ autoMemoryDirectory: "~/old" }) + "\n") } } }))).toTargets, [["/a", SL, pointer(), 5]]);
-  // real settings edited in a checkout travel to the project state without the pointer, and to the other checkout with it
+  // real settings edited in a unit travel to the project state without the pointer, and to the other unit with it
   const perms = JSON.stringify({ permissions: { allow: ["Bash(ls)"] } }, null, 2) + "\n";
-  const d = text(decide(obs({ side: { [SL]: at("", 1) }, targets: { "/a": { [SL]: on(perms, 20, pointer({ permissions: { allow: ["Bash(ls)"] } })) }, "/b": { [SL]: on("", 5, pointer()) } } })));
-  assert.deepEqual(d.toSide, [[SL, perms, 20, "/a"]]);
+  const d = text(decide(obs({ state: { [SL]: at("", 1) }, targets: { "/a": { [SL]: on(perms, 20, pointer({ permissions: { allow: ["Bash(ls)"] } })) }, "/b": { [SL]: on("", 5, pointer()) } } })));
+  assert.deepEqual(d.toState, [[SL, perms, 20, "/a"]]);
   assert.deepEqual(d.toTargets, [["/b", SL, pointer({ permissions: { allow: ["Bash(ls)"] } }), 20]]);
   assert.deepEqual(d.placed, [SL]);
 });
 test("decide: a second machine with a fresh checkout receives everything with its own pointer, sends nothing back", () => {
-  const d = text(decide(obs({ side: { "CLAUDE.md": at("v2\n", 30), [SL]: at(JSON.stringify({ model: "opus" }, null, 2) + "\n", 30) }, targets: { "/new": {} } })));
-  assert.deepEqual(d.toSide, []);
+  const d = text(decide(obs({ state: { "CLAUDE.md": at("v2\n", 30), [SL]: at(JSON.stringify({ model: "opus" }, null, 2) + "\n", 30) }, targets: { "/new": {} } })));
+  assert.deepEqual(d.toState, []);
   assert.deepEqual(d.toTargets, [["/new", SL, pointer({ model: "opus" }), 30], ["/new", "CLAUDE.md", "v2\n", 30]]);
 });
 test("decide: exclude lines missing from a repo's info/exclude are added once per repo, after everything else", () => {
@@ -137,6 +137,16 @@ test("place: a file deleted from the project state leaves every checkout on the 
   assert.equal(read(co, ".claude/commands/x.md"), undefined);
   assert.deepEqual(place(share, P("one")), []);
 });
+test("place: a project-state file outside the managed set (.claude/settings.json) is placed once and then settles; an edit to it in a unit flows back", () => {
+  const co = join(ws, "one"); put(projectState(share, "one"), ".claude/settings.json", '{"model":"opus"}\n', 4100);
+  assert.deepEqual(place(share, P("one")), ["~/dev/one/.claude/settings.json ← project state"]);
+  assert.deepEqual(place(share, P("one")), []);
+  put(co, ".claude/settings.json", '{"model":"sonnet"}\n', 4200);
+  assert.deepEqual(place(share, P("one")), ["project state ← .claude/settings.json (from ~/dev/one)"]);
+  assert.equal(read(projectState(share, "one"), ".claude/settings.json"), '{"model":"sonnet"}\n');
+  rmSync(join(projectState(share, "one"), ".claude", "settings.json"));   // gone from the project state: a file outside the managed set is left alone (it may be the project's own)
+  assert.deepEqual(place(share, P("one")), []); assert.equal(read(co, ".claude/settings.json"), '{"model":"sonnet"}\n');
+});
 test("place: no checkout here is nothing to do, no record either", () => {
   assert.deepEqual(place(share, P("away")), []);
   assert.ok(!existsSync(join(tmp, "state", "cs", "project-state", "away.json")));
@@ -162,7 +172,7 @@ test("sweep: a record whose project left the manifest strips the pointer where t
   assert.ok(!existsSync(join(tmp, "state", "cs", "project-state", "one.json")));
   assert.deepEqual(sweep(gone), []);
 });
-test("forget: cs remove's tidy-up — the pointer goes from the given checkouts (the file too when nothing else is in it), the record goes", () => {
+test("forget: cs remove's tidy-up — the pointer goes from the given units (the file too when nothing else is in it), the record goes", () => {
   const root = join(ws, "wt", "repo"), feat = join(ws, "wt", "wt-feat");
   assert.deepEqual(forget("wt", [root, feat]), ["wt: auto-memory pointer removed from ~/dev/wt/repo", "wt: auto-memory pointer removed from ~/dev/wt/wt-feat"]);
   assert.equal(read(root, SL), undefined); assert.equal(read(feat, SL), undefined);

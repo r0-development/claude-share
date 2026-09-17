@@ -82,7 +82,7 @@ export async function remove(share: Share, names: string[], o: { yes?: boolean; 
     if (removeProject(share, t.name)) paths.push("projects.toml");
     if (t.state) { rmSync(t.state, { recursive: true, force: true }); paths.push(relative(repo, t.state)); }
     for (const f of t.secrets) { rmSync(f, { force: true }); paths.push(relative(repo, f)); }
-    for (const l of forget(t.name, t.here)) ui.step(l);
+    ui.steps(forget(t.name, t.here));
   }
   // exactly the removal — nothing else the share may have pending — so one git revert brings it all back
   const sha = o.noCommit ? "" : commit(share, `remove ${label}`, [...new Set(paths)]) ?? "";
