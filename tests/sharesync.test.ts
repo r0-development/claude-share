@@ -7,7 +7,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, unlinkSync, w
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { execFileSync } from "node:child_process";
-import { syncShare, type Conflict, type Side } from "../src/sharesync.ts";
+import { describe, newest, syncShare, type Conflict, type Side } from "../src/sharesync.ts";
 import { open, type Share } from "../src/share.ts";
 import type { Machine } from "../src/machine.ts";
 import * as ui from "../src/ui.ts";
@@ -55,6 +55,15 @@ function clean(s: Share) {
 const rebasing = (s: Share) => existsSync(join(s.path, ".git", "rebase-merge")) || existsSync(join(s.path, ".git", "rebase-apply"));
 /** An `ask` that answers `side` for every file and records what it was asked — and whether `s` was mid-rebase at the time. */
 const answering = (side: Side, s?: Share) => { const asked: Conflict[] = []; let midRebase = false; const ask = async (c: Conflict) => { asked.push(c); if (s && rebasing(s)) midRebase = true; return side; }; return { ask, asked, get midRebase() { return midRebase; } }; };
+
+// ---------------------------------------------------------------- the pure bits a prompt is built from
+test("newest / describe: the later change wins, a tie stays with this machine; a hint says changed or deleted and when", () => {
+  const at = (when: string, deleted = false) => ({ when, deleted });
+  assert.equal(newest({ file: "f", ours: at("2026-09-10T10:00:00Z"), theirs: at("2026-09-10T10:00:01Z") }), "theirs");
+  assert.equal(newest({ file: "f", ours: at("2026-09-10T10:00:00Z"), theirs: at("2026-09-10T10:00:00Z") }), "ours");
+  assert.equal(newest({ file: "f", ours: at("2026-09-10T10:00:00Z", true), theirs: at("2026-09-10T09:00:00Z") }), "ours");
+  assert.deepEqual([describe(at("2026-09-16T08:00:00+02:00")), describe(at("2026-09-16T08:00:00Z", true))], ["changed 2026-09-16 08:00", "deleted 2026-09-16 08:00"]);
+});
 
 // ---------------------------------------------------------------- the plain cycle
 test("syncShare: local changes are committed as this machine and pushed; the other machine fast-forwards to them", async () => {
@@ -151,6 +160,7 @@ test("rebase stops without a conflict: git refused the settled step for a reason
   hook(p.laptop, "exit 1");
   const r = await syncShare(p.laptop, {});
   assert.deepEqual([r.ok, head(p.laptop.path), read(p.laptop, SETTINGS)], [false, before, '{"model":"haiku"}\n']);
+  assert.match(r.error!, /stopped without a conflict — cd \S+ && git rebase origin\/main$/);   // the by-hand command names the upstream (HEAD is detached mid-rebase)
   clean(p.laptop);
 });
 test("same step twice: a stop that comes back after being settled is reported as stuck instead of looping — aborted, the share as it was", async () => {
@@ -158,6 +168,7 @@ test("same step twice: a stop that comes back after being settled is reported as
   hook(p.laptop, `git checkout -m -- ${SETTINGS}; exit 1`);   // the hook re-creates the conflict it was asked to commit past
   const r = await syncShare(p.laptop, {});
   assert.deepEqual([r.ok, head(p.laptop.path), read(p.laptop, SETTINGS)], [false, before, '{"model":"haiku"}\n']);
+  assert.match(r.error!, new RegExp(`keeps stopping on ${SETTINGS.replace(".", "\\.")} — cd \\S+ && git rebase origin/main$`));
   clean(p.laptop);
 });
 

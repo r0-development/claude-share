@@ -32,14 +32,17 @@ export interface Change { when: string; deleted: boolean }
  *  cycle (the hooks). `commitOnly`: commit local changes and stop (cs sync when the first fetch of the run already failed).
  *  `debounce` (seconds): do nothing when a sync ran that recently (the Stop hook fires per Claude turn). */
 export interface SyncOpts { pullOnly?: boolean; pushOnly?: boolean; timeout?: number; commitOnly?: boolean; debounce?: number; resolve?: Side | "newest"; ask?: (c: Conflict) => Promise<Side> }
-/** `offline`: the fetch failed (or was skipped), local commits are kept for a later push. `pushed`: commits that reached the remote. */
-export interface ShareResult { ok: boolean; offline?: boolean; pushed?: number }
+/** `offline`: the fetch failed (or was skipped), local commits are kept for a later push. `pushed`: commits that reached the
+ *  remote. `error`: why `ok` is false, as it was printed. */
+export interface ShareResult { ok: boolean; offline?: boolean; pushed?: number; error?: string }
 
 /** Newest change wins (a deletion is a change); a tie stays with this machine. */
 export const newest = (c: Conflict): Side => (Date.parse(c.theirs.when) > Date.parse(c.ours.when) ? "theirs" : "ours");
 /** "changed 2026-09-16 08:00" / "deleted 2026-09-16 08:00" for a prompt hint. */
 export const describe = (ch: Change) => `${ch.deleted ? "deleted" : "changed"} ${ch.when.slice(0, 16).replace("T", " ")}`;
 const LABEL = "share";
+/** An `ok: false` result: printed (what, why, fix) and returned. */
+const failed = (what: string, why = "", fix = ""): ShareResult => { ui.error(`${LABEL}: ${what}`, why, fix); return { ok: false, error: [what, why].filter(Boolean).join(" — ") }; };
 
 // ---------------------------------------------------------------- a stopped rebase: what stopped it, taking a side, settling it
 function conflictsOf(repo: string, local: string, upstream: string): Conflict[] {
@@ -55,9 +58,8 @@ function takeSide(repo: string, file: string, side: Side) {
 /** Settle a stopped rebase file by file until it finishes, `decided` (asked earlier this run) and `resolve` first, newest
  *  otherwise. With `ask`, files nothing decides yet abort the rebase and come back for the caller to ask about. Throws
  *  (rebase aborted) when git stops for another reason or the same conflict comes back. */
-function settleRebase(repo: string, local: string, upstream: string, o: SyncOpts, decided: Record<string, Side>): Conflict[] | undefined {
+function settleRebase(repo: string, local: string, upstream: string, byHand: string, o: SyncOpts, decided: Record<string, Side>): Conflict[] | undefined {
   const env = { GIT_EDITOR: "true" }; const ident = git.identityArgs(repo); const settled: string[] = []; let backedUp = false; let last = "";
-  const byHand = `cd ${contract(repo)} && git rebase ${git.out(["rev-parse", "--abbrev-ref", "@{upstream}"], repo)}`;   // HEAD is detached while the rebase runs: named through the upstream
   const side = (c: Conflict): Side | undefined => {
     if (decided[c.file]) return decided[c.file];
     if (o.resolve === "ours" || o.resolve === "theirs") return o.resolve;
@@ -82,34 +84,36 @@ function settleRebase(repo: string, local: string, upstream: string, o: SyncOpts
   ui.step(`${LABEL}: settled ${settled.join(", ")}`);
   return undefined;
 }
-/** Rebase this machine's commits onto the upstream, asking about what `ask` must decide with the rebase aborted in between.
- *  False when git stopped for a reason that is not ours to settle (reported; the share is as it was). */
-async function rebase(repo: string, o: SyncOpts): Promise<boolean> {
-  const decided: Record<string, Side> = {};
+/** Rebase this machine's commits onto the upstream, asking about what `ask` must decide with the rebase aborted in between;
+ *  `decided` holds the answers for the run (a push retry rebases again and must not ask twice). The failure when git stopped
+ *  for a reason that is not ours to settle (the share is as it was), nothing when the rebase finished. */
+async function rebase(repo: string, o: SyncOpts, decided: Record<string, Side>): Promise<ShareResult | undefined> {
+  const byHand = `cd ${contract(repo)} && git rebase ${git.out(["rev-parse", "--abbrev-ref", "@{upstream}"], repo)}`;   // named now: HEAD is detached once the rebase runs
   for (;;) {
     const local = git.out(["rev-parse", "HEAD"], repo), upstream = git.out(["rev-parse", "@{upstream}"], repo);
     const r = git.git([...git.identityArgs(repo), "rebase", "-q", "@{upstream}"], repo, { check: false, env: { GIT_EDITOR: "true" } });
-    if (r.code === 0) return true;
-    if (!git.rebaseInProgress(repo)) { ui.error(`${LABEL}: could not rebase`, r.err.split("\n").filter(Boolean).pop() ?? ""); return false; }
+    if (r.code === 0) return undefined;
+    if (!git.rebaseInProgress(repo)) return failed("could not rebase", r.err.split("\n").filter(Boolean).pop() ?? "");
     let open: Conflict[] | undefined;
-    try { open = settleRebase(repo, local, upstream, o, decided); } catch (e: any) { ui.error(`${LABEL}: could not settle the rebase`, e.message.replace(/^cs: /, "")); return false; }
-    if (!open) return true;
+    try { open = settleRebase(repo, local, upstream, byHand, o, decided); } catch (e: any) { return failed("could not settle the rebase", e.message.replace(/^cs: /, "")); }
+    if (!open) return undefined;
     ui.step(`${LABEL}: ${open.length} file(s) changed on both machines — asking`);
     for (const c of open) decided[c.file] = await o.ask!(c);
   }
 }
 
 // ---------------------------------------------------------------- the cycle
-const relevant = (file: string) => file.startsWith("claude/") || file.startsWith("projects.toml") || file.startsWith("plans/");
+const rerenders = (file: string) => file.startsWith("claude/") || file.startsWith("projects.toml") || file.startsWith("plans/");
 /** Commit → fetch → fast-forward or rebase → push, once the tree is committed. */
 async function cycle(share: Share, o: SyncOpts): Promise<ShareResult> {
   const repo = share.path; const timeout = o.timeout ?? 20;
   if (!git.remoteUrl(repo)) { ui.ok(`${LABEL}: no remote configured; local only`); return { ok: true }; }
   if (o.commitOnly) return { ok: true, offline: true };
+  const decided: Record<string, Side> = {};
   for (let attempt = 0; ; attempt++) {
     const f = await ui.spin(`${LABEL}: fetching…`, () => git.gitA(["fetch", "-q", "--prune", "origin"], repo, { check: false, timeout }));
     if (f.code !== 0) { ui.warn(`${LABEL}: offline or fetch timed out; will push later`); markSync("offline"); return { ok: true, offline: true }; }
-    const branch = git.currentBranch(repo); if (!branch) { ui.fail(`${LABEL}: detached HEAD; refusing to sync`); return { ok: false }; }
+    const branch = git.currentBranch(repo); if (!branch) return failed("detached HEAD; refusing to sync");
     if (!git.out(["rev-parse", "--abbrev-ref", "@{upstream}"], repo)) {
       if (git.out(["rev-parse", "--verify", "-q", `origin/${branch}`], repo)) git.git(["branch", "-q", `--set-upstream-to=origin/${branch}`, branch], repo);
       else if (!o.pullOnly) { await ui.spin(`${LABEL}: pushing…`, () => git.gitA(["push", "-q", "-u", "origin", branch], repo, { timeout })); ui.ok(`${LABEL}: pushed new branch ${branch}`); return { ok: true, pushed: 1 }; }
@@ -118,13 +122,13 @@ async function cycle(share: Share, o: SyncOpts): Promise<ShareResult> {
     const [ahead, behind] = git.aheadBehind(repo) ?? [0, 0];
     if (behind && !o.pushOnly) {
       if (!ahead) { git.git(["merge", "-q", "--ff-only", "@{upstream}"], repo); ui.step(`${LABEL}: fast-forwarded ${behind} commit(s)`); }
-      else { if (!(await rebase(repo, o))) return { ok: false }; ui.step(`${LABEL}: rebased ${ahead} local commit(s) onto ${behind} remote commit(s)`); }
+      else { const bad = await rebase(repo, o, decided); if (bad) return bad; ui.step(`${LABEL}: rebased ${ahead} local commit(s) onto ${behind} remote commit(s)`); }
     }
     if (o.pullOnly) { markSync(new Date().toISOString()); return { ok: true, pushed: 0 }; }
     const toPush = git.aheadBehind(repo)?.[0] ?? 0;
     if (toPush) {
       const pr = await ui.spin(`${LABEL}: pushing…`, () => git.gitA(["push", "-q", "origin", branch], repo, { check: false, timeout }));
-      if (pr.code !== 0) { if (attempt) { ui.fail(`${LABEL}: push rejected twice — ${pr.err.split("\n").filter(Boolean).pop() ?? ""}`); return { ok: false }; } ui.warn(`${LABEL}: push rejected, retrying once`); continue; }   // another machine pushed since the fetch
+      if (pr.code !== 0) { if (attempt) return failed("push rejected twice", pr.err.split("\n").filter(Boolean).pop() ?? ""); ui.warn(`${LABEL}: push rejected, retrying once`); continue; }   // another machine pushed since the fetch
       ui.ok(`${LABEL}: pushed ${toPush} commit(s)`);
     }
     markSync(new Date().toISOString());
@@ -136,10 +140,10 @@ async function cycle(share: Share, o: SyncOpts): Promise<ShareResult> {
 export async function syncShare(share: Share, o: SyncOpts = {}): Promise<ShareResult> {
   const repo = share.path;
   if (o.debounce && existsSync(lastSyncFile()) && Date.now() - statSync(lastSyncFile()).mtimeMs < o.debounce * 1000) return { ok: true };
-  if (!git.isRepo(repo)) { ui.warn(`${LABEL}: not a git repo (${contract(repo)})`); return { ok: false }; }
+  if (!git.isRepo(repo)) return failed(`not a git repo (${contract(repo)})`);
   const release = acquire(); if (!release) { ui.info(`${LABEL}: another sync is running, skipping`); return { ok: true }; }
   try {
-    if (git.rebaseInProgress(repo)) { ui.error(`${LABEL}: a rebase is in progress in ${contract(repo)}`, "", "finish it: git rebase --continue · or drop it: git rebase --abort"); return { ok: false }; }
+    if (git.rebaseInProgress(repo)) return failed(`a rebase is in progress in ${contract(repo)}`, "", "finish it: git rebase --continue · or drop it: git rebase --abort");
     const before = git.out(["rev-parse", "HEAD"], repo);
     if (!o.pullOnly) {
       ui.steps(placeAll(share));   // newest checkout content into the project state before it is committed
@@ -150,7 +154,7 @@ export async function syncShare(share: Share, o: SyncOpts = {}): Promise<ShareRe
     // state into every checkout. A --pull-only run (the SessionStart hook) re-renders even when nothing arrived.
     const after = git.out(["rev-parse", "HEAD"], repo);
     if (after !== before || o.pullOnly) {
-      if (o.pullOnly || git.out(["diff", "--name-only", before, after], repo).split("\n").some(relevant)) ui.steps(runApply(reload(share)));   // the pull may have changed the manifest
+      if (o.pullOnly || git.out(["diff", "--name-only", before, after], repo).split("\n").some(rerenders)) ui.steps(runApply(reload(share)));   // the pull may have changed the manifest
       ui.steps(placeAll(reload(share)));
     }
     return r;

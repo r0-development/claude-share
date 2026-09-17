@@ -8239,13 +8239,12 @@ function takeSide(repo, file, side) {
   git(["checkout", side === "ours" ? "--theirs" : "--ours", "--", file], repo);
   git(["add", "--", file], repo);
 }
-function settleRebase(repo, local, upstream2, o, decided) {
+function settleRebase(repo, local, upstream2, byHand, o, decided) {
   const env2 = { GIT_EDITOR: "true" };
   const ident2 = identityArgs(repo);
   const settled = [];
   let backedUp = false;
   let last = "";
-  const byHand = `cd ${contract(repo)} && git rebase ${out(["rev-parse", "--abbrev-ref", "@{upstream}"], repo)}`;
   const side = (c2) => {
     if (decided[c2.file]) return decided[c2.file];
     if (o.resolve === "ours" || o.resolve === "theirs") return o.resolve;
@@ -8284,24 +8283,20 @@ function settleRebase(repo, local, upstream2, o, decided) {
   step(`${LABEL}: settled ${settled.join(", ")}`);
   return void 0;
 }
-async function rebase(repo, o) {
-  const decided = {};
+async function rebase(repo, o, decided) {
+  const byHand = `cd ${contract(repo)} && git rebase ${out(["rev-parse", "--abbrev-ref", "@{upstream}"], repo)}`;
   for (; ; ) {
     const local = out(["rev-parse", "HEAD"], repo), upstream2 = out(["rev-parse", "@{upstream}"], repo);
     const r2 = git([...identityArgs(repo), "rebase", "-q", "@{upstream}"], repo, { check: false, env: { GIT_EDITOR: "true" } });
-    if (r2.code === 0) return true;
-    if (!rebaseInProgress(repo)) {
-      error(`${LABEL}: could not rebase`, r2.err.split("\n").filter(Boolean).pop() ?? "");
-      return false;
-    }
+    if (r2.code === 0) return void 0;
+    if (!rebaseInProgress(repo)) return failed("could not rebase", r2.err.split("\n").filter(Boolean).pop() ?? "");
     let open2;
     try {
-      open2 = settleRebase(repo, local, upstream2, o, decided);
+      open2 = settleRebase(repo, local, upstream2, byHand, o, decided);
     } catch (e) {
-      error(`${LABEL}: could not settle the rebase`, e.message.replace(/^cs: /, ""));
-      return false;
+      return failed("could not settle the rebase", e.message.replace(/^cs: /, ""));
     }
-    if (!open2) return true;
+    if (!open2) return void 0;
     step(`${LABEL}: ${open2.length} file(s) changed on both machines \u2014 asking`);
     for (const c2 of open2) decided[c2.file] = await o.ask(c2);
   }
@@ -8314,6 +8309,7 @@ async function cycle(share, o) {
     return { ok: true };
   }
   if (o.commitOnly) return { ok: true, offline: true };
+  const decided = {};
   for (let attempt = 0; ; attempt++) {
     const f = await spin(`${LABEL}: fetching\u2026`, () => gitA(["fetch", "-q", "--prune", "origin"], repo, { check: false, timeout }));
     if (f.code !== 0) {
@@ -8322,10 +8318,7 @@ async function cycle(share, o) {
       return { ok: true, offline: true };
     }
     const branch = currentBranch(repo);
-    if (!branch) {
-      fail(`${LABEL}: detached HEAD; refusing to sync`);
-      return { ok: false };
-    }
+    if (!branch) return failed("detached HEAD; refusing to sync");
     if (!out(["rev-parse", "--abbrev-ref", "@{upstream}"], repo)) {
       if (out(["rev-parse", "--verify", "-q", `origin/${branch}`], repo)) git(["branch", "-q", `--set-upstream-to=origin/${branch}`, branch], repo);
       else if (!o.pullOnly) {
@@ -8340,7 +8333,8 @@ async function cycle(share, o) {
         git(["merge", "-q", "--ff-only", "@{upstream}"], repo);
         step(`${LABEL}: fast-forwarded ${behind} commit(s)`);
       } else {
-        if (!await rebase(repo, o)) return { ok: false };
+        const bad = await rebase(repo, o, decided);
+        if (bad) return bad;
         step(`${LABEL}: rebased ${ahead} local commit(s) onto ${behind} remote commit(s)`);
       }
     }
@@ -8352,10 +8346,7 @@ async function cycle(share, o) {
     if (toPush) {
       const pr = await spin(`${LABEL}: pushing\u2026`, () => gitA(["push", "-q", "origin", branch], repo, { check: false, timeout }));
       if (pr.code !== 0) {
-        if (attempt) {
-          fail(`${LABEL}: push rejected twice \u2014 ${pr.err.split("\n").filter(Boolean).pop() ?? ""}`);
-          return { ok: false };
-        }
+        if (attempt) return failed("push rejected twice", pr.err.split("\n").filter(Boolean).pop() ?? "");
         warn(`${LABEL}: push rejected, retrying once`);
         continue;
       }
@@ -8368,20 +8359,14 @@ async function cycle(share, o) {
 async function syncShare(share, o = {}) {
   const repo = share.path;
   if (o.debounce && existsSync10(lastSyncFile()) && Date.now() - statSync7(lastSyncFile()).mtimeMs < o.debounce * 1e3) return { ok: true };
-  if (!isRepo(repo)) {
-    warn(`${LABEL}: not a git repo (${contract(repo)})`);
-    return { ok: false };
-  }
+  if (!isRepo(repo)) return failed(`not a git repo (${contract(repo)})`);
   const release = acquire();
   if (!release) {
     info(`${LABEL}: another sync is running, skipping`);
     return { ok: true };
   }
   try {
-    if (rebaseInProgress(repo)) {
-      error(`${LABEL}: a rebase is in progress in ${contract(repo)}`, "", "finish it: git rebase --continue \xB7 or drop it: git rebase --abort");
-      return { ok: false };
-    }
+    if (rebaseInProgress(repo)) return failed(`a rebase is in progress in ${contract(repo)}`, "", "finish it: git rebase --continue \xB7 or drop it: git rebase --abort");
     const before = out(["rev-parse", "HEAD"], repo);
     if (!o.pullOnly) {
       steps(placeAll(share));
@@ -8394,7 +8379,7 @@ async function syncShare(share, o = {}) {
     const r2 = await cycle(share, o);
     const after = out(["rev-parse", "HEAD"], repo);
     if (after !== before || o.pullOnly) {
-      if (o.pullOnly || out(["diff", "--name-only", before, after], repo).split("\n").some(relevant)) steps(runApply(reload(share)));
+      if (o.pullOnly || out(["diff", "--name-only", before, after], repo).split("\n").some(rerenders)) steps(runApply(reload(share)));
       steps(placeAll(reload(share)));
     }
     return r2;
@@ -8402,7 +8387,7 @@ async function syncShare(share, o = {}) {
     release();
   }
 }
-var lastSyncFile, lastSync, markSync, newest, describe2, LABEL, relevant;
+var lastSyncFile, lastSync, markSync, newest, describe2, LABEL, failed, rerenders;
 var init_sharesync = __esm({
   "src/sharesync.ts"() {
     "use strict";
@@ -8422,7 +8407,11 @@ var init_sharesync = __esm({
     newest = (c2) => Date.parse(c2.theirs.when) > Date.parse(c2.ours.when) ? "theirs" : "ours";
     describe2 = (ch) => `${ch.deleted ? "deleted" : "changed"} ${ch.when.slice(0, 16).replace("T", " ")}`;
     LABEL = "share";
-    relevant = (file) => file.startsWith("claude/") || file.startsWith("projects.toml") || file.startsWith("plans/");
+    failed = (what, why = "", fix2 = "") => {
+      error(`${LABEL}: ${what}`, why, fix2);
+      return { ok: false, error: [what, why].filter(Boolean).join(" \u2014 ") };
+    };
+    rerenders = (file) => file.startsWith("claude/") || file.startsWith("projects.toml") || file.startsWith("plans/");
   }
 });
 
@@ -9501,12 +9490,12 @@ async function runSync(share, o = {}) {
     for (const st of keysOnly) await one(`${st.project} \xB7 ${st.file}`, st, {});
   });
   for (const st of states) snapshotInSync(st);
-  const failed = chosen.length + over.length + replace.length + keysOnly.length - sent - applied - pushed - envDone;
-  if (failed) rc = rc || 1;
+  const failed2 = chosen.length + over.length + replace.length + keysOnly.length - sent - applied - pushed - envDone;
+  if (failed2) rc = rc || 1;
   const last = await shareStep("share pushed", first.offline ? "committed locally \u2014 offline, pushed by the next sync" : "already in sync", { commitOnly: first.offline });
   if (!last.ok) rc = 2;
   const bits = [applied ? `${applied} handoff(s) applied` : "", sent ? `${sent} handoff(s) sent` : "", pushed ? `${pushed} branch(es) pushed` : "", envDone ? `${envDone} .env file(s) merged` : "", cloned ? `${cloned} project(s) cloned` : "", kept ? yellow(`${kept} handoff(s) left waiting \u2014 see above`) : ""].filter(Boolean);
-  const summary2 = rc === 2 ? red("share not synced \u2014 see above") : failed ? red(`${failed} action(s) failed \u2014 see above`) : bits.length ? bits.join(" \xB7 ") : dim(first.offline || last.offline ? "offline \u2014 local parts done, nothing moved" : "nothing to move");
+  const summary2 = rc === 2 ? red("share not synced \u2014 see above") : failed2 ? red(`${failed2} action(s) failed \u2014 see above`) : bits.length ? bits.join(" \xB7 ") : dim(first.offline || last.offline ? "offline \u2014 local parts done, nothing moved" : "nothing to move");
   return { rc, summary: summary2 };
 }
 var GROUP, askSide, mask;
