@@ -24,6 +24,7 @@ occasionally
   cs new billing-api --personal            new project: dir, git, private GitHub repo, first push, Claude wired in
   cs add ~/dev/existing                    register a directory (creates its GitHub repo when it has none)
   cs remove old-thing                      take a project out of the share (its checkout and GitHub repo stay)
+  cs ignore scratch-dir                    a directory under the projects location that is not a project: stop mentioning it here
   cs secrets set global API_TOKEN=…        encrypted; available to Claude's MCP servers as \${API_TOKEN}
   cs trust laptop                          let another machine read the secrets
 
@@ -59,6 +60,8 @@ program.command("add [path]").description("register an existing directory as a p
   .action(async (p, o) => { const share = open(); const { add } = await import("./projects.js"); await ui.command("cs add", () => add(share, p, { profiles: csv(o.profiles), identity: o.identity, name: o.name, description: o.description, noCommit: !o.commit, priv: !o.public })); });
 program.command("remove <names...>").description("take projects out of the share: manifest entry, project state, secrets; checkouts and remotes stay").option("-y, --yes", "skip the confirmation").option("--no-commit")
   .action(async (names, o) => { const share = open(); const { remove } = await import("./remove.js"); await ui.command(`cs remove ${names.join(" ")}`, () => remove(share, names, { yes: o.yes, noCommit: !o.commit }), { outro: (s) => s }); });
+program.command("ignore <dirs...>").description("directories under the projects location that are not projects: this machine stops mentioning them (machine.toml ignore)")
+  .action(async (dirs) => { const share = open(); const { ignore } = await import("./ignore.js"); await ui.command(`cs ignore ${dirs.join(" ")}`, () => ignore(share, dirs)); });
 program.command("clone [names...]").description("clone the projects selected for this machine that are missing here").option("--dry-run").action(async (names, o) => { const share = open(); const { clone } = await import("./projects.js");
   await ui.command("cs clone", async () => { process.exitCode = await ui.group(o.dryRun ? "would clone" : "cloned", () => clone(share, names, o.dryRun), { done: "nothing missing" }); }); });
 

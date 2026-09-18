@@ -36,8 +36,10 @@ claude-share  desk
 
 A project's line shows dirty changes, `↑N unpushed` commits, `handoff waiting from <machine>`, what its `.env` files
 would move, `missing here` — and `cs sync` after it when that run would do or ask something there. The share's line shows
-its own state and when it last synced. Directories under the projects location that no project claims are listed with
-the `cs add` command that registers them. The last line is the command that resolves what was found: `run: cs sync`
+its own state and when it last synced. Directories under the projects location that no project claims are listed with what they
+are — `not registered` (`cs add` registers it), `another clone of <project>`, `empty` — and `cs ignore <dir>`, which
+makes it an ignored directory: this machine stops mentioning it (`ignore = [...]` in `machine.toml`, never in the share —
+each machine decides for itself). The last line is the command that resolves what was found: `run: cs sync`
 when anything is pending, `run: cs doctor --fix` when only repairs are; the exit code is 1 in both cases (`cs --no-fetch`
 for scripts and prompts).
 
@@ -121,6 +123,7 @@ cs add ~/dev/existing                # register a directory; creates its private
 cd ~/dev/thing && cs add             # default: the current directory (url, branch, identity, worktree layout inferred)
 cs clone                             # on a new machine (cs sync does this too)
 cs remove old-thing                  # out of the share: manifest entry, project state, secrets — one commit, after one confirmation
+cs ignore scratch-dir                # a directory under the projects location that is not a project: this machine stops mentioning it
 ```
 
 `cs new` takes `--<identity>` (or `--<github-owner>`), `--profiles a,b`, `-d "description"`, `--public`; `cs add` takes
@@ -130,8 +133,9 @@ project (a machine gets the projects whose profiles intersect its own), `machine
 project out of handoffs / `.env` travel, `handoff.extra`, `handoff.exclude`, `handoff.never` and `env.local` tune what
 travels (`docs/HANDOFF.md`, `docs/SECRETS.md`).
 
-`cs remove` never touches a checkout, a worktree or the GitHub repo: the checkout is just a directory again (the only thing
-tidied inside it, on every machine at its next `cs sync`, is the auto-memory pointer `cs` wrote there), and the closing
+`cs remove` never touches a checkout, a worktree or the GitHub repo: the checkout is just a directory again — ignored on
+this machine, so the next `cs` does not flag it (the only thing tidied inside it, on every machine at its next `cs sync`,
+is the auto-memory pointer `cs` wrote there), and the closing
 line names the `gh repo delete` command for when the remote should go too. `--yes` skips the confirmation, `--no-commit`
 leaves the share commit to you; undo is `git revert` of that commit in the share. `cs` and `cs doctor` offer `cs remove`
 for a project that has no remote and is not on this machine, and `cs doctor` flags state or secrets left in the share
@@ -183,7 +187,8 @@ org, repository access *All repositories*, *Administration: read & write*; add *
 
 ```sh
 cs doctor          # platform, tools, links, settings drift, identities, remotes, hooks, timer, old on-disk names
-cs doctor --fix    # repairs what it can: missing GitHub repos, remotes with an old owner, on-disk names (docs/MIGRATION.md)
+cs doctor --fix    # repairs what it can: missing GitHub repos, remotes with an old owner, on-disk names (docs/MIGRATION.md);
+                   # asks register / ignore / leave for each unregistered directory
 cs update          # the tool itself (git pull --ff-only in its checkout); `cs` says when one is available
 ```
 
@@ -204,6 +209,11 @@ for scripts. Details: `docs/BOOTSTRAP.md`; Windows: `docs/WINDOWS.md`.
 Two repos: this tool (public) and your own share (private, holds all your data). Node 18+ and git — nothing else.
 WSL2 on Windows, macOS, Linux; Windows-native is unsupported.
 
+What is this machine's alone lives in `~/.config/claude-share/machine.toml` (never synced; edit freely): `name`, `profiles`
+(which projects it gets), `exclude = [...]` (registered projects it does not get even so), `ignore = [...]` (directories
+under the projects location that are not projects — `cs ignore` writes it, `cs doctor --fix` and `cs remove` too; drop
+the name from the list to undo), `workspace` and `share` when they are not the defaults, and `[secrets] backend`.
+
 ## Commands
 
 What `cs --help` lists; `cs <command> -h` for options.
@@ -215,6 +225,7 @@ What `cs --help` lists; `cs <command> -h` for options.
 | `cs new <name>` | create a project: dir, git, private GitHub repo, first push, registered, Claude wired in |
 | `cs add [path]` | register an existing directory as a project (default: cwd); creates its private GitHub repo when it has no remote |
 | `cs remove <names...>` | take projects out of the share: manifest entry, project state, secrets; checkouts and remotes stay |
+| `cs ignore <dirs...>` | directories under the projects location that are not projects: this machine stops mentioning them (machine.toml ignore) |
 | `cs clone [names...]` | clone the projects selected for this machine that are missing here |
 | `cs secrets` | encrypted secrets in the share: set \| get \| edit |
 | `cs identity` | git identities: who commits, with which key, under which GitHub owner |

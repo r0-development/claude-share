@@ -12,7 +12,7 @@ import type { Machine } from "../src/machine.ts";
 // ---------------------------------------------------------------- fixture: a share per test, initialised with one committed manifest
 let tmp: string; let n = 0;
 const sh = (args: string[], cwd?: string) => execFileSync("git", args, { cwd, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }).trim();
-const machine: Machine = { name: "desk", profiles: ["personal"], exclude: [], secretsBackend: "none" };
+const machine: Machine = { name: "desk", profiles: ["personal"], exclude: [], ignore: [], secretsBackend: "none" };
 const MANIFEST = `schema_version = 1\n\n[workspace]\nroot = "~/dev"\n\n[identities.acme]\nowner = "acme"\nname = "A"\nemail = "a@example.invalid"\n\n# ---- Projects\n\n[projects.a]   # first\nurl = "git@github.com:acme/a.git"\nidentity = "acme"\nprofiles = ["all"]\n`;
 before(() => {
   tmp = mkdtempSync(join(tmpdir(), "cs-share-"));

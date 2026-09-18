@@ -27,7 +27,7 @@ test("manifest: parse, validate, select, identity globs, block round-trip", () =
   // `kind` is ignored: a project is a project; one without a url is merely remote-less (flagged by cs / cs doctor)
   assert.ok(!("kind" in m.projects.a) && hasRemote(m.projects.a) && !hasRemote(m.projects.b) && !hasRemote(m.projects.c));
   assert.ok(!projectBlock(m.projects.a).includes("kind"));
-  const mach = (name: string, profiles: string[], exclude: string[] = []) => ({ name, profiles, exclude, secretsBackend: "sops" as const });
+  const mach = (name: string, profiles: string[], exclude: string[] = []) => ({ name, profiles, exclude, ignore: [], secretsBackend: "sops" as const });
   assert.deepEqual(Object.values(m.projects).filter((p) => selected(p, mach("m1", ["work"]))).map((p) => p.name), ["a", "b", "c"]);
   assert.deepEqual(Object.values(m.projects).filter((p) => selected(p, mach("m2", ["personal"], ["b"]))).map((p) => p.name), []);
   assert.deepEqual(globs(m.identities.work), ["git@github.com:acme/**"]);
@@ -91,7 +91,7 @@ test("manifest: renameIdentityText renames the table and every `identity = \"old
 });
 test("cs new: --<id> / --<owner> become --identity; profiles default to the identity's own when the machine has it, else the machine's", () => {
   const m = parseManifest(TOML);
-  const mach = (profiles: string[]) => ({ name: "m1", profiles, exclude: [], secretsBackend: "sops" as const });
+  const mach = (profiles: string[]) => ({ name: "m1", profiles, exclude: [], ignore: [], secretsBackend: "sops" as const });
   assert.deepEqual(rewriteIdentityFlags(["new", "x", "--work", "--public"], m), ["new", "x", "--identity", "work", "--public"]);
   assert.deepEqual(rewriteIdentityFlags(["new", "x", "--acme", "--profiles=work"], m), ["new", "x", "--identity", "work", "--profiles=work"]);
   assert.deepEqual(rewriteIdentityFlags(["new", "x", "--nope"], m), ["new", "x", "--nope"]);

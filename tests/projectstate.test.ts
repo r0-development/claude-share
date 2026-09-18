@@ -93,7 +93,7 @@ before(() => {
   tmp = mkdtempSync(join(tmpdir(), "cs-projectstate-")); ws = join(tmp, "dev"); mkdirSync(ws);
   process.env.HOME = tmp; process.env.XDG_STATE_HOME = join(tmp, "state"); process.env.CS_CONFIG_DIR = join(tmp, "cs");
   process.env.GIT_CONFIG_GLOBAL = join(tmp, "gitconfig"); writeFileSync(process.env.GIT_CONFIG_GLOBAL, "[user]\n\tname = Tester\n\temail = tester@example.invalid\n[init]\n\tdefaultBranch = main\n");
-  share = { path: join(tmp, "share"), machine: { name: "desk", profiles: ["all"], exclude: [], secretsBackend: "none" }, manifest: parseManifest(MANIFEST) };
+  share = { path: join(tmp, "share"), machine: { name: "desk", profiles: ["all"], exclude: [], ignore: [], secretsBackend: "none" }, manifest: parseManifest(MANIFEST) };
   mkdirSync(share.path);
 });
 after(() => rmSync(tmp, { recursive: true, force: true }));

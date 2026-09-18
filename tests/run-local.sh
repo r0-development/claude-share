@@ -25,7 +25,7 @@ ln -s ../../.agents/skills/sh-skill "$HOME/.claude/skills/sh-skill"
 
 # --- a project with a remote (bare) and a worktree layout project
 git init -q -b main "$HOME/remote-src" && (cd "$HOME/remote-src" && echo hi > README && git add . && git commit -qm init)
-git clone -q --bare "$HOME/remote-src" "$HOME/remote.git"
+git clone -q --bare "$HOME/remote-src" "$HOME/remote.git"; git clone -q --bare "$HOME/remote-src" "$HOME/remote-delta.git"
 git clone -q "$HOME/remote.git" "$HOME/dev/alpha"
 mkdir -p "$HOME/dev/beta" && git clone -q "$HOME/remote.git" "$HOME/dev/beta/repo"
 (cd "$HOME/dev/beta/repo" && git worktree add -q ../wt-feat -b feat)
@@ -44,7 +44,7 @@ cat >> "$HOME/cfg-src/projects.toml" <<TOML
 name = "Test User"
 email = "test@example.com"
 owner = "test"
-url_globs = ["$HOME/remote.git", "$HOME/remote.git/**"]
+url_globs = ["$HOME/remote*.git", "$HOME/remote.git/**"]
 
 [projects.alpha]
 url = "$HOME/remote.git"
@@ -166,12 +166,12 @@ pass share-sync-newest-wins
 printf '\n[projects.orphan]\nprofiles = ["all"]\n' >> "$CS_CONFIG_DIR/share/projects.toml"; (cd "$CS_CONFIG_DIR/share" && git add -A && git commit -qm "orphan: registered before it had a remote")
 mkdir -p "$HOME/dev/orphan" && (cd "$HOME/dev/orphan" && git init -q -b master && echo x > f && git add f && git commit -qm init)
 ($CS status || true) | grep -q "orphan.*no remote.*cs doctor --fix" || die "status flags the remote-less project"
-($CS status || true) | grep -q "notes: not registered, no remote.*cs add" || die "status flags the unregistered dir"
+($CS status || true) | grep -q "notes: empty  cs ignore notes" || die "status flags the unregistered (empty) dir"
 ($CS doctor || true) | grep -q "orphan: no remote" || die "doctor flags the remote-less project"
 $CS doctor >/dev/null && die "doctor must fail while a project has no remote" || true
 $CS >/dev/null 2>&1 || true
-#            orphan: create repo? y   notes: register? n
-CS_ANSWERS='["y","n"]' $CS doctor --fix >/dev/null || die "doctor --fix"
+#            orphan: create repo? y   notes: register / ignore / leave? leave
+CS_ANSWERS='["y","leave"]' $CS doctor --fix >/dev/null || die "doctor --fix"
 [ -d "$HOME/gh/test/orphan.git" ] || die "doctor --fix created the (fake) GitHub repo"
 [ "$(git -C "$HOME/dev/orphan" remote get-url origin)" = "$HOME/gh/test/orphan.git" ] || die "origin added"
 git -C "$HOME/gh/test/orphan.git" log --oneline | grep -q init || die "pushed"
@@ -182,10 +182,50 @@ mkdir -p "$HOME/dev/notes" && (cd "$HOME/dev/notes" && git init -q -b master && 
 $CS add "$HOME/dev/notes" >/dev/null || die "cs add remote-less"
 [ -d "$HOME/gh/test/notes.git" ] && grep -q '^\[projects.notes\]' "$CS_CONFIG_DIR/share/projects.toml" || die "cs add created the repo and registered"
 # cs add on a directory that already has a remote: registered as is, identity inferred from the url
-git clone -q "$HOME/remote.git" "$HOME/dev/delta" && $CS add "$HOME/dev/delta" >/dev/null || die "cs add with remote"
+git clone -q "$HOME/remote-delta.git" "$HOME/dev/delta" && $CS add "$HOME/dev/delta" >/dev/null || die "cs add with remote"
 grep -A3 '^\[projects.delta\]' "$CS_CONFIG_DIR/share/projects.toml" | grep -q 'identity = "test"' || die "identity inferred"
 $CS doctor >/dev/null || die "doctor clean"
 pass status-doctor
+
+# --- ignored directories (#30): a workspace directory that is not a project — a second clone of one, a plain folder, an empty one — is named
+#     for what it is; cs ignore, the --fix prompt and cs remove silence it on this machine only (machine.toml ignore); cs add drops the entry
+git clone -q "$HOME/remote-delta.git" "$HOME/dev/delta-scratch"; mkdir -p "$HOME/dev/scratch" "$HOME/dev/void"; echo x > "$HOME/dev/scratch/x"
+($CS status > "$HOME/ign-status.log" 2>&1) && die "unregistered dirs are attention" || true
+grep -q "delta-scratch: another clone of delta  cs ignore delta-scratch" "$HOME/ign-status.log" && ! grep -q "cs add ~/dev/delta-scratch" "$HOME/ign-status.log" || { cat "$HOME/ign-status.log"; die "a second clone is named, never offered cs add"; }
+grep -q "scratch: not registered, no remote  cs add ~/dev/scratch · cs ignore scratch" "$HOME/ign-status.log" && grep -q "void: empty  cs ignore void" "$HOME/ign-status.log" || { cat "$HOME/ign-status.log"; die "plain and empty lines name both ways out"; }
+($CS doctor > "$HOME/ign-doctor.log" 2>&1 || true); grep -q "delta-scratch: another clone of delta" "$HOME/ign-doctor.log" || { cat "$HOME/ign-doctor.log"; die "doctor says the same"; }
+($CS add "$HOME/dev/delta-scratch" > "$HOME/ign-add.log" 2>&1) && die "cs add of a second clone must refuse" || true
+grep -q "delta-scratch is another clone of delta" "$HOME/ign-add.log" || { cat "$HOME/ign-add.log"; die "the refusal names the project"; }
+$CS ignore "$HOME/dev/delta-scratch" scratch > "$HOME/ign.log" 2>&1 || { cat "$HOME/ign.log"; die "cs ignore (path and name)"; }
+grep -q "delta-scratch: ignored here" "$HOME/ign.log" && grep -q "scratch: ignored here" "$HOME/ign.log" || { cat "$HOME/ign.log"; die "one line per name"; }
+grep -q '^ignore = \[.*"delta-scratch".*"scratch".*\]' "$CS_CONFIG_DIR/machine.toml" && ! grep -q "delta-scratch" "$CS_CONFIG_DIR/share/projects.toml" || die "written to machine.toml, never the share"
+($CS ignore delta > "$HOME/ign-delta.log" 2>&1) && die "a registered project cannot be ignored" || true
+grep -q "delta is the registered project delta" "$HOME/ign-delta.log" && grep -q "exclude in machine.toml" "$HOME/ign-delta.log" || { cat "$HOME/ign-delta.log"; die "refusal points at exclude / cs remove"; }
+($CS ignore "$HOME/dev/scratch/x" > "$HOME/ign-deep.log" 2>&1) && die "only direct children" || true
+grep -q "not directly under the workspace" "$HOME/ign-deep.log" || { cat "$HOME/ign-deep.log"; die "depth refusal"; }
+$CS ignore scratch 2>&1 | grep -q "scratch: already ignored here" || die "ignoring twice is a no-op"
+($CS status > "$HOME/ign-status2.log" 2>&1 || true); ! grep -q "delta-scratch\|scratch:" "$HOME/ign-status2.log" && grep -q "void: empty" "$HOME/ign-status2.log" || { cat "$HOME/ign-status2.log"; die "ignored dirs silent, the rest still flagged"; }
+#            void: register / ignore / leave? ignore
+CS_ANSWERS='["ignore"]' $CS doctor --fix > "$HOME/ign-fix.log" 2>&1 || { cat "$HOME/ign-fix.log"; die "doctor --fix ignore"; }
+grep -q '"void"' "$CS_CONFIG_DIR/machine.toml" || die "--fix wrote the ignore"
+$CS doctor > "$HOME/ign-doctor2.log" 2>&1 || { cat "$HOME/ign-doctor2.log"; die "doctor clean with everything ignored"; }
+grep -q "nothing unregistered under the workspace (3 ignored)" "$HOME/ign-doctor2.log" || { cat "$HOME/ign-doctor2.log"; die "doctor counts the ignored"; }
+($CS status > "$HOME/ign-status3.log" 2>&1 || true); ! grep -q "not registered\|: empty\|another clone" "$HOME/ign-status3.log" || { cat "$HOME/ign-status3.log"; die "nothing left to flag"; }
+# cs add of an ignored directory makes it a project and drops the entry; cs remove leaves the checkout behind as an ignored directory
+(cd "$HOME/dev/scratch" && git init -q -b master && git add x && git commit -qm x)
+$CS add "$HOME/dev/scratch" >/dev/null || die "cs add of an ignored dir"
+! grep -q '"scratch"' "$CS_CONFIG_DIR/machine.toml" && grep -q '^\[projects.scratch\]' "$CS_CONFIG_DIR/share/projects.toml" || die "registered, entry dropped"
+CS_ANSWERS='["y"]' $CS remove scratch > "$HOME/ign-rm.log" 2>&1 || { cat "$HOME/ign-rm.log"; die "cs remove scratch"; }
+grep -q "kept   checkout        ~/dev/scratch — just a directory now, ignored here" "$HOME/ign-rm.log" && grep -q "just a directory now, ignored here" "$HOME/ign-rm.log" || { cat "$HOME/ign-rm.log"; die "remove says the leftover is ignored"; }
+grep -q '"scratch"' "$CS_CONFIG_DIR/machine.toml" && [ -d "$HOME/dev/scratch/.git" ] || die "leftover ignored, checkout kept"
+($CS status > "$HOME/ign-status4.log" 2>&1 || true); ! grep -q "scratch" "$HOME/ign-status4.log" || { cat "$HOME/ign-status4.log"; die "the leftover is not flagged"; }
+# the --fix prompt's register answer runs cs add; a worktrees-layout path names the directory above
+mkdir -p "$HOME/dev/reg" && (cd "$HOME/dev/reg" && git init -q -b master && echo r > r && git add r && git commit -qm r)
+CS_ANSWERS='["register"]' $CS doctor --fix > "$HOME/ign-fix2.log" 2>&1 || { cat "$HOME/ign-fix2.log"; die "doctor --fix register"; }
+grep -q '^\[projects.reg\]' "$CS_CONFIG_DIR/share/projects.toml" && [ -d "$HOME/gh/test/reg.git" ] || { cat "$HOME/ign-fix2.log"; die "register answer ran cs add"; }
+mkdir -p "$HOME/dev/wt" && git clone -q "$HOME/remote-delta.git" "$HOME/dev/wt/repo"
+$CS ignore "$HOME/dev/wt/repo" 2>&1 | grep -q "wt: ignored here" || die "cs ignore of <name>/repo ignores <name>"
+pass ignored-dirs
 
 # --- hooks: the rewrite rules are a unit table (tests/hooks.test.ts); here only that the CLI installs through the share and is idempotent
 $CS hooks install --no-timer >/dev/null || die "hooks install"
@@ -198,7 +238,7 @@ pass hooks
 
 # --- command surface: --help shows exactly the visible tier; hidden commands still run
 VISIBLE="$($CS --help | sed -n '/^Commands:/,/^$/p' | grep -E '^  [a-z]' | awk '{print $1}' | tr '\n' ' ')"
-[ "$VISIBLE" = "sync new add remove clone secrets identity trust doctor update init help " ] || die "visible tier: $VISIBLE"
+[ "$VISIBLE" = "sync new add remove ignore clone secrets identity trust doctor update init help " ] || die "visible tier: $VISIBLE"
 SEC="$($CS secrets --help | sed -n '/^Commands:/,/^$/p' | grep -E '^  [a-z]' | awk '{print $1}' | tr '\n' ' ')"
 [ "$SEC" = "set get edit help " ] || die "secrets visible tier: $SEC"
 $CS apply >/dev/null && $CS link >/dev/null && $CS share path >/dev/null && $CS hooks >/dev/null && $CS handoffs >/dev/null || die "hidden commands callable"

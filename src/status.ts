@@ -14,11 +14,33 @@ import { behindCount, behindHint, startUpdateCheck } from "./update.js";
 import { ago, status, type Facts, type StatusBit } from "./plan.js";
 import * as ui from "./ui.js";
 
-/** Directories directly under the workspace that no project claims — a project forgotten or never pushed. */
-export function unregisteredDirs(ws: string, known: Set<string>): { name: string; remote: string }[] {
-  if (!existsSync(ws)) return [];
-  return readdirSync(ws, { withFileTypes: true }).filter((d) => d.isDirectory() && !d.name.startsWith(".") && !known.has(d.name)).map((d) => d.name).sort()
-    .map((name) => { const { root } = sniff(join(ws, name)); return { name, remote: git.isRepo(root) ? git.remoteUrl(root) : "" }; });
+/** One directory directly under the workspace that no project claims and this machine has not ignored: a second clone of a
+ *  registered project (`of`), a repo with some other remote, a repo without one, a plain folder, or an empty one. */
+export interface Unregistered { name: string; kind: "clone" | "foreign" | "no-remote" | "plain" | "empty"; of?: string }
+/** The workspace scan bare cs and cs doctor share — a project forgotten or never pushed, or a clone holding work no handoff carries. */
+export function unregisteredDirs(share: Share): Unregistered[] {
+  const ws = workspace(share); if (!existsSync(ws)) return [];
+  const projects = Object.values(share.manifest.projects); const known = new Set(projects.map((p) => p.path || p.name)), ignored = new Set(share.machine.ignore);
+  const byUrl = new Map(projects.filter((p) => p.url).map((p) => [git.canonicalGithub(p.url!), p.name]));
+  return readdirSync(ws, { withFileTypes: true }).filter((d) => d.isDirectory() && !d.name.startsWith(".") && !known.has(d.name) && !ignored.has(d.name)).map((d) => d.name).sort()
+    .map((name) => {
+      const dir = join(ws, name), { root } = sniff(dir);
+      if (!git.isRepo(root)) return { name, kind: readdirSync(dir).length ? "plain" : "empty" };
+      const url = git.remoteUrl(root); if (!url) return { name, kind: "no-remote" };
+      const of = byUrl.get(git.canonicalGithub(url)); return of ? { name, kind: "clone", of } : { name, kind: "foreign" };
+    });
+}
+
+/** What one is, and whether cs add is a way out — never for a second clone (two projects must not share a remote), pointless for an empty directory. */
+export function describe(d: Unregistered): { what: string; addable: boolean } {
+  if (d.kind === "clone") return { what: `another clone of ${d.of}`, addable: false };
+  if (d.kind === "empty") return { what: "empty", addable: false };
+  return { what: d.kind === "foreign" ? "not registered" : "not registered, no remote", addable: true };
+}
+/** The warning line bare cs and cs doctor print: what it is, then the ways out. */
+export function unregisteredLine(d: Unregistered, ws: string): string {
+  const { what, addable } = describe(d);
+  return `${d.name}: ${what}  ${ui.dim(`${addable ? `cs add ${contract(join(ws, d.name))} · ` : ""}cs ignore ${d.name}`)}`;
 }
 
 const SYNC = ui.dim("  cs sync"), FIX = ui.dim("  cs doctor --fix");
@@ -53,9 +75,9 @@ export async function runStatus(share: Share, fetch = true, showAll = false, tim
   const { facts, envSkipped } = await ui.spin("fetching projects…", () => gather(share, { timeout, fetch }));
   const byName = new Map(facts.map((f) => [f.checkout.project.name, f]));
   let pending = shareRow.pending, attention = shareRow.broken, stuck = false;
-  const rows: string[][] = [shareRow.row]; const known = new Set<string>();
+  const rows: string[][] = [shareRow.row];
   for (const p of Object.values(man.projects)) {
-    known.add(p.path || p.name); const sel = selected(p, m); if (!sel && !showAll) continue;
+    const sel = selected(p, m); if (!sel && !showAll) continue;
     const kind = ui.dim(p.layout === "worktrees" ? "⑂" : "");
     const f = byName.get(p.name); const c = sel && !f ? locate(p, ws) : undefined;   // not gathered: absent, and the reason says which row
     if (!sel) rows.push([p.name, kind, "", ui.dim("skipped (profile)")]);
@@ -67,7 +89,7 @@ export async function runStatus(share: Share, fetch = true, showAll = false, tim
   }
   ui.table(rows, ["project", "", "branch", "state"]);
   for (const s of envSkipped) ui.warn(s);
-  for (const d of unregisteredDirs(ws, known)) { ui.warn(`${d.name}: ${d.remote ? "not registered" : "not registered, no remote"}  ${ui.dim(`cs add ${contract(join(ws, d.name))}`)}`); attention = true; }
+  for (const d of unregisteredDirs(share)) { ui.warn(unregisteredLine(d, ws)); attention = true; }
   return { rc: pending || attention || stuck ? 1 : 0, next: pending ? "cs sync" : attention ? "cs doctor --fix" : undefined };
 }
 

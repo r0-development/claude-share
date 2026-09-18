@@ -6235,10 +6235,12 @@ var init_dist5 = __esm({
 // src/machine.ts
 var machine_exports = {};
 __export(machine_exports, {
+  ignoreDirs: () => ignoreDirs,
   loadMachine: () => loadMachine,
   machineExists: () => machineExists,
   saveMachine: () => saveMachine,
-  shareDir: () => shareDir
+  shareDir: () => shareDir,
+  unignoreDir: () => unignoreDir
 });
 import { existsSync, mkdirSync, readFileSync as readFileSync2, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
@@ -6252,6 +6254,7 @@ function loadMachine() {
     name: d.name,
     profiles: d.profiles ?? ["personal"],
     exclude: d.exclude ?? [],
+    ignore: d.ignore ?? [],
     workspace: d.workspace,
     share: d.share ?? d.repo,
     // `repo`: the key's old name, rewritten by cs doctor --fix
@@ -6259,12 +6262,26 @@ function loadMachine() {
   };
 }
 function saveMachine(m) {
-  const obj = { name: m.name, profiles: m.profiles, exclude: m.exclude };
+  const obj = { name: m.name, profiles: m.profiles, exclude: m.exclude, ignore: m.ignore };
   if (m.workspace) obj.workspace = m.workspace;
   if (m.share) obj.share = m.share;
   obj.secrets = { backend: m.secretsBackend };
   mkdirSync(dirname(machineFile()), { recursive: true });
   writeFileSync(machineFile(), "# claude-share machine config (not synced). Edit freely.\n" + stringify(obj) + "\n");
+}
+function ignoreDirs(m, names) {
+  const r2 = { added: [], already: [] };
+  for (const n3 of [...new Set(names)]) (m.ignore.includes(n3) ? r2.already : r2.added).push(n3);
+  if (r2.added.length) {
+    m.ignore = [...m.ignore, ...r2.added];
+    saveMachine(m);
+  }
+  return r2;
+}
+function unignoreDir(m, name2) {
+  if (!m.ignore.includes(name2)) return;
+  m.ignore = m.ignore.filter((n3) => n3 !== name2);
+  saveMachine(m);
 }
 var shareDir;
 var init_machine = __esm({
@@ -6284,14 +6301,14 @@ __export(proc_exports, {
 });
 import { spawn } from "node:child_process";
 function exec2(cmd, args, opts = {}) {
-  return new Promise((resolve7) => {
+  return new Promise((resolve8) => {
     const p = spawn(cmd, args, { cwd: opts.cwd, env: opts.env ?? process.env, stdio: ["pipe", "pipe", "pipe"], detached: !!opts.group });
     let out2 = "", err = "", done = false;
     const finish3 = (r2) => {
       if (done) return;
       done = true;
       if (timer) clearTimeout(timer);
-      resolve7(r2);
+      resolve8(r2);
     };
     const timer = opts.timeout ? setTimeout(() => {
       if (opts.group) {
@@ -8672,6 +8689,8 @@ async function add(share, path, o) {
     url = made;
   } else {
     if (url.includes("github")) url = canonicalGithub(url);
+    const twin = Object.values(man.projects).find((q) => q.url && canonicalGithub(q.url) === canonicalGithub(url));
+    if (twin) throw new Error(`cs: ${name2} is another clone of ${twin.name} \u2014 two projects cannot share a remote (cs ignore ${name2} to stop cs mentioning it)`);
     ident2 = o.identity ? man.identities[o.identity] : identityForUrl(man, url);
     if (!ident2) throw new Error(`cs: no identity matches ${url}; pass --identity or add url_globs in projects.toml`);
   }
@@ -8680,6 +8699,7 @@ async function add(share, path, o) {
   if (errs.length) throw new Error("cs: " + errs.join("; "));
   addProject(share, p);
   ok(`registered ${name2}  ${dim(`${url} \xB7 profiles ${p.profiles.join(",")}`)}`);
+  unignoreDir(share.machine, rel);
   if (!o.noCommit) commit2(share, `projects: add ${name2}`, ["projects.toml"]);
   if (selected(p, share.machine)) place(share, p);
   return p;
@@ -8797,6 +8817,7 @@ var init_projects = __esm({
     init_paths();
     init_manifest();
     init_share();
+    init_machine();
     init_projectstate();
     init_checkout();
     init_ui();
@@ -9516,7 +9537,7 @@ function summary(t2, manifestText2) {
   if (t2.project) lines.push(`goes   manifest entry  ${dim(subTables(manifestText2, t2.name).join(" "))}`);
   if (t2.state) lines.push(`goes   project state   ${dim(`projects/${t2.name}/ (${countFiles(t2.state)} files, memory included)`)}`);
   for (const f of t2.secrets) lines.push(`goes   secrets         ${dim(`secrets/projects/${f.split("/").pop()}`)}`);
-  for (const c2 of t2.here) lines.push(`kept   checkout        ${dim(contract(c2))}`);
+  for (const c2 of t2.here) lines.push(`kept   checkout        ${dim(`${contract(c2)} \u2014 just a directory now, ignored here`)}`);
   if (!t2.here.length) lines.push(`kept   checkout        ${dim("none on this machine")}`);
   if (t2.project?.url) lines.push(`kept   remote          ${dim(t2.project.url)}`);
   return lines;
@@ -9549,8 +9570,9 @@ add --yes to remove ${label} unattended`);
   }
   const sha = o.noCommit ? "" : commit2(share, `remove ${label}`, [...new Set(paths)]) ?? "";
   ok(`removed ${label} from the share${sha ? `  ${dim(`commit ${sha}`)}` : dim(o.noCommit ? "  (not committed: --no-commit)" : "  (nothing to commit \u2014 the share had none of it committed)")}`);
+  ignoreDirs(share.machine, targets.filter((t2) => t2.here.length).map((t2) => t2.project?.path || t2.name));
   for (const t2 of targets) {
-    for (const c2 of t2.here) info(`${t2.name}: checkout kept at ${contract(c2)} \u2014 just a directory now, yours to keep or rm`);
+    for (const c2 of t2.here) info(`${t2.name}: checkout kept at ${contract(c2)} \u2014 just a directory now, ignored here; yours to keep or rm`);
     if (t2.project?.url) {
       const [, gh] = parseRepoUrl(t2.project.url);
       info(dim(gh ? `${t2.name}: the GitHub repo stays \u2014 to delete it too, by hand: gh repo delete ${gh[0]}/${gh[1]}` : `${t2.name}: the remote stays \u2014 ${t2.project.url}`));
@@ -9568,12 +9590,49 @@ var init_remove = __esm({
     init_checkout();
     init_projectstate();
     init_env();
+    init_machine();
     init_sharekey();
     init_ui();
     secretsDir = (repo) => join19(repo, "secrets", "projects");
     secretEntries = (repo) => existsSync16(secretsDir(repo)) ? readdirSync8(secretsDir(repo)).filter((f) => f.endsWith(".env")).map((f) => f.slice(0, -4)).sort() : [];
     countFiles = (dir) => readdirSync8(dir, { withFileTypes: true }).reduce((n3, e) => n3 + (e.isDirectory() ? countFiles(join19(dir, e.name)) : e.isFile() && e.name !== ".gitkeep" ? 1 : 0), 0);
     subTables = (text3, name2) => [...text3.matchAll(projectTableRe(name2, "gm"))].map((m) => m[0].replace(/\s*(#.*)?$/, ""));
+  }
+});
+
+// src/ignore.ts
+var ignore_exports = {};
+__export(ignore_exports, {
+  ignore: () => ignore
+});
+import { basename as basename4, dirname as dirname8, resolve as resolve7 } from "node:path";
+function nameOf(arg, ws) {
+  let path = resolve7(arg);
+  if (basename4(path) === "repo" && dirname8(dirname8(path)) === ws && sniff(dirname8(path)).layout === "worktrees") path = dirname8(path);
+  if (dirname8(path) === ws) return basename4(path);
+  if (arg.includes("/") || arg === ".") throw new Error(`cs: ${contract(path)} is not directly under the workspace ${contract(ws)}`);
+  return arg;
+}
+function ignore(share, args) {
+  const ws = resolve7(workspace2(share));
+  const man = share.manifest;
+  const names = [...new Set(args.map((a2) => nameOf(a2, ws)))];
+  for (const n3 of names) {
+    const p = Object.values(man.projects).find((p2) => (p2.path || p2.name) === n3);
+    if (p) throw new Error(`cs: ${n3} is the registered project ${p.name} \u2014 to skip it here add it to exclude in machine.toml, to take it out of the share run cs remove ${p.name}`);
+  }
+  const { added, already } = ignoreDirs(share.machine, names);
+  for (const n3 of added) ok(`${n3}: ignored here  ${dim("(machine.toml ignore \u2014 delete the name to undo)")}`);
+  for (const n3 of already) info(`${n3}: already ignored here`);
+}
+var init_ignore = __esm({
+  "src/ignore.ts"() {
+    "use strict";
+    init_paths();
+    init_machine();
+    init_share();
+    init_checkout();
+    init_ui();
   }
 });
 
@@ -9886,18 +9945,37 @@ var init_identity = __esm({
 // src/status.ts
 var status_exports = {};
 __export(status_exports, {
+  describe: () => describe3,
   runBare: () => runBare,
   runStatus: () => runStatus,
-  unregisteredDirs: () => unregisteredDirs
+  unregisteredDirs: () => unregisteredDirs,
+  unregisteredLine: () => unregisteredLine
 });
 import { existsSync as existsSync19, readdirSync as readdirSync9 } from "node:fs";
 import { join as join21 } from "node:path";
-function unregisteredDirs(ws, known) {
+function unregisteredDirs(share) {
+  const ws = workspace2(share);
   if (!existsSync19(ws)) return [];
-  return readdirSync9(ws, { withFileTypes: true }).filter((d) => d.isDirectory() && !d.name.startsWith(".") && !known.has(d.name)).map((d) => d.name).sort().map((name2) => {
-    const { root } = sniff(join21(ws, name2));
-    return { name: name2, remote: isRepo(root) ? remoteUrl(root) : "" };
+  const projects = Object.values(share.manifest.projects);
+  const known = new Set(projects.map((p) => p.path || p.name)), ignored = new Set(share.machine.ignore);
+  const byUrl = new Map(projects.filter((p) => p.url).map((p) => [canonicalGithub(p.url), p.name]));
+  return readdirSync9(ws, { withFileTypes: true }).filter((d) => d.isDirectory() && !d.name.startsWith(".") && !known.has(d.name) && !ignored.has(d.name)).map((d) => d.name).sort().map((name2) => {
+    const dir = join21(ws, name2), { root } = sniff(dir);
+    if (!isRepo(root)) return { name: name2, kind: readdirSync9(dir).length ? "plain" : "empty" };
+    const url = remoteUrl(root);
+    if (!url) return { name: name2, kind: "no-remote" };
+    const of = byUrl.get(canonicalGithub(url));
+    return of ? { name: name2, kind: "clone", of } : { name: name2, kind: "foreign" };
   });
+}
+function describe3(d) {
+  if (d.kind === "clone") return { what: `another clone of ${d.of}`, addable: false };
+  if (d.kind === "empty") return { what: "empty", addable: false };
+  return { what: d.kind === "foreign" ? "not registered" : "not registered, no remote", addable: true };
+}
+function unregisteredLine(d, ws) {
+  const { what, addable } = describe3(d);
+  return `${d.name}: ${what}  ${dim(`${addable ? `cs add ${contract(join21(ws, d.name))} \xB7 ` : ""}cs ignore ${d.name}`)}`;
 }
 function projectLine(f, machine) {
   const { bits, pending, stuck } = status(f, machine);
@@ -9925,9 +10003,7 @@ async function runStatus(share, fetch2 = true, showAll = false, timeout = 10) {
   const byName = new Map(facts.map((f) => [f.checkout.project.name, f]));
   let pending = shareRow.pending, attention = shareRow.broken, stuck = false;
   const rows = [shareRow.row];
-  const known = /* @__PURE__ */ new Set();
   for (const p of Object.values(man.projects)) {
-    known.add(p.path || p.name);
     const sel = selected(p, m);
     if (!sel && !showAll) continue;
     const kind = dim(p.layout === "worktrees" ? "\u2442" : "");
@@ -9954,8 +10030,8 @@ async function runStatus(share, fetch2 = true, showAll = false, timeout = 10) {
   }
   table(rows, ["project", "", "branch", "state"]);
   for (const s of envSkipped) warn(s);
-  for (const d of unregisteredDirs(ws, known)) {
-    warn(`${d.name}: ${d.remote ? "not registered" : "not registered, no remote"}  ${dim(`cs add ${contract(join21(ws, d.name))}`)}`);
+  for (const d of unregisteredDirs(share)) {
+    warn(unregisteredLine(d, ws));
     attention = true;
   }
   return { rc: pending || attention || stuck ? 1 : 0, next: pending ? "cs sync" : attention ? "cs doctor --fix" : void 0 };
@@ -10115,12 +10191,11 @@ import { existsSync as existsSync21, lstatSync as lstatSync2, readdirSync as rea
 import { join as join23 } from "node:path";
 function remoteless(share) {
   const ws = workspace2(share);
-  const man = share.manifest;
   const projects = selectedProjects2(share).filter((p) => {
     const c2 = locate(p, ws);
     return present(c2) ? !p.url : c2.why !== "missing";
   });
-  return { projects, dirs: unregisteredDirs(ws, new Set(Object.values(man.projects).map((p) => p.path || p.name))) };
+  return { projects, dirs: unregisteredDirs(share) };
 }
 async function fix(share) {
   for (const d of migrate(share)) ok(d);
@@ -10136,15 +10211,21 @@ async function fix(share) {
   for (const d of dirs2) {
     const path = join23(ws, d.name);
     if (!canAsk()) {
-      warn(`${d.name}: not registered \u2014 cs add ${contract(path)}`);
+      warn(unregisteredLine(d, ws));
       continue;
     }
-    if (await confirm2(`${d.name} is not registered \u2014 register it${d.remote ? "" : " (creating a private GitHub repo)"}?`, true)) {
+    const { what, addable } = describe3(d);
+    const register2 = { value: "register", label: "register", hint: d.kind === "foreign" ? "cs add" : "cs add \u2014 creates a private GitHub repo" };
+    const choice = await select2(`${d.name} is ${what} \u2014`, [...addable ? [register2] : [], { value: "ignore", label: "ignore", hint: "this machine stops mentioning it (machine.toml ignore)" }, { value: "leave", label: "leave", hint: "decide later" }], addable ? "register" : "ignore");
+    if (choice === "register") {
       try {
         await add(share, path, { profiles: [], description: "", noCommit: false });
       } catch (e) {
         fail(e.message);
       }
+    } else if (choice === "ignore") {
+      ignoreDirs(share.machine, [d.name]);
+      ok(`${d.name}: ignored here`);
     }
   }
   for (const p of selectedProjects2(share)) {
@@ -10226,8 +10307,9 @@ async function runDoctor(share, doFix = false, compact = false) {
   if (!old.length) res.push(["ok", "on-disk names current (share key, share, handoffs, state)"]);
   const rl = remoteless(share);
   for (const p of rl.projects) res.push(["fail", `${p.name}: no remote  (cs doctor --fix \xB7 or cs remove ${p.name})`]);
-  for (const d of rl.dirs) res.push(["warn", `${contract(join23(ws, d.name))}: not registered${d.remote ? "" : ", no remote"}  (cs add ${contract(join23(ws, d.name))})`]);
-  if (!rl.projects.length && !rl.dirs.length) res.push(["ok", "every project has a remote; nothing unregistered under the workspace"]);
+  for (const d of rl.dirs) res.push(["warn", unregisteredLine(d, ws)]);
+  const ign = share.machine.ignore.filter((n3) => existsSync21(join23(ws, n3))).length;
+  if (!rl.projects.length && !rl.dirs.length) res.push(["ok", `every project has a remote; nothing unregistered under the workspace${ign ? ` (${ign} ignored)` : ""}`]);
   const left = orphans(share);
   for (const n3 of left) res.push(["warn", `${n3}: state/secrets in the share but not registered  (cs remove ${n3})`]);
   if (!left.length) res.push(["ok", "the share holds state and secrets for registered projects only"]);
@@ -10253,6 +10335,7 @@ var init_doctor = __esm({
     init_ui();
     init_deps();
     init_status();
+    init_machine();
     init_plan();
     init_hooks();
     init_sharesync();
@@ -10271,10 +10354,10 @@ __export(ssh_exports, {
   writeSshConfig: () => writeSshConfig
 });
 import { chmodSync as chmodSync6, existsSync as existsSync22, mkdirSync as mkdirSync18, readFileSync as readFileSync22, writeFileSync as writeFileSync16 } from "node:fs";
-import { dirname as dirname8, join as join24 } from "node:path";
+import { dirname as dirname9, join as join24 } from "node:path";
 import { spawnSync as spawnSync8 } from "node:child_process";
 function keygen2(key, comment) {
-  mkdirSync18(dirname8(key), { recursive: true, mode: 448 });
+  mkdirSync18(dirname9(key), { recursive: true, mode: 448 });
   const p = spawnSync8("ssh-keygen", ["-q", "-t", "ed25519", "-N", "", "-C", comment, "-f", key]);
   if (p.status !== 0) throw new Error("cs: ssh-keygen failed");
   chmodSync6(key, 384);
@@ -10291,7 +10374,7 @@ function writeSshConfig() {
   const block3 = [MARK, "Host github.com", "    IdentitiesOnly yes", "    AddKeysToAgent yes", ...isMac() ? ["    UseKeychain yes"] : [], END].join("\n") + "\n";
   const next = text3.includes(MARK) ? text3.slice(0, text3.indexOf(MARK)) + block3 + text3.slice(text3.indexOf(END) + END.length + 1) : block3 + (text3 && !text3.startsWith("\n") ? "\n" : "") + text3;
   if (next === text3) return false;
-  mkdirSync18(dirname8(cfg), { recursive: true, mode: 448 });
+  mkdirSync18(dirname9(cfg), { recursive: true, mode: 448 });
   writeFileSync16(cfg, next);
   chmodSync6(cfg, 384);
   return true;
@@ -10336,7 +10419,7 @@ async function setup2(share, checkOnly = false) {
     const pub = readFileSync22(pubf, "utf8").trim();
     const dest = join24(repo, "machines", m.name, "ssh", `${i2.id}.pub`);
     if (!checkOnly && (!existsSync22(dest) || readFileSync22(dest, "utf8").trim() !== pub)) {
-      mkdirSync18(dirname8(dest), { recursive: true });
+      mkdirSync18(dirname9(dest), { recursive: true });
       writeFileSync16(dest, pub + "\n");
       published.push(dest);
     }
@@ -10391,7 +10474,7 @@ __export(init_exports, {
   newShare: () => newShare
 });
 import { copyFileSync as copyFileSync4, existsSync as existsSync23, mkdirSync as mkdirSync19, readdirSync as readdirSync12, writeFileSync as writeFileSync17 } from "node:fs";
-import { dirname as dirname9, join as join25, relative as relative8 } from "node:path";
+import { dirname as dirname10, join as join25, relative as relative8 } from "node:path";
 function newShare(dest, branch = "master") {
   const src = templatesDir() + "/share";
   mkdirSync19(dest, { recursive: true });
@@ -10402,7 +10485,7 @@ function newShare(dest, branch = "master") {
         mkdirSync19(t2, { recursive: true });
         copy(f);
       } else if (!existsSync23(t2)) {
-        mkdirSync19(dirname9(t2), { recursive: true });
+        mkdirSync19(dirname10(t2), { recursive: true });
         copyFileSync4(f, t2);
       }
     }
@@ -10432,7 +10515,7 @@ async function accessLoop(sshUrl, gh, interactive, machine) {
   step("share reachable with the share key");
 }
 async function cloneConfig(sshUrl, target) {
-  mkdirSync19(dirname9(target), { recursive: true });
+  mkdirSync19(dirname10(target), { recursive: true });
   await spin("cloning the share\u2026", () => gitA(["clone", "-q", sshUrl, target], void 0, { sshKey: keyPath2() }));
   configureRepo(target);
   step(`share cloned to ${dim(contract(target))}`);
@@ -10565,7 +10648,7 @@ async function machinePhase(repo, nm, profiles, ws, interactive) {
     step(`projects live in ${bold(w)}${existed ? "" : dim("  (created)")}`);
     workspaceOverride = w === dws ? void 0 : w;
   } else if (ws) mkdirSync19(expand(ws), { recursive: true });
-  const m = { name: nm, profiles, exclude, workspace: workspaceOverride, secretsBackend: "sops" };
+  const m = { name: nm, profiles, exclude, ignore: [], workspace: workspaceOverride, secretsBackend: "sops" };
   saveMachine(m);
   return m;
 }
@@ -10676,13 +10759,13 @@ async function init3(o) {
   } else if (!skip2.includes("share")) {
     if (localSrc) {
       if (!(isRepo(localSrc) || isBare(localSrc))) throw new Error(`cs: ${localSrc} is not a git repo`);
-      mkdirSync19(dirname9(target), { recursive: true });
+      mkdirSync19(dirname10(target), { recursive: true });
       git(["clone", "-q", localSrc, target]);
       ok(`share cloned from ${contract(localSrc)}`);
     } else if (o.repo) {
       const [sshUrl, gh] = parseRepoUrl(o.repo);
       if (o.key) {
-        mkdirSync19(dirname9(target), { recursive: true });
+        mkdirSync19(dirname10(target), { recursive: true });
         git(["clone", "-q", sshUrl, target], void 0, { sshKey: expand(o.key) });
         git(["config", "core.sshCommand", `ssh -i ${contract(expand(o.key))} -o IdentitiesOnly=yes`], target);
       } else {
@@ -10752,7 +10835,7 @@ __export(import_exports, {
   unionLines: () => unionLines
 });
 import { copyFileSync as copyFileSync5, existsSync as existsSync24, mkdirSync as mkdirSync20, readdirSync as readdirSync13, readFileSync as readFileSync23, writeFileSync as writeFileSync18 } from "node:fs";
-import { basename as basename4, dirname as dirname10, extname, join as join26, relative as relative9 } from "node:path";
+import { basename as basename5, dirname as dirname11, extname, join as join26, relative as relative9 } from "node:path";
 function walkFiles(dir) {
   const out2 = [];
   const rec = (d) => {
@@ -10775,23 +10858,23 @@ function importMemory(share, p, check = false) {
       if (!existsSync24(target)) {
         step(`+ ${rel}`);
         if (!check) {
-          mkdirSync20(dirname10(target), { recursive: true });
+          mkdirSync20(dirname11(target), { recursive: true });
           copyFileSync5(f, target);
         }
         n3++;
       } else if (readFileSync23(target).equals(readFileSync23(f))) continue;
-      else if (basename4(rel) === "MEMORY.md") {
+      else if (basename5(rel) === "MEMORY.md") {
         step(`~ ${rel} (union)`);
         if (!check) writeFileSync18(target, unionLines(readFileSync23(target, "utf8"), readFileSync23(f, "utf8")));
         n3++;
       } else {
-        const alt = join26(dirname10(target), `${basename4(rel, extname(rel))}.from-${machine}-${(/* @__PURE__ */ new Date()).toISOString().slice(0, 10)}${extname(rel)}`);
-        step(`? ${rel} differs \u2192 ${basename4(alt)}`);
+        const alt = join26(dirname11(target), `${basename5(rel, extname(rel))}.from-${machine}-${(/* @__PURE__ */ new Date()).toISOString().slice(0, 10)}${extname(rel)}`);
+        step(`? ${rel} differs \u2192 ${basename5(alt)}`);
         if (!check) copyFileSync5(f, alt);
         n3++;
       }
     }
-    if (!check) writeFileSync18(join26(dirname10(src), "memory.imported-by-cs"), `imported into ${contract(dest)} on ${(/* @__PURE__ */ new Date()).toISOString().slice(0, 10)}
+    if (!check) writeFileSync18(join26(dirname11(src), "memory.imported-by-cs"), `imported into ${contract(dest)} on ${(/* @__PURE__ */ new Date()).toISOString().slice(0, 10)}
 `);
   }
   if (!n3) ok(`${p.name}: no new memory to import`);
@@ -11084,6 +11167,7 @@ occasionally
   cs new billing-api --personal            new project: dir, git, private GitHub repo, first push, Claude wired in
   cs add ~/dev/existing                    register a directory (creates its GitHub repo when it has none)
   cs remove old-thing                      take a project out of the share (its checkout and GitHub repo stay)
+  cs ignore scratch-dir                    a directory under the projects location that is not a project: stop mentioning it here
   cs secrets set global API_TOKEN=\u2026        encrypted; available to Claude's MCP servers as \${API_TOKEN}
   cs trust laptop                          let another machine read the secrets
 
@@ -11128,6 +11212,11 @@ program2.command("remove <names...>").description("take projects out of the shar
   const share = open();
   const { remove: remove2 } = await Promise.resolve().then(() => (init_remove(), remove_exports));
   await command(`cs remove ${names.join(" ")}`, () => remove2(share, names, { yes: o.yes, noCommit: !o.commit }), { outro: (s) => s });
+});
+program2.command("ignore <dirs...>").description("directories under the projects location that are not projects: this machine stops mentioning them (machine.toml ignore)").action(async (dirs2) => {
+  const share = open();
+  const { ignore: ignore2 } = await Promise.resolve().then(() => (init_ignore(), ignore_exports));
+  await command(`cs ignore ${dirs2.join(" ")}`, () => ignore2(share, dirs2));
 });
 program2.command("clone [names...]").description("clone the projects selected for this machine that are missing here").option("--dry-run").action(async (names, o) => {
   const share = open();

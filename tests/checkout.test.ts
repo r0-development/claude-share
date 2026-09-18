@@ -77,7 +77,7 @@ test("dirs: the checkout directories for placement — every unit, or the bare d
 });
 
 // ---------------------------------------------------------------- send → fetchWaiting → apply: the round trip between two machines
-const desk = { name: "desk", profiles: ["all"], exclude: [], secretsBackend: "none" as const }, laptop = { ...desk, name: "laptop" };
+const desk = { name: "desk", profiles: ["all"], exclude: [], ignore: [], secretsBackend: "none" as const }, laptop = { ...desk, name: "laptop" };
 const co = (p: Project) => { const c = locate(p, ws); assert.ok(present(c), `${p.name}: ${(c as Absence).why}`); return c; };
 const quiet = async <T>(fn: () => Promise<T>) => { const was = ui.isQuiet(); ui.setQuiet(true); try { return await fn(); } finally { ui.setQuiet(was); } };
 

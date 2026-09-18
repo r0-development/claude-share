@@ -38,7 +38,7 @@ function pair(): Pair {
   mkdirSync(join(seed, "claude")); writeFileSync(join(seed, SETTINGS), '{"model":"opus"}\n');
   sh(["add", "-A"], seed); sh(["commit", "-q", "-m", "skeleton"], seed, { GIT_COMMITTER_DATE: "2026-09-01T00:00:00Z", GIT_AUTHOR_DATE: "2026-09-01T00:00:00Z" }); sh(["push", "-q", "origin", "main"], seed);
   const clone = (name: string, machine: Machine) => { const dir = join(root, name); sh(["clone", "-q", bare, dir]); return open(machine, dir); };
-  return { bare, desk: clone("desk", { name: "desk", profiles: ["all"], exclude: [], secretsBackend: "none" }), laptop: clone("laptop", { name: "laptop", profiles: ["all"], exclude: [], secretsBackend: "none", workspace: join(tmp, "laptop-dev") }) };
+  return { bare, desk: clone("desk", { name: "desk", profiles: ["all"], exclude: [], ignore: [], secretsBackend: "none" }), laptop: clone("laptop", { name: "laptop", profiles: ["all"], exclude: [], ignore: [], secretsBackend: "none", workspace: join(tmp, "laptop-dev") }) };
 }
 /** Write `rel` in a share and commit it there at `when` (ISO), as a machine's own sync would have. */
 function commitAt(s: Share, rel: string, content: string | null, when: string, msg = rel) {

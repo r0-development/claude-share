@@ -57,8 +57,13 @@ _Avoid_: adopt
 
 **Remove**:
 Taking a project out of the share: its manifest entry, project state and secrets go (the share's history keeps them).
-Its checkouts and its remote are never touched; a checkout left behind is just a directory again.
+Its checkouts and its remote are never touched; a checkout left behind is an ignored directory on this machine.
 _Avoid_: delete (ambiguous with deleting the checkout or the GitHub repo), forget, unregister
+
+**Ignored directory**:
+A directory directly under the projects location that this machine has said is not a project. Nothing follows it
+between machines; `cs` stops mentioning it here. Per machine — the other machines decide for themselves.
+_Avoid_: excluded (that is a registered project this machine does not get)
 
 **Trust**:
 Granting a machine access to the share's secrets. Only an already-trusted machine can do it.

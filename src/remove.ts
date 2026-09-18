@@ -9,6 +9,7 @@ import { commit, manifestText, removeProject, workspace, type Share } from "./sh
 import { dirs, fetchWaiting, locate, present } from "./checkout.js";
 import { forget, projectState, statesDir } from "./projectstate.js";
 import { fileOf } from "./env.js";
+import { ignoreDirs } from "./machine.js";
 import { parseRepoUrl } from "./sharekey.js";
 import * as ui from "./ui.js";
 
@@ -61,7 +62,7 @@ function summary(t: Target, manifestText: string) {
   if (t.project) lines.push(`goes   manifest entry  ${ui.dim(subTables(manifestText, t.name).join(" "))}`);
   if (t.state) lines.push(`goes   project state   ${ui.dim(`projects/${t.name}/ (${countFiles(t.state)} files, memory included)`)}`);
   for (const f of t.secrets) lines.push(`goes   secrets         ${ui.dim(`secrets/projects/${f.split("/").pop()}`)}`);
-  for (const c of t.here) lines.push(`kept   checkout        ${ui.dim(contract(c))}`);
+  for (const c of t.here) lines.push(`kept   checkout        ${ui.dim(`${contract(c)} — just a directory now, ignored here`)}`);
   if (!t.here.length) lines.push(`kept   checkout        ${ui.dim("none on this machine")}`);
   if (t.project?.url) lines.push(`kept   remote          ${ui.dim(t.project.url)}`);
   return lines;
@@ -87,8 +88,10 @@ export async function remove(share: Share, names: string[], o: { yes?: boolean; 
   // exactly the removal — nothing else the share may have pending — so one git revert brings it all back
   const sha = o.noCommit ? "" : commit(share, `remove ${label}`, [...new Set(paths)]) ?? "";
   ui.ok(`removed ${label} from the share${sha ? `  ${ui.dim(`commit ${sha}`)}` : ui.dim(o.noCommit ? "  (not committed: --no-commit)" : "  (nothing to commit — the share had none of it committed)")}`);
+  // the checkout left behind is an ignored directory here (CONTEXT.md: Remove) — the next bare cs does not flag what was just removed
+  ignoreDirs(share.machine, targets.filter((t) => t.here.length).map((t) => t.project?.path || t.name));
   for (const t of targets) {
-    for (const c of t.here) ui.info(`${t.name}: checkout kept at ${contract(c)} — just a directory now, yours to keep or rm`);
+    for (const c of t.here) ui.info(`${t.name}: checkout kept at ${contract(c)} — just a directory now, ignored here; yours to keep or rm`);
     if (t.project?.url) { const [, gh] = parseRepoUrl(t.project.url); ui.info(ui.dim(gh ? `${t.name}: the GitHub repo stays — to delete it too, by hand: gh repo delete ${gh[0]}/${gh[1]}` : `${t.name}: the remote stays — ${t.project.url}`)); }
   }
   return sha ? ui.dim(`undo: git -C ${contract(repo)} revert ${sha}, then cs sync everywhere`) : ui.dim("the share pushes with the next cs sync");

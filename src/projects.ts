@@ -7,6 +7,7 @@ import * as github from "./github.js";
 import { contract, expand } from "./paths.js";
 import { identityByFlag, identityForUrl, keyPath, NAME_RE, selected, validate, type Identity, type Manifest, type Project } from "./manifest.js";
 import { addProject, commit, selectedProjects, updateProject, workspace, type Share } from "./share.js";
+import { unignoreDir } from "./machine.js";
 import { place } from "./projectstate.js";
 import { checkoutRoot, container, locate, present, sniff } from "./checkout.js";
 import * as ui from "./ui.js";
@@ -67,10 +68,14 @@ export async function add(share: Share, path: string | undefined, o: { profiles:
   if (man.projects[name]) throw new Error(`cs: project '${name}' is already registered (edit projects.toml to change it)`);
   let url = git.remoteUrl(checkout); let ident: Identity | undefined;
   if (!url) { ident = await chooseIdentity(man, o.identity, name); const made = await ensureRemote(checkout, name, ident, git.currentBranch(checkout) || man.defaultBranch, { priv: o.priv, description: o.description }); if (!made) throw new Error(`cs: ${name} still has no remote`); url = made; }
-  else { if (url.includes("github")) url = git.canonicalGithub(url); ident = o.identity ? man.identities[o.identity] : identityForUrl(man, url); if (!ident) throw new Error(`cs: no identity matches ${url}; pass --identity or add url_globs in projects.toml`); }
+  else {
+    if (url.includes("github")) url = git.canonicalGithub(url);
+    const twin = Object.values(man.projects).find((q) => q.url && git.canonicalGithub(q.url) === git.canonicalGithub(url)); if (twin) throw new Error(`cs: ${name} is another clone of ${twin.name} — two projects cannot share a remote (cs ignore ${name} to stop cs mentioning it)`);
+    ident = o.identity ? man.identities[o.identity] : identityForUrl(man, url); if (!ident) throw new Error(`cs: no identity matches ${url}; pass --identity or add url_globs in projects.toml`); }
   const p: Project = { name, path: rel !== name ? rel : undefined, url, identity: ident.id, profiles: o.profiles.length ? o.profiles : ["all"], machines: [], branch: git.currentBranch(checkout), layout, description: o.description, handoff: {} };
   const errs = validate({ ...man, projects: { [name]: p } }); if (errs.length) throw new Error("cs: " + errs.join("; "));
   addProject(share, p); ui.ok(`registered ${name}  ${ui.dim(`${url} · profiles ${p.profiles.join(",")}`)}`);
+  unignoreDir(share.machine, rel);   // a project now, not an ignored directory
   if (!o.noCommit) commit(share, `projects: add ${name}`, ["projects.toml"]);
   if (selected(p, share.machine)) place(share, p);   // a project registered here for other profiles is not this machine's to keep placed
   return p;

@@ -10,7 +10,8 @@ import { locate, present } from "./checkout.js";
 import { applySettings } from "./apply.js";
 import * as ui from "./ui.js";
 import { which } from "./deps.js";
-import { unregisteredDirs } from "./status.js";
+import { describe, unregisteredDirs, unregisteredLine, type Unregistered } from "./status.js";
+import { ignoreDirs } from "./machine.js";
 import { ago } from "./plan.js";
 import { HOOK_EVENTS, hooksStatus } from "./hooks.js";
 import { lastSync } from "./sharesync.js";
@@ -21,11 +22,11 @@ import { orphans } from "./remove.js";
 type R = ["ok" | "warn" | "fail", string];
 const LINKS = ["CLAUDE.md", "rules", "agents", "themes", "keybindings.json", "plans"];
 
-/** Registered projects (present here) and workspace directories that have no remote yet — the ensure-remote candidates. */
-export function remoteless(share: Share): { projects: Project[]; dirs: { name: string; remote: string }[] } {
-  const ws = workspace(share); const man = share.manifest;
+/** Registered projects (present here) without a remote — the ensure-remote candidates — and the unregistered directories (every kind). */
+export function remoteless(share: Share): { projects: Project[]; dirs: Unregistered[] } {
+  const ws = workspace(share);
   const projects = selectedProjects(share).filter((p) => { const c = locate(p, ws); return present(c) ? !p.url : c.why !== "missing"; });
-  return { projects, dirs: unregisteredDirs(ws, new Set(Object.values(man.projects).map((p) => p.path || p.name))) };
+  return { projects, dirs: unregisteredDirs(share) };
 }
 /** The old-name moves may relocate the share: `migrate` updates the Share in place. */
 export async function fix(share: Share): Promise<void> {
@@ -38,8 +39,12 @@ export async function fix(share: Share): Promise<void> {
   }
   for (const d of dirs) {
     const path = join(ws, d.name);
-    if (!ui.canAsk()) { ui.warn(`${d.name}: not registered — cs add ${contract(path)}`); continue; }
-    if (await ui.confirm(`${d.name} is not registered — register it${d.remote ? "" : " (creating a private GitHub repo)"}?`, true)) { try { await add(share, path, { profiles: [], description: "", noCommit: false }); } catch (e: any) { ui.fail(e.message); } }
+    if (!ui.canAsk()) { ui.warn(unregisteredLine(d, ws)); continue; }
+    const { what, addable } = describe(d);
+    const register = { value: "register" as const, label: "register", hint: d.kind === "foreign" ? "cs add" : "cs add — creates a private GitHub repo" };
+    const choice = await ui.select(`${d.name} is ${what} —`, [...(addable ? [register] : []), { value: "ignore" as const, label: "ignore", hint: "this machine stops mentioning it (machine.toml ignore)" }, { value: "leave" as const, label: "leave", hint: "decide later" }], addable ? "register" : "ignore");
+    if (choice === "register") { try { await add(share, path, { profiles: [], description: "", noCommit: false }); } catch (e: any) { ui.fail(e.message); } }
+    else if (choice === "ignore") { ignoreDirs(share.machine, [d.name]); ui.ok(`${d.name}: ignored here`); }
   }
   for (const p of selectedProjects(share)) {
     const c = locate(p, ws); if (!present(c) || !p.url) continue; const root = c.root;
@@ -89,8 +94,9 @@ export async function runDoctor(share: Share, doFix = false, compact = false): P
   if (!old.length) res.push(["ok", "on-disk names current (share key, share, handoffs, state)"]);
   const rl = remoteless(share);
   for (const p of rl.projects) res.push(["fail", `${p.name}: no remote  (cs doctor --fix · or cs remove ${p.name})`]);
-  for (const d of rl.dirs) res.push(["warn", `${contract(join(ws, d.name))}: not registered${d.remote ? "" : ", no remote"}  (cs add ${contract(join(ws, d.name))})`]);
-  if (!rl.projects.length && !rl.dirs.length) res.push(["ok", "every project has a remote; nothing unregistered under the workspace"]);
+  for (const d of rl.dirs) res.push(["warn", unregisteredLine(d, ws)]);
+  const ign = share.machine.ignore.filter((n) => existsSync(join(ws, n))).length;
+  if (!rl.projects.length && !rl.dirs.length) res.push(["ok", `every project has a remote; nothing unregistered under the workspace${ign ? ` (${ign} ignored)` : ""}`]);
   const left = orphans(share);   // state or secrets for a name no longer in the manifest: never fixed by --fix, removal always asks (or takes --yes)
   for (const n of left) res.push(["warn", `${n}: state/secrets in the share but not registered  (cs remove ${n})`]);
   if (!left.length) res.push(["ok", "the share holds state and secrets for registered projects only"]);

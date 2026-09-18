@@ -125,7 +125,7 @@ async function machinePhase(repo: string, nm: string, profiles: string[], ws: st
     ui.step(`projects live in ${ui.bold(w)}${existed ? "" : ui.dim("  (created)")}`);
     workspaceOverride = w === dws ? undefined : w;
   } else if (ws) mkdirSync(expand(ws), { recursive: true });
-  const m: Machine = { name: nm, profiles, exclude, workspace: workspaceOverride, secretsBackend: "sops" }; saveMachine(m);
+  const m: Machine = { name: nm, profiles, exclude, ignore: [], workspace: workspaceOverride, secretsBackend: "sops" }; saveMachine(m);
   return m;
 }
 async function firstIdentity(share: Share, interactive: boolean) {
